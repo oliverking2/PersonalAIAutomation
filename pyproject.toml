@@ -20,6 +20,10 @@ sqlalchemy = "^2.0.45"
 alembic = "^1.17.2"
 psycopg2-binary = "^2.9.11"
 pydantic = "^2.12.5"
+celery = "^5.6.0"
+redis = "^7.1.0"
+flower = "^2.0.1"
+fastapi = "^0.127.0"
 
 [tool.poetry.group.checks]
 optional = true

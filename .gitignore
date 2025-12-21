@@ -9,4 +9,4 @@ data
 *.log
 
 # Cache files
-msal_cache.bin
+.msal_cache/msal_cache.bin

@@ -50,7 +50,7 @@ class GraphAPI:
         self._authority = f"https://login.microsoftonline.com/{self._tenant_id}"
         self._scopes = ["Mail.Read"]
 
-        self._cache_file = cache_file or PROJECT_ROOT / "msal_cache.bin"
+        self._cache_file = cache_file or PROJECT_ROOT / ".msal_cache" / "msal_cache.bin"
         self._cache: SerializableTokenCache | None = None
         logger.debug(f"Token cache file configured at path={self._cache_file}")
 

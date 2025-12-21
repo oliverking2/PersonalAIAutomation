@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
     ports:
-      - "${DATABASE_PORT:-5432}:5432"
+      - "${DATABASE_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,5 +17,86 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:8-alpine
+    container_name: personal_ai_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery-worker:
+    build: .
+    container_name: personal_ai_celery_worker
+    restart: unless-stopped
+    command: [
+      "celery",
+      "-A",
+      "src.orchestration.celery_app",
+      "worker",
+      "--loglevel=info"
+    ]
+    env_file: .env
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - msal_cache:/app/.msal_cache
+
+  celery-beat:
+    build: .
+    container_name: personal_ai_celery_beat
+    restart: unless-stopped
+    command: [
+      "celery",
+      "-A",
+      "src.orchestration.celery_app",
+      "beat",
+      "--loglevel=info"
+    ]
+    env_file: .env
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  flower:
+    build: .
+    container_name: personal_ai_flower
+    restart: unless-stopped
+    command: [
+      "celery",
+      "-A",
+      "src.orchestration.celery_app",
+      "flower",
+      "--port=5555"
+    ]
+    ports:
+      - "${FLOWER_PORT}:5555"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
 volumes:
   postgres_data:
+  redis_data:
+  msal_cache:
