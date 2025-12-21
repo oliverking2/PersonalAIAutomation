@@ -24,6 +24,7 @@ celery = "^5.6.0"
 redis = "^7.1.0"
 flower = "^2.0.1"
 fastapi = "^0.127.0"
+uvicorn = {extras = ["standard"], version = "^0.40.0"}
 
 [tool.poetry.group.checks]
 optional = true
@@ -36,6 +37,11 @@ sqlfluff = "^3.5.0"
 coverage = "^7.13.0"
 types-psycopg2 = "^2.9.21.20251012"
 boto3-stubs = {extras = ["s3", "ssm"], version = "^1.41.5"}
+httpx = "^0.28.1"
+
+
+[tool.poetry.group.dev.dependencies]
+httpx = "^0.28.1"
 
 [tool.ruff]
 # Ruff Configuration

@@ -112,3 +112,39 @@ process_newsletters_task.delay()
 # Send pending Telegram alerts
 send_alerts_task.delay()
 ```
+
+### REST API
+FastAPI REST API for triggering tasks programmatically.
+
+#### Configuration
+- `API_AUTH_TOKEN`: Bearer token for API authentication (required)
+- `API_PORT`: API server port (default: 8000)
+
+#### Running with Docker
+The API service starts automatically with docker-compose. Access OpenAPI documentation at http://localhost:8000/docs.
+
+#### Running Locally
+```bash
+poetry run uvicorn src.api.app:app --reload
+```
+
+#### Endpoints
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | /health | No | Health check |
+| POST | /tasks/process-newsletters | Yes | Trigger newsletter processing |
+| POST | /tasks/send-alerts | Yes | Trigger Telegram alerts |
+| GET | /tasks/{task_id} | Yes | Get task status |
+
+#### Example Usage
+```bash
+# Trigger newsletter processing
+curl -X POST http://localhost:8000/tasks/process-newsletters \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"days_back": 3}'
+
+# Check task status
+curl http://localhost:8000/tasks/TASK_ID \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

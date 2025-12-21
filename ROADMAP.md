@@ -5,7 +5,7 @@
 - Add tasks via the Telegram chat
 
 ## Orchestration
-- Add a scheduler to run daily/hourly jobs
+- ~~Add a scheduler to run daily/hourly jobs~~
   - Daily jobs which can be run and updates sent through Telegram (Celery?)
 
 ## Email Summaries
@@ -16,6 +16,9 @@
   - DataExpert.io (Subscription needed?)
   - Daily Dose of Data Science
   - Seattle Data Guy
+
+## API
+- Trigger celery tasks manually 
 
 ## AI
 - Integrate with AWS Bedrock for models
@@ -28,7 +31,7 @@
 
 ## Other
 - ~~Standardised logging config~~
-- FastAPI API
+- ~~FastAPI API~~
 - Add CI/CD
-- Dockerise
+- ~~Dockerise~~
 - ~~Postgres for DB~~
