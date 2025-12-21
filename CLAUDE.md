@@ -76,11 +76,14 @@
   - at least one edge case
   - at least one failure mode (if applicable)
 - Keep tests readable and deterministic. Avoid network calls unless the project already uses integration tests/mocking patterns.
+- Aim for at least 80% test coverage.
+- Leverage `setUp`/`setUpClass` and `tearDown`/`tearDownClass` to avoid boilerplate.
 
 ## Static Analysis (mypy)
 - Generated code must pass mypy according to the project's configured strictness.
 - Prefer precise types over broad ones (use `TypedDict`, `Protocol`, `Literal`, `NewType` where helpful).
 - Avoid `# type: ignore` unless it is narrowly scoped and justified with a reason comment.
+- Add type stubs for third-party libraries where possible. Add them to the poetry `checks` group.
 
 ## Project-Specific Prohibitions
 
@@ -92,14 +95,14 @@
 ## Validation Requirements
 - All changes must pass `ruff check` and `ruff format --check`.
 - All changes must pass `mypy` with no errors.
-- All changes must pass tests in the `testing/` folder.
+- All changes must pass tests in the `testing/` folder with at least 80% coverage.
 - For all changes, update the `README.md` to reflect new or modified behaviour.
 
 ## Validation Commands
 - Lint: `poetry run ruff check --fix`
 - Format: `poetry run ruff format`
 - Types: `poetry run mypy .`
-- Tests: `poetry run python -m unittest discover testing/`
+- Tests with coverage: `poetry run coverage run -m unittest discover testing/ && poetry run coverage report --fail-under=80`
 
 ## Git
 - Write clear, imperative commit messages.
@@ -111,4 +114,4 @@
 - Confirm types line up (no obvious mypy failures).
 - Confirm tests match the behaviour and run in isolation.
 - Confirm no secrets, tokens, or private data are introduced.
-- Run `ruff check`, `mypy`, and tests before considering work complete.
+- Run `ruff check`, `mypy`, and coverage tests before considering work complete.
