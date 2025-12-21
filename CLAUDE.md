@@ -50,6 +50,12 @@
 - Public functions/classes must include Sphinx-style docstrings using `:param:`, `:raises:`, `:returns:`.
 - If you add or change user-facing behaviour, update the relevant README/docs snippet.
 
+## README Guidelines
+- Keep documentation high-level and concise.
+- Focus on what things do, not implementation details.
+- Document configuration options (environment variables, settings).
+- No code examples unless essential for usage.
+
 ## Environment Configuration
 - Use `.env` for local development (never commit).
 - Document all required variables in `.env_example`.
@@ -115,3 +121,4 @@
 - Confirm tests match the behaviour and run in isolation.
 - Confirm no secrets, tokens, or private data are introduced.
 - Run `ruff check`, `mypy`, and coverage tests before considering work complete.
+- Make sure `README.md` is up to date with any changes

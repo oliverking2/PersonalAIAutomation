@@ -1,5 +1,12 @@
+# Project Files
 .idea
 .env
+
+# Data files
 data
 
+# Log files
+*.log
+
+# Cache files
 /src/graph/msal_cache.bin
