@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:18-alpine
-    container_name: personal_ai_postgres
+    container_name: personal_automation_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DATABASE_USER}
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:8-alpine
-    container_name: personal_ai_redis
+    container_name: personal_automation_redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT}:6379"
@@ -33,7 +33,7 @@ services:
 
   celery-worker:
     build: .
-    container_name: personal_ai_celery_worker
+    container_name: personal_automation_celery_worker
     restart: unless-stopped
     command: [
       "celery",
@@ -57,7 +57,7 @@ services:
 
   celery-beat:
     build: .
-    container_name: personal_ai_celery_beat
+    container_name: personal_automation_celery_beat
     restart: unless-stopped
     command: [
       "celery",
@@ -79,7 +79,7 @@ services:
 
   flower:
     build: .
-    container_name: personal_ai_flower
+    container_name: personal_automation_flower
     restart: unless-stopped
     command: [
       "celery",
@@ -98,7 +98,7 @@ services:
 
   api:
     build: .
-    container_name: personal_ai_api
+    container_name: personal_automation_api
     restart: unless-stopped
     command: [
       "uvicorn",
