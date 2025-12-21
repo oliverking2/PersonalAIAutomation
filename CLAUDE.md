@@ -50,6 +50,11 @@
 - Public functions/classes must include Sphinx-style docstrings using `:param:`, `:raises:`, `:returns:`.
 - If you add or change user-facing behaviour, update the relevant README/docs snippet.
 
+## Environment Configuration
+- Use `.env` for local development (never commit).
+- Document all required variables in `.env_example`.
+- Access via `python-dotenv` and `os.environ`.
+
 ## Data & I/O Safety
 - Never hard-code secrets. Use environment variables or existing configuration patterns.
 - Do not log credentials, tokens, or full payloads containing personal data.
@@ -58,6 +63,11 @@
   - use timeouts
   - handle retryable errors explicitly where appropriate
   - ensure failures are actionable (good error messages)
+
+## AWS (boto3)
+- Use typed stubs from `boto3-stubs`.
+- Always use explicit resource/client types.
+- Handle AWS exceptions specifically (e.g., `botocore.exceptions.ClientError`).
 
 ## Testing (unittest)
 - All new behaviour must include `unittest` tests under `testing/`.
@@ -84,6 +94,17 @@
 - All changes must pass `mypy` with no errors.
 - All changes must pass tests in the `testing/` folder.
 - For all changes, update the `README.md` to reflect new or modified behaviour.
+
+## Validation Commands
+- Lint: `poetry run ruff check --fix`
+- Format: `poetry run ruff format`
+- Types: `poetry run mypy .`
+- Tests: `poetry run python -m unittest discover testing/`
+
+## Git
+- Write clear, imperative commit messages.
+- Keep commits atomic and focused.
+- Pre-commit hooks run automatically on commit.
 
 ## Self-Check Before Final Output
 - Confirm imports are correct and minimal.
