@@ -1,0 +1,55 @@
+# Pre-commit Configuration
+# Automatically runs code quality checks before each git commit
+# Install: poetry install --with checks && poetry run pre-commit install
+# Run manually: poetry run pre-commit run --all-files
+
+repos:
+# Ruff: Fast Python linter and formatter
+# Checks and fixes code style, imports, and common errors
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.14.9
+  hooks:
+  - id: ruff-check
+    # Automatically fix issues and fail if fixes were needed
+    args: [--fix, --exit-non-zero-on-fix]
+  - id: ruff-format
+    # Format code according to style rules defined in pyproject.toml
+
+# MyPy: Static type checker
+# Ensures type hints are correct and catches type-related bugs
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.19.0
+  hooks:
+  - id: mypy
+    # Type check the entire src directory with config from pyproject.toml
+    args: [--config-file=pyproject.toml, --install-types, --non-interactive, src]
+    pass_filenames: false  # Check entire src/ directory on each run, not individual files
+
+# Poetry: Python dependency manager
+# Validates that pyproject.toml is correctly formatted and consistent
+- repo: https://github.com/python-poetry/poetry
+  rev: 2.2.1
+  hooks:
+  - id: poetry-check
+    # Ensures poetry configuration is valid
+
+# Pre-commit hooks: General file validation
+# Various checks for common file issues and security concerns
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+    - id: check-yaml
+      # Validates YAML file syntax
+    - id: check-toml
+      # Validates TOML file syntax
+    - id: check-json
+      # Validates JSON file syntax
+    - id: pretty-format-json
+      # Formats JSON files consistently
+      args: [--autofix, --indent=2, --no-sort-keys]
+    - id: check-merge-conflict
+      # Detects merge conflict markers in files
+    - id: check-added-large-files
+      # Prevents accidentally committing large files
+    - id: detect-private-key
+      # Scans for accidentally committed private keys
