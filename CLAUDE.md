@@ -1,6 +1,62 @@
-# Project Rules
+# CLAUDE.md
 
-## Core Principles
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Build Commands
+
+```bash
+# Install dependencies
+poetry install
+
+# Run all validation
+poetry run ruff check --fix && poetry run ruff format && poetry run mypy . && poetry run coverage run -m unittest discover testing/ && poetry run coverage report --fail-under=80
+
+# Run single test file
+poetry run python -m unittest testing/api/test_health.py
+
+# Run single test method
+poetry run python -m unittest testing.api.test_health.TestHealthEndpoint.test_health_check_returns_200
+
+# Database migrations
+poetry run alembic upgrade head
+poetry run alembic revision --autogenerate -m "description"
+
+# Start services locally
+docker-compose up -d                    # All services
+poetry run uvicorn src.api.app:app --reload  # API only
+poetry run celery -A src.orchestration.celery_app worker --loglevel=info  # Worker only
+```
+
+## Architecture
+
+### Data Flow
+1. **Email Ingestion**: `src/graph/` fetches emails via Microsoft Graph API
+2. **Newsletter Parsing**: `src/newsletters/tldr/` extracts articles from HTML
+3. **Storage**: `src/database/newsletters/` persists to PostgreSQL via SQLAlchemy
+4. **Alerting**: `src/telegram/` sends formatted messages to Telegram
+5. **Orchestration**: `src/orchestration/` schedules hourly Celery tasks
+6. **API**: `src/api/` exposes FastAPI endpoints for manual triggers
+
+### Key Patterns
+- **Service layer**: Business logic in `*Service` classes (e.g., `NewsletterService`, `TelegramService`)
+- **Database operations**: Functions in `src/database/*/operations.py`, not in services
+- **Pydantic models**: Used for API schemas and parsed data (not ORM)
+- **SQLAlchemy models**: ORM in `src/database/*/models.py`
+- **Dependency injection**: Services take `Session` and clients as constructor args
+
+### Module Responsibilities
+| Module               | Purpose                                        |
+|----------------------|------------------------------------------------|
+| `src/api/`           | FastAPI REST endpoints with HTTPBearer auth    |
+| `src/database/`      | SQLAlchemy models and database operations      |
+| `src/graph/`         | Microsoft Graph API client for email access    |
+| `src/newsletters/`   | Email parsing and article extraction           |
+| `src/orchestration/` | Celery tasks and scheduling                    |
+| `src/telegram/`      | Telegram Bot API client and alerting           |
+
+## Project Rules
+
+### Core Principles
 - Optimise for clarity, maintainability, and consistency with existing project patterns.
 - Preserve existing public APIs and behaviours unless explicitly instructed otherwise.
 - Prefer small, testable units. Avoid cleverness.

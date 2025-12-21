@@ -39,10 +39,6 @@ types-psycopg2 = "^2.9.21.20251012"
 boto3-stubs = {extras = ["s3", "ssm"], version = "^1.41.5"}
 httpx = "^0.28.1"
 
-
-[tool.poetry.group.dev.dependencies]
-httpx = "^0.28.1"
-
 [tool.ruff]
 # Ruff Configuration
 # Ruff is an extremely fast Python linter and formatter written in Rust
