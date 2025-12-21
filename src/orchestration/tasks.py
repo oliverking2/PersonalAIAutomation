@@ -51,7 +51,6 @@ def process_newsletters_task(self: Task, *, days_back: int = 1) -> dict[str, int
     :returns: Dictionary with processing statistics.
     """
     logger.info(f"Starting newsletter processing task (days_back={days_back})")
-
     try:
         graph_client = GraphAPI(GRAPH_USER_EMAIL)
         since = datetime.now(UTC) - timedelta(days=days_back)
@@ -71,6 +70,7 @@ def process_newsletters_task(self: Task, *, days_back: int = 1) -> dict[str, int
         }
 
         logger.info(f"Newsletter processing complete: {stats}")
+        raise ValueError("Example Failure")
         return stats
 
     except Exception as exc:

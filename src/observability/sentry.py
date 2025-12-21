@@ -1,5 +1,6 @@
 """Setup Sentry."""
 
+import logging
 import os
 
 import sentry_sdk
@@ -13,10 +14,10 @@ def init_sentry() -> None:
     if not dsn:
         return
 
-    # Capture ERROR logs as events, and keep INFO+ as breadcrumbs (optional but useful)
+    # Capture ERROR logs as events, and keep INFO+ as breadcrumbs
     logging_integration = LoggingIntegration(
-        level=None,  # breadcrumbs: leave default or set to logging.INFO
-        event_level=None,  # events: leave default or set to logging.ERROR
+        level=logging.INFO,  # breadcrumbs
+        event_level=logging.ERROR,  # events
     )
 
     sentry_sdk.init(

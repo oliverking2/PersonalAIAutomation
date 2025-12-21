@@ -40,7 +40,9 @@ services:
       "-A",
       "src.orchestration.celery_app",
       "worker",
-      "--loglevel=info"
+      "--loglevel=info",
+      "-Q",
+      "personal_automation"
     ]
     env_file: .env
     environment:
@@ -107,7 +109,7 @@ services:
       "--port", "8000"
     ]
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${API_PORT}:8000"
     env_file: .env
     environment:
       - DATABASE_HOST=postgres
@@ -146,11 +148,12 @@ services:
       glitchtip-postgres:
         condition: service_healthy
     ports:
-      - "${GLITCHTIP_PORT:-8001}:8000"
+      - "${GLITCHTIP_PORT}:8000"
     environment:
       DATABASE_URL: "postgres://${GLITCHTIP_DB_USER}:${GLITCHTIP_DB_PASSWORD}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME}"
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
       GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN}
+      VALKEY_URL: ""
 
       # Minimal setup: no real email for now (emails go to container logs)
       EMAIL_URL: "consolemail://"
