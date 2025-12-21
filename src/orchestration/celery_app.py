@@ -4,6 +4,12 @@ import os
 
 from celery import Celery
 
+from src.observability.sentry import init_sentry
+from src.utils.logging import configure_logging
+
+configure_logging()
+init_sentry()
+
 # Redis URL for broker and result backend
 REDIS_URL = os.environ["REDIS_URL"]
 
@@ -30,4 +36,7 @@ celery_app.conf.update(
     # Worker settings
     worker_prefetch_multiplier=1,
     worker_concurrency=2,
+    # Worker logging
+    worker_hijack_root_logger=False,
+    worker_redirect_stdouts=False,
 )

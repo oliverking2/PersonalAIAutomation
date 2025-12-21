@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
 from msal import PublicClientApplication, SerializableTokenCache
 from requests import Response
 
@@ -232,5 +231,7 @@ class GraphAPI:
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+
     load_dotenv()
     print(GraphAPI("oliver@oliverking.me.uk").access_token)

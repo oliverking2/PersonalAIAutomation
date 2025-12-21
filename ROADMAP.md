@@ -35,3 +35,4 @@
 - Add CI/CD
 - ~~Dockerise~~
 - ~~Postgres for DB~~
+- Connect GlitchTip to Telegram using webhook and FastAPI

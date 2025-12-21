@@ -119,7 +119,52 @@ services:
       redis:
         condition: service_healthy
 
+  # ----------------------------
+  # GlitchTip (minimal, all-in-one)
+  # ----------------------------
+  glitchtip-postgres:
+    image: postgres:16-alpine
+    container_name: glitchtip_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${GLITCHTIP_DB_NAME}
+      POSTGRES_USER: ${GLITCHTIP_DB_USER}
+      POSTGRES_PASSWORD: ${GLITCHTIP_DB_PASSWORD}
+    volumes:
+      - glitchtip_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${GLITCHTIP_DB_USER} -d ${GLITCHTIP_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  glitchtip:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip
+    restart: unless-stopped
+    depends_on:
+      glitchtip-postgres:
+        condition: service_healthy
+    ports:
+      - "${GLITCHTIP_PORT:-8001}:8000"
+    environment:
+      DATABASE_URL: "postgres://${GLITCHTIP_DB_USER}:${GLITCHTIP_DB_PASSWORD}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME}"
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN}
+
+      # Minimal setup: no real email for now (emails go to container logs)
+      EMAIL_URL: "consolemail://"
+      DEFAULT_FROM_EMAIL: ${GLITCHTIP_FROM_EMAIL}
+
+      # Keep it private unless you explicitly want signups
+      ENABLE_OPEN_USER_REGISTRATION: "False"
+
+      # Keep resource usage sensible
+      CELERY_WORKER_CONCURRENCY: "2"
+    command: ./bin/run-all-in-one.sh
+
 volumes:
   postgres_data:
   redis_data:
   msal_cache:
+  glitchtip_postgres_data:

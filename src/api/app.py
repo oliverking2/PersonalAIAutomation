@@ -2,16 +2,16 @@
 
 import logging
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from src.api.health import router as health_router
 from src.api.tasks import router as tasks_router
 from src.api.tasks.models import ErrorResponse
+from src.observability.sentry import init_sentry
 from src.utils.logging import configure_logging
 
-load_dotenv()
 configure_logging()
+init_sentry()
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,7 @@ def create_app() -> FastAPI:
     """
     application = FastAPI(
         title="Personal AI Automation API",
-        description="REST API for triggering newsletter processing and alerting tasks.",
-        version="0.1.0",
+        version="1.0.0",
         responses={
             401: {"model": ErrorResponse, "description": "Unauthorised"},
             500: {"model": ErrorResponse, "description": "Internal server error"},

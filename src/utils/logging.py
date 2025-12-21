@@ -3,56 +3,55 @@
 import logging
 import os
 import sys
-from pathlib import Path
-
-from src.paths import PROJECT_ROOT
+from collections.abc import Iterable
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def configure_logging() -> None:
-    """Configure application-wide logging with file and stdout handlers.
-
-    Reads configuration from environment variables:
-        - LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Defaults to INFO.
-        - LOG_FILE: Path to the log file. If relative, uses project root as base.
-            Defaults to 'app.log' in the project root.
-    """
-    level = os.environ.get("LOG_LEVEL", "INFO")
-    log_file_env = os.environ.get("LOG_FILE", "app.log")
-    log_path = Path(log_file_env)
-
-    # Use project root for relative paths
-    if not log_path.is_absolute():
-        log_path = PROJECT_ROOT / log_path
-
-    # Validate log level
+def _parse_level(level: str) -> int:
     numeric_level = getattr(logging, level.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError(f"Invalid log level: {level}")
+    return numeric_level
 
-    # Create formatter
-    formatter = logging.Formatter(fmt=LOG_FORMAT, datefmt=DATE_FORMAT)
 
-    # Configure root logger
+def _set_logger_levels(names: Iterable[str], level: int) -> None:
+    for name in names:
+        logging.getLogger(name).setLevel(level)
+
+
+def configure_logging() -> None:
+    """Configure application-wide logging to stdout only.
+
+    Env vars:
+      - LOG_LEVEL: DEBUG/INFO/WARNING/ERROR/CRITICAL (default INFO)
+      - LOG_UVICORN_ACCESS: true/false (default false)
+    """
+    level_name = os.environ.get("LOG_LEVEL", "INFO")
+    level = _parse_level(level_name)
+
     root_logger = logging.getLogger()
-    root_logger.setLevel(numeric_level)
+    root_logger.setLevel(level)
 
-    # Remove existing handlers to avoid duplicates
+    # Hard reset: ensure exactly one stdout handler with your formatter.
     root_logger.handlers.clear()
 
-    # Stdout handler
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    stdout_handler.setLevel(numeric_level)
-    stdout_handler.setFormatter(formatter)
-    root_logger.addHandler(stdout_handler)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter(fmt=LOG_FORMAT, datefmt=DATE_FORMAT))
+    root_logger.addHandler(handler)
 
-    # File handler
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setLevel(numeric_level)
-    file_handler.setFormatter(formatter)
-    root_logger.addHandler(file_handler)
+    # Ensure libs don't attach their own handlers; they should propagate to root.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "celery"):
+        lib_logger = logging.getLogger(name)
+        lib_logger.handlers.clear()
+        lib_logger.propagate = True
 
-    logging.info("Logging configured: level=%s, file=%s", level.upper(), log_path)
+    access_enabled = os.environ.get("LOG_UVICORN_ACCESS", "false").strip().lower() == "true"
+    if not access_enabled:
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    _set_logger_levels(("urllib3", "httpx"), level=max(level, logging.INFO))
+
+    logging.getLogger(__name__).info("Logging configured: level=%s", level_name.upper())

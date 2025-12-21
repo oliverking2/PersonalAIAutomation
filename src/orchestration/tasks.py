@@ -5,7 +5,6 @@ import os
 from datetime import UTC, datetime, timedelta
 
 from celery import Task
-from dotenv import load_dotenv
 
 from src.database.connection import get_session
 from src.database.newsletters import backfill_article_urls
@@ -13,10 +12,6 @@ from src.graph.auth import GraphAPI
 from src.newsletters.tldr.service import NewsletterService
 from src.orchestration.celery_app import celery_app
 from src.telegram import TelegramClient, TelegramService
-from src.utils.logging import configure_logging
-
-load_dotenv()
-configure_logging()
 
 logger = logging.getLogger(__name__)
 

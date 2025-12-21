@@ -2,7 +2,7 @@
 
 from logging.config import fileConfig
 
-from dotenv import load_dotenv
+
 from sqlalchemy.engine import Engine
 
 from alembic import context
