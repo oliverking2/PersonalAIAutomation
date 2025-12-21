@@ -97,6 +97,7 @@
 - Before writing new code, look for an existing pattern and match it.
 - If a change could be breaking, propose a non-breaking alternative first.
 - When uncertain about an existing convention, ask a targeted question instead of guessing.
+- Consider the roadmap which is saved in `ROADMAP.md`
 
 ## Validation Requirements
 - All changes must pass `ruff check` and `ruff format --check`.
