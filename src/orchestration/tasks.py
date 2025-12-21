@@ -70,7 +70,6 @@ def process_newsletters_task(self: Task, *, days_back: int = 1) -> dict[str, int
         }
 
         logger.info(f"Newsletter processing complete: {stats}")
-        raise ValueError("Example Failure")
         return stats
 
     except Exception as exc:
