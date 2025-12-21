@@ -2,21 +2,13 @@
 
 import uuid as uuid_module
 from datetime import UTC, datetime
-from enum import StrEnum
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.core import Base
-
-
-class NewsletterType(StrEnum):
-    """Type of TLDR newsletter."""
-
-    TLDR = "tldr"
-    TLDR_AI = "tldr_ai"
-    TLDR_DEV = "tldr_dev"
+from src.newsletters.tldr.models import NewsletterType
 
 
 class Newsletter(Base):
@@ -84,8 +76,6 @@ class Article(Base):
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
     url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    section: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    source_publication: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

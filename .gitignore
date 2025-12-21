@@ -9,4 +9,4 @@ data
 *.log
 
 # Cache files
-/src/graph/msal_cache.bin
+msal_cache.bin

@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.database.models.newsletters import Article, Newsletter
-from src.database.models.newsletters import NewsletterType as DBNewsletterType
 from src.graph.auth import GraphAPI
 from src.newsletters.tldr.fetcher import extract_email_metadata, fetch_tldr_newsletters
 from src.newsletters.tldr.models import ParsedNewsletter
@@ -87,7 +86,7 @@ class NewsletterService:
         :param result: The ProcessingResult to update.
         """
         metadata = extract_email_metadata(message)
-
+        logger.info(f"Processing newsletter: {metadata['subject']}")
         # Check if already processed
         if self._newsletter_exists(metadata["email_id"]):
             logger.debug(f"Newsletter already processed: {metadata['email_id']}")
@@ -130,12 +129,9 @@ class NewsletterService:
         :param parsed: The parsed newsletter data.
         :returns: A tuple of (new_articles_count, duplicate_articles_count).
         """
-        # Map Pydantic enum to SQLAlchemy enum
-        db_type = DBNewsletterType(parsed.newsletter_type.value)
-
         newsletter = Newsletter(
             email_id=parsed.email_id,
-            newsletter_type=db_type,
+            newsletter_type=parsed.newsletter_type,
             subject=parsed.subject,
             received_at=parsed.received_at,
             processed_at=datetime.now(UTC),
@@ -160,8 +156,6 @@ class NewsletterService:
                 url=str(article.url),
                 url_hash=url_hash,
                 description=article.description,
-                section=article.section,
-                source_publication=article.source_publication,
             )
             self._session.add(db_article)
             new_count += 1

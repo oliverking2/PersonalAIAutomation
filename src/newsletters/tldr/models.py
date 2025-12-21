@@ -12,6 +12,7 @@ class NewsletterType(StrEnum):
     TLDR = "tldr"
     TLDR_AI = "tldr_ai"
     TLDR_DEV = "tldr_dev"
+    TLDR_DATA = "tldr_data"
 
 
 class ParsedArticle(BaseModel):
@@ -20,8 +21,6 @@ class ParsedArticle(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     url: HttpUrl
     description: str | None = None
-    section: str | None = Field(None, max_length=2000)
-    source_publication: str | None = Field(None, max_length=200)
 
 
 class ParsedNewsletter(BaseModel):
