@@ -30,12 +30,12 @@ ruff = "^0.14.9"
 pre-commit = "^4.5.0"
 mypy = "^1.13.0"
 sqlfluff = "^3.5.0"
-
-# Ruff Configuration
-# Ruff is an extremely fast Python linter and formatter written in Rust
 coverage = "^7.13.0"
 types-psycopg2 = "^2.9.21.20251012"
+
 [tool.ruff]
+# Ruff Configuration
+# Ruff is an extremely fast Python linter and formatter written in Rust
 line-length = 100                # Maximum line length for code formatting
 target-version = "py313"         # Target Python version for syntax compatibility
 exclude = [
@@ -46,9 +46,9 @@ exclude = [
 quote-style = "double"           # Use double quotes for strings
 indent-style = "space"           # Use spaces for indentation
 
+[tool.ruff.lint]
 # Ruff Linting Rules
 # Selects which linting rules to enable and ignore
-[tool.ruff.lint]
 select = [
     "E",     # pycodestyle errors
     "F",     # pyflakes
@@ -77,9 +77,9 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"  # Regex for unused
 [tool.ruff.lint.mccabe]
 max-complexity = 10              # Maximum cyclomatic complexity threshold
 
+[tool.mypy]
 # MyPy Configuration
 # Static type checking configuration for enhanced type safety
-[tool.mypy]
 exclude = "^testing/"            # Don't type check testing directory
 warn_redundant_casts = true      # Warn about unnecessary casts
 warn_unused_ignores = true       # Warn about unused type ignore comments

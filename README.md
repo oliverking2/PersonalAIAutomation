@@ -30,3 +30,31 @@ Copy `.env_example` to `.env` and populate the required values.
 Logging outputs to both stdout and a file. Configure via environment variables:
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
 - `LOG_FILE`: Log file path. Relative paths use project root (default: app.log)
+
+#### Database
+PostgreSQL database for storing newsletters and articles:
+- `DATABASE_HOST`: Database host (default: localhost)
+- `DATABASE_PORT`: Database port (default: 5432)
+- `DATABASE_NAME`: Database name
+- `DATABASE_USER`: Database user
+- `DATABASE_PASSWORD`: Database password
+
+Start the database with Docker:
+```bash
+docker-compose up -d
+```
+
+Run migrations:
+```bash
+poetry run alembic upgrade head
+```
+
+## Features
+
+### Newsletter Extraction
+Fetches TLDR newsletters (standard, AI, Dev) from Outlook via Microsoft Graph API, extracts articles, and stores them in PostgreSQL.
+
+Supported newsletters:
+- TLDR (general tech news)
+- TLDR AI (AI/ML focused)
+- TLDR Dev (developer focused)
