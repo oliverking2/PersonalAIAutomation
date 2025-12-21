@@ -1,10 +1,14 @@
 """Tests for newsletter parser module."""
 
 import unittest
+from unittest.mock import MagicMock, patch
+
+import requests
 
 from src.newsletters.tldr.models import NewsletterType
 from src.newsletters.tldr.parser import (
     _is_article_url,
+    _unpack_href,
     identify_newsletter_type,
 )
 
@@ -75,6 +79,78 @@ class TestIsArticleUrl(unittest.TestCase):
         # This is acceptable behaviour as the URL won't be valid anyway
         result = _is_article_url("")
         self.assertIsInstance(result, bool)
+
+
+class TestUnpackHref(unittest.TestCase):
+    """Tests for _unpack_href function."""
+
+    @patch("src.newsletters.tldr.parser.requests.head")
+    def test_returns_final_url_after_redirects(self, mock_head: MagicMock) -> None:
+        """Test that the final URL is returned after following redirects."""
+        mock_response = MagicMock()
+        mock_response.url = "https://example.com/final-article"
+        mock_head.return_value = mock_response
+
+        result = _unpack_href("https://tracking.example.com/redirect?url=123")
+
+        self.assertEqual(result, "https://example.com/final-article")
+        mock_head.assert_called_once_with(
+            "https://tracking.example.com/redirect?url=123",
+            allow_redirects=True,
+            timeout=10,
+        )
+
+    @patch("src.newsletters.tldr.parser.requests.head")
+    def test_uses_custom_timeout(self, mock_head: MagicMock) -> None:
+        """Test that custom timeout is passed to requests."""
+        mock_response = MagicMock()
+        mock_response.url = "https://example.com/article"
+        mock_head.return_value = mock_response
+
+        _unpack_href("https://example.com/redirect", timeout=30)
+
+        mock_head.assert_called_once_with(
+            "https://example.com/redirect",
+            allow_redirects=True,
+            timeout=30,
+        )
+
+    @patch("src.newsletters.tldr.parser.requests.head")
+    def test_not_raises_on_http_error(self, mock_head: MagicMock) -> None:
+        """Test that HTTP errors are raised."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
+        mock_head.return_value = mock_response
+
+        _unpack_href("https://example.com/not-found")
+
+    @patch("src.newsletters.tldr.parser.requests.head")
+    def test_raises_on_timeout(self, mock_head: MagicMock) -> None:
+        """Test that timeout errors are raised."""
+        mock_head.side_effect = requests.Timeout("Connection timed out")
+
+        with self.assertRaises(requests.Timeout):
+            _unpack_href("https://slow-server.example.com/article")
+
+    @patch("src.newsletters.tldr.parser.requests.head")
+    def test_raises_on_connection_error(self, mock_head: MagicMock) -> None:
+        """Test that connection errors are raised."""
+        mock_head.side_effect = requests.ConnectionError("Connection refused")
+
+        with self.assertRaises(requests.ConnectionError):
+            _unpack_href("https://unreachable.example.com/article")
+
+    @patch("src.newsletters.tldr.parser.requests.head")
+    def test_returns_same_url_if_no_redirect(self, mock_head: MagicMock) -> None:
+        """Test that the same URL is returned if there are no redirects."""
+        original_url = "https://example.com/direct-article"
+        mock_response = MagicMock()
+        mock_response.url = original_url
+        mock_head.return_value = mock_response
+
+        result = _unpack_href(original_url)
+
+        self.assertEqual(result, original_url)
 
 
 if __name__ == "__main__":

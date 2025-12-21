@@ -1,10 +1,12 @@
 """Service layer for sending Telegram alerts about newsletters."""
 
 import logging
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
 from src.database.newsletters import (
+    Article,
     Newsletter,
     get_unsent_newsletters,
     mark_newsletter_alerted,
@@ -74,8 +76,21 @@ class TelegramService:
         lines = [f"<b>{newsletter.newsletter_type.value} - {newsletter.subject}</b>", ""]
 
         for article in newsletter.articles:
-            lines.append(f"- {article.title}")
-            lines.append(f"  {article.url}")
+            lines.append(f"<b>{article.title}</b>")
+            if article.description:
+                lines.append(f"{article.description[:150]}")
+            lines.append(self._format_article_link(article))
             lines.append("")
 
         return "\n".join(lines).strip()
+
+    def _format_article_link(self, article: Article) -> str:
+        """Format an article link with domain display text.
+
+        :param article: The article to format.
+        :returns: HTML link with domain as display text.
+        """
+        # Use url_parsed if available, otherwise fall back to url
+        link_url = article.url_parsed or article.url
+        domain = urlparse(link_url).netloc
+        return f'<a href="{link_url}">{domain}</a>'

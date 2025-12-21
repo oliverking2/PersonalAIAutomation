@@ -33,6 +33,7 @@ class TestTelegramServiceSendUnsentNewsletters(unittest.TestCase):
         newsletter = MagicMock()
         newsletter.id = uuid.uuid4()
         newsletter.subject = subject
+        newsletter.newsletter_type.value = "TLDR"
         newsletter.alerted_at = alerted_at
         newsletter.articles = []
         return newsletter
@@ -42,16 +43,22 @@ class TestTelegramServiceSendUnsentNewsletters(unittest.TestCase):
         *,
         title: str = "Test Article",
         url: str = "https://example.com/article",
+        url_parsed: str | None = "https://example.com/article",
+        description: str | None = "Article description",
     ) -> MagicMock:
         """Create a mock Article object.
 
         :param title: The article title.
         :param url: The article URL.
+        :param url_parsed: The parsed (redirect-resolved) URL.
+        :param description: The article description.
         :returns: A mock Article object.
         """
         article = MagicMock()
         article.title = title
         article.url = url
+        article.url_parsed = url_parsed
+        article.description = description
         return article
 
     def test_send_unsent_newsletters_no_newsletters_returns_zero(self) -> None:
@@ -161,6 +168,7 @@ class TestTelegramServiceFormatMessage(unittest.TestCase):
         """
         newsletter = MagicMock()
         newsletter.subject = subject
+        newsletter.newsletter_type.value = "TLDR"
         newsletter.articles = []
         return newsletter
 
@@ -168,17 +176,23 @@ class TestTelegramServiceFormatMessage(unittest.TestCase):
         self,
         *,
         title: str = "Article Title",
-        url: str = "https://example.com",
+        url: str = "https://example.com/article",
+        url_parsed: str | None = "https://example.com/article",
+        description: str | None = "Article description text",
     ) -> MagicMock:
         """Create a mock Article object.
 
         :param title: The article title.
         :param url: The article URL.
+        :param url_parsed: The parsed (redirect-resolved) URL.
+        :param description: The article description.
         :returns: A mock Article object.
         """
         article = MagicMock()
         article.title = title
         article.url = url
+        article.url_parsed = url_parsed
+        article.description = description
         return article
 
     def test_format_message_includes_subject_as_bold(self) -> None:
@@ -188,22 +202,30 @@ class TestTelegramServiceFormatMessage(unittest.TestCase):
 
         message = self.service._format_newsletter_message(newsletter)
 
-        self.assertIn("<b>My Newsletter</b>", message)
+        self.assertIn("<b>TLDR - My Newsletter</b>", message)
 
     def test_format_message_includes_article_titles_and_urls(self) -> None:
         """Test that article titles and URLs are included."""
         newsletter = self._create_mock_newsletter()
         newsletter.articles = [
-            self._create_mock_article(title="Article 1", url="https://example.com/1"),
-            self._create_mock_article(title="Article 2", url="https://example.com/2"),
+            self._create_mock_article(
+                title="Article 1",
+                url="https://techcrunch.com/1",
+                url_parsed="https://techcrunch.com/article/1",
+            ),
+            self._create_mock_article(
+                title="Article 2",
+                url="https://theverge.com/2",
+                url_parsed="https://theverge.com/article/2",
+            ),
         ]
 
         message = self.service._format_newsletter_message(newsletter)
 
-        self.assertIn("- Article 1", message)
-        self.assertIn("https://example.com/1", message)
-        self.assertIn("- Article 2", message)
-        self.assertIn("https://example.com/2", message)
+        self.assertIn("<b>Article 1</b>", message)
+        self.assertIn('<a href="https://techcrunch.com/article/1">techcrunch.com</a>', message)
+        self.assertIn("<b>Article 2</b>", message)
+        self.assertIn('<a href="https://theverge.com/article/2">theverge.com</a>', message)
 
     def test_format_message_handles_empty_articles(self) -> None:
         """Test that newsletter with no articles formats correctly."""
@@ -212,7 +234,7 @@ class TestTelegramServiceFormatMessage(unittest.TestCase):
 
         message = self.service._format_newsletter_message(newsletter)
 
-        self.assertEqual(message, "<b>Empty Newsletter</b>")
+        self.assertEqual(message, "<b>TLDR - Empty Newsletter</b>")
 
     def test_format_message_preserves_article_order(self) -> None:
         """Test that articles appear in the same order as provided."""
@@ -231,6 +253,59 @@ class TestTelegramServiceFormatMessage(unittest.TestCase):
 
         self.assertLess(first_pos, second_pos)
         self.assertLess(second_pos, third_pos)
+
+    def test_format_article_link_uses_url_parsed(self) -> None:
+        """Test that url_parsed is used for the link when available."""
+        article = self._create_mock_article(
+            url="https://tracking.example.com/redirect",
+            url_parsed="https://techcrunch.com/article",
+        )
+
+        link = self.service._format_article_link(article)
+
+        self.assertEqual(link, '<a href="https://techcrunch.com/article">techcrunch.com</a>')
+
+    def test_format_article_link_falls_back_to_url(self) -> None:
+        """Test that url is used when url_parsed is None."""
+        article = self._create_mock_article(
+            url="https://example.com/article",
+            url_parsed=None,
+        )
+
+        link = self.service._format_article_link(article)
+
+        self.assertEqual(link, '<a href="https://example.com/article">example.com</a>')
+
+    def test_format_message_includes_description(self) -> None:
+        """Test that article description is included in message."""
+        newsletter = self._create_mock_newsletter()
+        newsletter.articles = [
+            self._create_mock_article(
+                title="Test Article",
+                description="This is a test description for the article.",
+            ),
+        ]
+
+        message = self.service._format_newsletter_message(newsletter)
+
+        self.assertIn("This is a test description for the article.", message)
+
+    def test_format_message_truncates_long_description(self) -> None:
+        """Test that long descriptions are truncated to 150 characters."""
+        newsletter = self._create_mock_newsletter()
+        long_description = "A" * 200
+        newsletter.articles = [
+            self._create_mock_article(
+                title="Test Article",
+                description=long_description,
+            ),
+        ]
+
+        message = self.service._format_newsletter_message(newsletter)
+
+        # Should contain exactly 150 A's, not 200
+        self.assertIn("A" * 150, message)
+        self.assertNotIn("A" * 151, message)
 
 
 if __name__ == "__main__":

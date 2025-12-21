@@ -20,6 +20,7 @@ class ParsedArticle(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=500)
     url: HttpUrl
+    url_parsed: HttpUrl
     description: str | None = None
 
 

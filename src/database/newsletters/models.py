@@ -79,6 +79,7 @@ class Article(Base):
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    url_parsed: Mapped[str] = mapped_column(String(2000), nullable=True)
     url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -4,6 +4,7 @@ import logging
 import re
 from urllib.parse import urlparse
 
+import requests
 from bs4 import BeautifulSoup, Tag
 from pydantic import HttpUrl
 from readability import Document
@@ -75,6 +76,19 @@ def parse_newsletter_html(html: str) -> list[ParsedArticle]:
     return articles
 
 
+def _unpack_href(href: str, *, timeout: int = 10) -> str:
+    """Follow redirects to get the final destination URL.
+
+    :param href: The URL to unpack (may contain tracking redirects).
+    :param timeout: Request timeout in seconds.
+    :returns: The final destination URL after following redirects.
+    :raises requests.RequestException: If the request fails.
+    """
+    resp = requests.head(href, allow_redirects=True, timeout=timeout)
+    # don't raise because sometimes the head comes back with a failure status but the url has been found
+    return resp.url
+
+
 def _extract_article_from_block(
     block: Tag,
 ) -> ParsedArticle | None:
@@ -99,6 +113,9 @@ def _extract_article_from_block(
         logger.info(f"Skipping non-article link: {href}")
         return None
 
+    parsed_href = _unpack_href(href)
+    logger.debug(f"Unpacked href: {parsed_href} -> {href}")
+
     title = link.get_text(strip=True)
     if not title:
         logger.info(f"Skipping link without title: {link}")
@@ -111,6 +128,7 @@ def _extract_article_from_block(
         return ParsedArticle(
             title=title[:500],  # Truncate to max length
             url=HttpUrl(href),
+            url_parsed=HttpUrl(parsed_href),
             description=description,
         )
     except ValueError as e:
