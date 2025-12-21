@@ -87,6 +87,7 @@ This starts:
 - Celery worker (processes tasks)
 - Celery beat (schedules hourly tasks)
 - Flower (monitoring at http://localhost:5555)
+- GlitchTip (error tracking at http://localhost:8001)
 
 #### Running Locally
 Start Redis (via Docker or locally), then run:

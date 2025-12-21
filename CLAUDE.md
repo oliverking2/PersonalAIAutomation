@@ -51,6 +51,7 @@ poetry run celery -A src.orchestration.celery_app worker --loglevel=info  # Work
 | `src/database/`      | SQLAlchemy models and database operations      |
 | `src/graph/`         | Microsoft Graph API client for email access    |
 | `src/newsletters/`   | Email parsing and article extraction           |
+| `src/observability/` | Sentry/GlitchTip error tracking integration    |
 | `src/orchestration/` | Celery tasks and scheduling                    |
 | `src/telegram/`      | Telegram Bot API client and alerting           |
 
