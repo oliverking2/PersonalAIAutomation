@@ -89,9 +89,12 @@ class TestTelegramServiceSendUnsentNewsletters(unittest.TestCase):
         newsletter.articles = [self._create_mock_article()]
         self.assertIsNone(newsletter.alerted_at)
 
+        # Mock for get_unsent_newsletters (ends with .all())
         self.mock_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
             newsletter
         ]
+        # Mock for mark_newsletter_alerted (ends with .one())
+        self.mock_session.query.return_value.filter.return_value.one.return_value = newsletter
         self.mock_client.send_message.return_value = True
 
         service = TelegramService(self.mock_session, self.mock_client)

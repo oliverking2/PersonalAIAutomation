@@ -9,10 +9,10 @@ from pydantic import BaseModel, Field, HttpUrl
 class NewsletterType(StrEnum):
     """Type of TLDR newsletter."""
 
-    TLDR = "tldr"
-    TLDR_AI = "tldr_ai"
-    TLDR_DEV = "tldr_dev"
-    TLDR_DATA = "tldr_data"
+    TLDR = "TLDR"
+    TLDR_AI = "TLDR AI"
+    TLDR_DEV = "TLDR Dev"
+    TLDR_DATA = "TLDR Data"
 
 
 class ParsedArticle(BaseModel):

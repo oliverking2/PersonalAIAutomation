@@ -8,7 +8,7 @@ from sqlalchemy.engine import Engine
 from alembic import context
 from src.database.connection import create_db_engine, get_database_url
 from src.database.core import Base
-from src.database.models.newsletters import *
+from src.database.newsletters.models import *
 
 # Load environment variables
 load_dotenv()

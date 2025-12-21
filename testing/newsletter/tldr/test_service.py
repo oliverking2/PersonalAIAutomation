@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.newsletters.tldr.service import NewsletterService
+from src.database.newsletters import compute_url_hash
 
 
 class TestComputeUrlHash(unittest.TestCase):
@@ -11,15 +11,15 @@ class TestComputeUrlHash(unittest.TestCase):
     def test_computes_consistent_hash(self) -> None:
         """Test that the same URL produces the same hash."""
         url = "https://example.com/article/123"
-        hash1 = NewsletterService._compute_url_hash(url)
-        hash2 = NewsletterService._compute_url_hash(url)
+        hash1 = compute_url_hash(url)
+        hash2 = compute_url_hash(url)
 
         self.assertEqual(hash1, hash2)
 
     def test_hash_is_64_characters(self) -> None:
         """Test that hash is SHA256 hex (64 characters)."""
         url = "https://example.com/article"
-        result = NewsletterService._compute_url_hash(url)
+        result = compute_url_hash(url)
 
         self.assertEqual(len(result), 64)
 
@@ -28,8 +28,8 @@ class TestComputeUrlHash(unittest.TestCase):
         url1 = "https://example.com/article/"
         url2 = "https://example.com/article"
 
-        hash1 = NewsletterService._compute_url_hash(url1)
-        hash2 = NewsletterService._compute_url_hash(url2)
+        hash1 = compute_url_hash(url1)
+        hash2 = compute_url_hash(url2)
 
         self.assertEqual(hash1, hash2)
 
@@ -38,8 +38,8 @@ class TestComputeUrlHash(unittest.TestCase):
         url1 = "HTTPS://EXAMPLE.COM/ARTICLE"
         url2 = "https://example.com/article"
 
-        hash1 = NewsletterService._compute_url_hash(url1)
-        hash2 = NewsletterService._compute_url_hash(url2)
+        hash1 = compute_url_hash(url1)
+        hash2 = compute_url_hash(url2)
 
         self.assertEqual(hash1, hash2)
 
@@ -48,8 +48,8 @@ class TestComputeUrlHash(unittest.TestCase):
         url1 = "  https://example.com/article  "
         url2 = "https://example.com/article"
 
-        hash1 = NewsletterService._compute_url_hash(url1)
-        hash2 = NewsletterService._compute_url_hash(url2)
+        hash1 = compute_url_hash(url1)
+        hash2 = compute_url_hash(url2)
 
         self.assertEqual(hash1, hash2)
 
@@ -58,8 +58,8 @@ class TestComputeUrlHash(unittest.TestCase):
         url1 = "https://example.com/article/1"
         url2 = "https://example.com/article/2"
 
-        hash1 = NewsletterService._compute_url_hash(url1)
-        hash2 = NewsletterService._compute_url_hash(url2)
+        hash1 = compute_url_hash(url1)
+        hash2 = compute_url_hash(url2)
 
         self.assertNotEqual(hash1, hash2)
 

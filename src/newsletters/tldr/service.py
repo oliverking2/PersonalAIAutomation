@@ -1,13 +1,12 @@
 """Service layer for processing TLDR newsletters."""
 
-import hashlib
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from src.database.models.newsletters import Article, Newsletter
+from src.database.newsletters import create_newsletter, newsletter_exists
 from src.graph.auth import GraphAPI
 from src.newsletters.tldr.fetcher import extract_email_metadata, fetch_tldr_newsletters
 from src.newsletters.tldr.models import ParsedNewsletter
@@ -87,8 +86,9 @@ class NewsletterService:
         """
         metadata = extract_email_metadata(message)
         logger.info(f"Processing newsletter: {metadata['subject']}")
+
         # Check if already processed
-        if self._newsletter_exists(metadata["email_id"]):
+        if newsletter_exists(self._session, metadata["email_id"]):
             logger.debug(f"Newsletter already processed: {metadata['email_id']}")
             return
 
@@ -105,83 +105,9 @@ class NewsletterService:
         )
 
         # Store in database
-        new_count, dup_count = self._store_newsletter(parsed)
+        _, new_count, dup_count = create_newsletter(self._session, parsed)
 
         result.newsletters_processed += 1
         result.articles_extracted += len(articles)
         result.articles_new += new_count
         result.articles_duplicate += dup_count
-
-    def _newsletter_exists(self, email_id: str) -> bool:
-        """Check if a newsletter has already been processed.
-
-        :param email_id: The Graph API email ID.
-        :returns: True if the newsletter exists in the database.
-        """
-        return (
-            self._session.query(Newsletter).filter(Newsletter.email_id == email_id).first()
-            is not None
-        )
-
-    def _store_newsletter(self, parsed: ParsedNewsletter) -> tuple[int, int]:
-        """Store a parsed newsletter and its articles.
-
-        :param parsed: The parsed newsletter data.
-        :returns: A tuple of (new_articles_count, duplicate_articles_count).
-        """
-        newsletter = Newsletter(
-            email_id=parsed.email_id,
-            newsletter_type=parsed.newsletter_type,
-            subject=parsed.subject,
-            received_at=parsed.received_at,
-            processed_at=datetime.now(UTC),
-        )
-
-        self._session.add(newsletter)
-        self._session.flush()  # Get the newsletter ID
-
-        new_count = 0
-        dup_count = 0
-
-        for article in parsed.articles:
-            url_hash = self._compute_url_hash(str(article.url))
-
-            if self._article_exists(url_hash):
-                dup_count += 1
-                continue
-
-            db_article = Article(
-                newsletter_id=newsletter.id,
-                title=article.title,
-                url=str(article.url),
-                url_hash=url_hash,
-                description=article.description,
-            )
-            self._session.add(db_article)
-            new_count += 1
-
-        logger.info(
-            f"Stored newsletter {parsed.email_id[:20]}: {new_count} new articles, "
-            f"{dup_count} duplicates"
-        )
-
-        return new_count, dup_count
-
-    def _article_exists(self, url_hash: str) -> bool:
-        """Check if an article with this URL already exists.
-
-        :param url_hash: The SHA256 hash of the article URL.
-        :returns: True if the article exists in the database.
-        """
-        return self._session.query(Article).filter(Article.url_hash == url_hash).first() is not None
-
-    @staticmethod
-    def _compute_url_hash(url: str) -> str:
-        """Compute SHA256 hash of a URL for deduplication.
-
-        :param url: The URL to hash.
-        :returns: The hex-encoded SHA256 hash.
-        """
-        # Normalise URL before hashing
-        normalised = url.lower().strip().rstrip("/")
-        return hashlib.sha256(normalised.encode()).hexdigest()

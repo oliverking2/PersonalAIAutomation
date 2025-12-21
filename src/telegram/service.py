@@ -1,11 +1,14 @@
 """Service layer for sending Telegram alerts about newsletters."""
 
 import logging
-from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from src.database.models.newsletters import Newsletter
+from src.database.newsletters import (
+    Newsletter,
+    get_unsent_newsletters,
+    mark_newsletter_alerted,
+)
 from src.telegram.client import TelegramClient, TelegramClientError
 from src.telegram.models import SendResult
 
@@ -31,13 +34,7 @@ class TelegramService:
         """
         result = SendResult()
 
-        # Query newsletters where alerted_at is NULL
-        unsent_newsletters = (
-            self._session.query(Newsletter)
-            .filter(Newsletter.alerted_at.is_(None))
-            .order_by(Newsletter.received_at.asc())
-            .all()
-        )
+        unsent_newsletters = get_unsent_newsletters(self._session)
 
         logger.info(f"Found {len(unsent_newsletters)} newsletters to alert")
 
@@ -51,7 +48,8 @@ class TelegramService:
                 result.errors.append(error_msg)
 
         logger.info(
-            f"Notification sending complete: {result.newsletters_sent} sent, {len(result.errors)} errors"
+            f"Notification sending complete: {result.newsletters_sent} sent, "
+            f"{len(result.errors)} errors"
         )
 
         return result
@@ -65,11 +63,7 @@ class TelegramService:
         message = self._format_newsletter_message(newsletter)
         self._client.send_message(message)
 
-        # Mark newsletter as alerted
-        newsletter.alerted_at = datetime.now(UTC)
-        self._session.flush()
-
-        logger.debug(f"Newsletter {newsletter.id} marked as alerted")
+        mark_newsletter_alerted(self._session, newsletter.id)
 
     def _format_newsletter_message(self, newsletter: Newsletter) -> str:
         """Format a newsletter into a Telegram message.
@@ -77,7 +71,7 @@ class TelegramService:
         :param newsletter: The newsletter to format.
         :returns: The formatted message string.
         """
-        lines = [f"<b>{newsletter.subject}</b>", ""]
+        lines = [f"<b>{newsletter.newsletter_type.value} - {newsletter.subject}</b>", ""]
 
         for article in newsletter.articles:
             lines.append(f"- {article.title}")
