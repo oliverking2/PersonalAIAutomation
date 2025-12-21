@@ -1,23 +1,34 @@
 # Roadmap
-- ~~Standardised logging config~~
-- Integrate with Telegram for Agentic Chat
-- Telegram bot (chat UI + notifications)
-- Daily jobs which can be run and updates sent through Telegram (Celery?)
-- FastAPI layer for API
-- Dockerised
-- AWS Bedrock for models
-- Integrate with Notion for task tracking
-- Postgres for data storage using alembic
 
 ## Notion
 - Daily updates of tasks due or overdue
-- Add tasks via the Telegram chat 
+- Add tasks via the Telegram chat
+
+## Orchestration
+- Add a scheduler to run daily/hourly jobs
+  - Daily jobs which can be run and updates sent through Telegram (Celery?)
 
 ## Email Summaries
-- TLDR Newsletter
+- ~~TLDR Newsletter~~
 - Medium Daily Digest
 - Substack - likely different configs per feed
   - Joe Reis
   - DataExpert.io (Subscription needed?)
   - Daily Dose of Data Science
   - Seattle Data Guy
+
+## AI
+- Integrate with AWS Bedrock for models
+- Add in AI for summarising news articles
+
+## Telegram
+- ~~Notifications~~
+- 2-way chat
+- Add in AI for chatting
+
+## Other
+- ~~Standardised logging config~~
+- FastAPI API
+- Add CI/CD
+- Dockerise
+- ~~Postgres for DB~~

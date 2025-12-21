@@ -10,6 +10,7 @@ from src.graph.auth import (
     GraphAPI,
     GraphAuthenticationError,
 )
+from src.paths import PROJECT_ROOT
 
 
 class TestGraphAPIInitialisation(unittest.TestCase):
@@ -30,7 +31,7 @@ class TestGraphAPIInitialisation(unittest.TestCase):
         self.assertEqual(client._target_upn, "user@example.com")
         self.assertEqual(client._tenant_id, "test-tenant")
         self.assertEqual(client._client_id, "test-app")
-        self.assertEqual(client._cache_file, Path("msal_cache.bin"))
+        self.assertEqual(client._cache_file, PROJECT_ROOT / "msal_cache.bin")
 
     @patch.dict("os.environ", {}, clear=True)
     def test_initialisation_missing_tenant_id_raises_key_error(self) -> None:

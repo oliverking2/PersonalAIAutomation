@@ -39,6 +39,11 @@ PostgreSQL database for storing newsletters and articles:
 - `DATABASE_USER`: Database user
 - `DATABASE_PASSWORD`: Database password
 
+#### Telegram
+Send newsletter alerts via Telegram bot:
+- `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
+- `TELEGRAM_CHAT_ID`: Target chat ID for messages
+
 Start the database with Docker:
 ```bash
 docker-compose up -d
@@ -58,3 +63,6 @@ Supported newsletters:
 - TLDR (general tech news)
 - TLDR AI (AI/ML focused)
 - TLDR Dev (developer focused)
+
+### Telegram Alerts
+Sends newsletter summaries to Telegram with article titles and links. Newsletters are tracked to prevent duplicate alerts.

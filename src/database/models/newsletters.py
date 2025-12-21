@@ -40,6 +40,11 @@ class Newsletter(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
+    alerted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
 
     articles: Mapped[list["Article"]] = relationship(
         "Article",
