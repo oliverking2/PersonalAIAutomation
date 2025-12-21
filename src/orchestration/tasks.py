@@ -3,10 +3,8 @@
 import logging
 import os
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
-from celery import Celery, Task, chain
-from celery.schedules import crontab
+from celery import Task
 from dotenv import load_dotenv
 
 from src.database.connection import get_session
@@ -122,43 +120,3 @@ def send_alerts_task(self: Task) -> dict[str, int | list[str]]:
     except Exception as exc:
         logger.exception(f"Telegram alerts failed: {exc}")
         raise
-
-
-@celery_app.task(
-    bind=True,
-    base=BaseTask,
-    name="src.orchestration.tasks.run_full_pipeline_task",
-    **DEFAULT_RETRY_KWARGS,
-)
-def run_full_pipeline_task(self: Task, *, days_back: int = 1) -> dict[str, object]:
-    """Run the full newsletter pipeline: process then alert.
-
-    Convenience task that runs both processing and alerting in sequence.
-
-    :param self: The Celery task instance (bound).
-    :param days_back: Number of days to look back for newsletters.
-    :returns: Combined statistics from both operations.
-    """
-    logger.info(f"Starting full pipeline task (days_back={days_back})")
-
-    process_result = process_newsletters_task(days_back=days_back)
-    alert_result = send_alerts_task()
-
-    return {
-        "processing": process_result,
-        "alerting": alert_result,
-    }
-
-
-# Beat schedule for periodic tasks
-@celery_app.on_after_configure.connect
-def setup_periodic_tasks(sender: Celery, **kwargs: Any) -> None:
-    """Set up periodic tasks."""
-    sender.add_periodic_task(
-        crontab(minute=0),
-        chain(
-            process_newsletters_task.s(),
-            send_alerts_task.s(),
-        ),
-        name="process-then-alert",
-    )
