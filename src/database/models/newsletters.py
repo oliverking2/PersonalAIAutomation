@@ -4,7 +4,7 @@ import uuid as uuid_module
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,7 +43,6 @@ class Newsletter(Base):
         DateTime(timezone=True),
         nullable=False,
     )
-    article_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -85,9 +84,8 @@ class Article(Base):
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
     url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    section: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    section: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     source_publication: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    position_in_newsletter: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

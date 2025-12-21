@@ -32,6 +32,7 @@
 ## Logging
 - Use the standard library `logging` module.
 - Use module-level loggers: `logger = logging.getLogger(__name__)`.
+- Use f-strings for all string formatting, including log messages.
 - Log actionable context (ids, counts, timings) but never secrets or personal data.
 - Prefer structured-ish logging via consistent key/value wording even if using plain logging.
 - Do not `print()` in production code.

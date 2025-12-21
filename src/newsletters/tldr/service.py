@@ -69,11 +69,9 @@ class NewsletterService:
                 result.errors.append(error_msg)
 
         logger.info(
-            "Processing complete: %d newsletters, %d articles (%d new, %d duplicate)",
-            result.newsletters_processed,
-            result.articles_extracted,
-            result.articles_new,
-            result.articles_duplicate,
+            f"Processing complete: {result.newsletters_processed} newsletters, "
+            f"{result.articles_extracted} articles ({result.articles_new} new, "
+            f"{result.articles_duplicate} duplicate)"
         )
 
         return result
@@ -92,7 +90,7 @@ class NewsletterService:
 
         # Check if already processed
         if self._newsletter_exists(metadata["email_id"]):
-            logger.debug("Newsletter already processed: %s", metadata["email_id"])
+            logger.debug(f"Newsletter already processed: {metadata['email_id']}")
             return
 
         # Parse the newsletter
@@ -141,7 +139,6 @@ class NewsletterService:
             subject=parsed.subject,
             received_at=parsed.received_at,
             processed_at=datetime.now(UTC),
-            article_count=len(parsed.articles),
         )
 
         self._session.add(newsletter)
@@ -165,16 +162,13 @@ class NewsletterService:
                 description=article.description,
                 section=article.section,
                 source_publication=article.source_publication,
-                position_in_newsletter=article.position,
             )
             self._session.add(db_article)
             new_count += 1
 
         logger.info(
-            "Stored newsletter %s: %d new articles, %d duplicates",
-            parsed.email_id[:20],
-            new_count,
-            dup_count,
+            f"Stored newsletter {parsed.email_id[:20]}: {new_count} new articles, "
+            f"{dup_count} duplicates"
         )
 
         return new_count, dup_count

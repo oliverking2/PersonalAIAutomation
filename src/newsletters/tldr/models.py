@@ -20,9 +20,8 @@ class ParsedArticle(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     url: HttpUrl
     description: str | None = None
-    section: str | None = Field(None, max_length=100)
+    section: str | None = Field(None, max_length=2000)
     source_publication: str | None = Field(None, max_length=200)
-    position: int = Field(..., ge=0)
 
 
 class ParsedNewsletter(BaseModel):

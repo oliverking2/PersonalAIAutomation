@@ -58,30 +58,28 @@ def parse_newsletter_html(html: str) -> list[ParsedArticle]:
     articles: list[ParsedArticle] = []
     current_section: str | None = None
 
-    for position, block in enumerate(text_blocks):
+    for block in text_blocks:
         if not isinstance(block, Tag):
             continue
 
-        article = _extract_article_from_block(block, position, current_section)
+        article = _extract_article_from_block(block, current_section)
         if article:
             articles.append(article)
             # Update current section if this article had one
             if article.section:
                 current_section = article.section
 
-    logger.info("Extracted %d articles from newsletter", len(articles))
+    logger.info(f"Extracted {len(articles)} articles from newsletter")
     return articles
 
 
 def _extract_article_from_block(
     block: Tag,
-    position: int,
     current_section: str | None,
 ) -> ParsedArticle | None:
     """Extract article details from a single text-block element.
 
     :param block: The BeautifulSoup Tag representing the article block.
-    :param position: The position of this article in the newsletter.
     :param current_section: The current section name (carried forward).
     :returns: A ParsedArticle if extraction succeeds, None otherwise.
     """
@@ -116,12 +114,11 @@ def _extract_article_from_block(
             title=title[:500],  # Truncate to max length
             url=HttpUrl(href),
             description=description,
-            section=section[:100] if section else None,
+            section=section[:2000] if section else None,
             source_publication=source_publication[:200] if source_publication else None,
-            position=position,
         )
     except ValueError as e:
-        logger.warning("Failed to create ParsedArticle: %s", e)
+        logger.warning(f"Failed to create ParsedArticle: {e}")
         return None
 
 

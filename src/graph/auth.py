@@ -114,10 +114,7 @@ class GraphAPI:
                     f"Failed to initiate device flow: {flow.get('error_description', flow)}"
                 )
 
-            logger.info(
-                "Device code authentication required: %s",
-                flow["message"],
-            )
+            logger.info(f"Device code authentication required: {flow['message']}")
             result = self._app.acquire_token_by_device_flow(flow)
 
         self._save_cache()

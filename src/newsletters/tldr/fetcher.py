@@ -43,11 +43,7 @@ def fetch_tldr_newsletters(
         "$top": str(limit),
     }
 
-    logger.info(
-        "Fetching TLDR newsletters since %s (limit=%d)",
-        since.isoformat(),
-        limit,
-    )
+    logger.info(f"Fetching TLDR newsletters since {since.isoformat()} (limit={limit})")
 
     response = graph_client.get(
         endpoint="mailFolders/Inbox/messages",
@@ -58,7 +54,7 @@ def fetch_tldr_newsletters(
     data = response.json()
     messages = data.get("value", [])
 
-    logger.info("Fetched %d TLDR newsletter(s)", len(messages))
+    logger.info(f"Fetched {len(messages)} TLDR newsletter(s)")
     return messages
 
 
