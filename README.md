@@ -130,12 +130,12 @@ poetry run uvicorn src.api.app:app --reload
 ```
 
 #### Endpoints
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /health | No | Health check |
-| POST | /tasks/process-newsletters | Yes | Trigger newsletter processing |
-| POST | /tasks/send-alerts | Yes | Trigger Telegram alerts |
-| GET | /tasks/{task_id} | Yes | Get task status |
+| Method   | Path                       | Auth  | Description                   |
+|----------|----------------------------|-------|-------------------------------|
+| GET      | /health                    | No    | Health check                  |
+| POST     | /tasks/process-newsletters | Yes   | Trigger newsletter processing |
+| POST     | /tasks/send-alerts         | Yes   | Trigger Telegram alerts       |
+| GET      | /tasks/{task_id}           | Yes   | Get task status               |
 
 #### Example Usage
 ```bash

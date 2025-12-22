@@ -6,7 +6,7 @@
 
 ## Orchestration
 - ~~Add a scheduler to run daily/hourly jobs~~
-  - Daily jobs which can be run and updates sent through Telegram (Celery?)
+  - ~~Daily jobs which can be run and updates sent through Telegram (Celery?)~~
 
 ## Email Summaries
 - ~~TLDR Newsletter~~
@@ -36,3 +36,4 @@
 - ~~Dockerise~~
 - ~~Postgres for DB~~
 - Connect GlitchTip to Telegram using webhook and FastAPI
+- Standardise to a single PG database
