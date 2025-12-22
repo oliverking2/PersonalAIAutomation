@@ -52,7 +52,7 @@ class TelegramClient:
         self._base_url = f"https://api.telegram.org/bot{self._bot_token}"
         logger.debug(f"TelegramClient initialised for chat_id={self._chat_id}")
 
-    def send_message(self, text: str) -> bool:
+    def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
         """Send a text message to the configured chat.
 
         :param text: The message text to send.
@@ -64,7 +64,7 @@ class TelegramClient:
         payload = {
             "chat_id": self._chat_id,
             "text": text,
-            "parse_mode": "HTML",
+            "parse_mode": parse_mode,
             "disable_web_page_preview": True,
         }
 

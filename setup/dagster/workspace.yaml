@@ -1,2 +1,4 @@
 load_from:
-  - python_module: src.dagster
+  - python_module:
+      module_name: src.dagster.definitions
+      attribute: defs
