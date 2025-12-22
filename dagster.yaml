@@ -8,3 +8,9 @@ storage:
 scheduler:
   module: dagster.core.scheduler
   class: DagsterDaemonScheduler
+
+# Capture Python logging from application code
+python_logs:
+  managed_python_loggers:
+    - src
+  python_log_level: INFO

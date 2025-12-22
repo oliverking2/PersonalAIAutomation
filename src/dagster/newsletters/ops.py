@@ -1,6 +1,7 @@
 """Dagster ops for newsletter processing and alerting."""
 
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -14,7 +15,16 @@ from src.telegram import TelegramClient, TelegramService
 # Email address to fetch newsletters for
 GRAPH_USER_EMAIL = os.environ["GRAPH_TARGET_UPN"]
 
-# Retry policy matching previous Celery behaviour
+
+@dataclass
+class AlertStats:
+    """Stats for alerting operations."""
+
+    newsletters_sent: int
+    errors: list[str]
+
+
+# Retry policy
 NEWSLETTER_RETRY_POLICY = RetryPolicy(
     max_retries=3,
     delay=60,  # 1 minute initial delay
@@ -65,9 +75,7 @@ def process_newsletters_op(context: OpExecutionContext) -> dict[str, int]:
     retry_policy=NEWSLETTER_RETRY_POLICY,
     description="Send Telegram alerts for unsent newsletters.",
 )
-def send_alerts_op(
-    context: OpExecutionContext, newsletter_stats: dict[str, Any]
-) -> dict[str, int | list[str]]:
+def send_alerts_op(context: OpExecutionContext, newsletter_stats: dict[str, Any]) -> AlertStats:
     """Send Telegram alerts for unsent newsletters.
 
     Queries for newsletters that haven't been alerted yet and sends
@@ -87,10 +95,10 @@ def send_alerts_op(
         telegram_service = TelegramService(session, telegram_client)
         result = telegram_service.send_unsent_newsletters()
 
-    stats: dict[str, int | list[str]] = {
-        "newsletters_sent": result.newsletters_sent,
-        "errors": result.errors,
-    }
+    stats = AlertStats(
+        newsletters_sent=result.newsletters_sent,
+        errors=result.errors,
+    )
 
     context.log.info(
         f"Telegram alerts complete: {result.newsletters_sent} sent, {len(result.errors)} errors"
