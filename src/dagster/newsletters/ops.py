@@ -3,9 +3,8 @@
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
-from dagster import Backoff, Config, Jitter, OpExecutionContext, RetryPolicy, op
+from dagster import Backoff, Jitter, OpExecutionContext, RetryPolicy, op
 from src.database.connection import get_session
 from src.database.extraction_state import get_watermark, set_watermark
 from src.database.newsletters import backfill_article_urls
@@ -17,15 +16,6 @@ from src.telegram import TelegramClient, TelegramService
 # Email address to fetch newsletters for
 GRAPH_USER_EMAIL = os.environ["GRAPH_TARGET_UPN"]
 
-
-@dataclass
-class AlertStats:
-    """Stats for alerting operations."""
-
-    newsletters_sent: int
-    errors: list[str]
-
-
 # Retry policy
 NEWSLETTER_RETRY_POLICY = RetryPolicy(
     max_retries=3,
@@ -35,24 +25,30 @@ NEWSLETTER_RETRY_POLICY = RetryPolicy(
 )
 
 
-class NewsletterOpConfig(Config):
-    """Configuration for newsletter processing op."""
+@dataclass
+class AlertStats:
+    """Stats for alerting operations."""
 
-    since_override: str | None = None
-    """Optional ISO format datetime to override the watermark.
+    newsletters_sent: int
+    errors: list[str]
 
-    If provided, newsletters will be fetched from this time instead of
-    using the stored watermark. Useful for backfills or debugging.
-    """
+
+@dataclass
+class NewsletterStats:
+    """Stats for newsletter processing operations."""
+
+    newsletters_processed: int
+    articles_new: int
+    articles_duplicate: int
+    urls_backfilled: int
 
 
 @op(
+    name="process_newsletters",
     retry_policy=NEWSLETTER_RETRY_POLICY,
     description="Fetch and process newsletters from Microsoft Graph API.",
 )
-def process_newsletters_op(
-    context: OpExecutionContext, config: NewsletterOpConfig
-) -> dict[str, int]:
+def process_newsletters_op(context: OpExecutionContext) -> NewsletterStats:
     """Process newsletters using watermark-based incremental extraction.
 
     Fetches newsletters from Graph API (since the last watermark or override),
@@ -60,25 +56,19 @@ def process_newsletters_op(
     Also backfills any missing parsed URLs for articles.
 
     :param context: Dagster execution context.
-    :param config: Op configuration with optional since_override.
     :returns: Dictionary with processing statistics.
     """
     graph_client = GraphAPI(GRAPH_USER_EMAIL)
 
     with get_session() as session:
         # Determine the since datetime
-        since: datetime | None = None
-        if config.since_override:
-            since = datetime.fromisoformat(config.since_override)
-            context.log.info(f"Using since_override: {since}")
+        since = get_watermark(session, ExtractionSource.NEWSLETTER_TLDR)
+        if since is not None:
+            context.log.info(f"Using watermark: {since}")
         else:
-            since = get_watermark(session, ExtractionSource.NEWSLETTER_TLDR)
-            if since is not None:
-                context.log.info(f"Using watermark: {since}")
-            else:
-                # default to 7 days ago if no watermark is found
-                since = datetime.now(UTC) - timedelta(days=7)
-                context.log.info("No watermark found, processing last 7 days of emails")
+            # default to 7 days ago if no watermark is found
+            since = datetime.now(UTC) - timedelta(days=7)
+            context.log.info("No watermark found, processing last 7 days of emails")
 
         # Process newsletters
         newsletter_service = NewsletterService(session, graph_client)
@@ -92,22 +82,23 @@ def process_newsletters_op(
         # Backfill any articles missing parsed URLs
         backfill_result = backfill_article_urls(session)
 
-    stats = {
-        "newsletters_processed": result.newsletters_processed,
-        "articles_new": result.articles_new,
-        "articles_duplicate": result.articles_duplicate,
-        "urls_backfilled": backfill_result.articles_updated,
-    }
+    stats = NewsletterStats(
+        newsletters_processed=result.newsletters_processed,
+        articles_new=result.articles_new,
+        articles_duplicate=result.articles_duplicate,
+        urls_backfilled=backfill_result.articles_updated,
+    )
 
-    context.log.info(f"Newsletter processing complete: {stats}")
+    context.log.info(f"Newsletter processing complete: {result}")
     return stats
 
 
 @op(
+    name="send_newsletter_alerts",
     retry_policy=NEWSLETTER_RETRY_POLICY,
     description="Send Telegram alerts for unsent newsletters.",
 )
-def send_alerts_op(context: OpExecutionContext, newsletter_stats: dict[str, Any]) -> AlertStats:
+def send_alerts_op(context: OpExecutionContext, newsletter_stats: NewsletterStats) -> AlertStats:
     """Send Telegram alerts for unsent newsletters.
 
     Queries for newsletters that haven't been alerted yet and sends
@@ -118,7 +109,7 @@ def send_alerts_op(context: OpExecutionContext, newsletter_stats: dict[str, Any]
     :returns: Dictionary with alerting statistics.
     """
     context.log.info(
-        f"Starting Telegram alerts (processed {newsletter_stats.get('newsletters_processed', 0)} newsletters)"
+        f"Starting Telegram alerts (processed {newsletter_stats.newsletters_processed} newsletters)"
     )
 
     telegram_client = TelegramClient()

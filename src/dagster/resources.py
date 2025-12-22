@@ -6,7 +6,7 @@ from dagster import ConfigurableResource
 from src.telegram import TelegramClient
 
 
-class TelegramResource(ConfigurableResource):
+class TelegramResource(ConfigurableResource[TelegramClient]):
     """Dagster resource providing a Telegram client."""
 
     bot_token: str = Field(..., description="Telegram bot token")

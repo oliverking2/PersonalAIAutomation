@@ -3,19 +3,18 @@
 import os
 
 from dagster import (
-    DagsterRunStatus,
     DefaultSensorStatus,
     Definitions,
     RunFailureSensorContext,
-    run_status_sensor,
+    run_failure_sensor,
 )
+from src.telegram import TelegramClient
+from src.telegram.utils import _escape_md
 
 
-@run_status_sensor(
-    run_status=DagsterRunStatus.FAILURE,
+@run_failure_sensor(
     default_status=DefaultSensorStatus.RUNNING,
     minimum_interval_seconds=60,
-    required_resource_keys={"telegram_errors"},
 )
 def telegram_on_run_failure(context: RunFailureSensorContext) -> None:
     """Send a Telegram alert once per failed run."""
@@ -27,14 +26,19 @@ def telegram_on_run_failure(context: RunFailureSensorContext) -> None:
     subject = f"Dagster failure: {run.job_name}"
 
     # Keep it simple and readable in Telegram.
-    text = (
-        f"<b>{subject}</b>\n"
-        f"Pipeline: <code>{run.job_name}</code>\n"
-        f"Run ID: <code>{run.run_id}</code>\n"
-        f"Link: {link}"
+    client = TelegramClient(
+        bot_token=os.environ["TELEGRAM_ERROR_BOT_TOKEN"], chat_id=os.environ["TELEGRAM_CHAT_ID"]
     )
+    context.log.info(f"Sending Telegram alert for failed run: {subject}")
+    text = (
+        f"*{_escape_md(subject)}*\n"
+        f"Pipeline: `{_escape_md(run.job_name)}`\n"
+        f"Run ID: `{_escape_md(run.run_id)}`\n"
+        f"[Open in Dagster]({_escape_md(link)})"
+    )
+    context.log.info(f"Message: {text}")
 
-    context.resources.telegram_errors.send_message(text)
+    client.send_message(text, parse_mode="MarkdownV2")
 
 
 util_sensor_defs = Definitions(
