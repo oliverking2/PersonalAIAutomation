@@ -9,4 +9,8 @@ data
 *.log
 
 # Cache files
-.msal_cache/msal_cache.bin
+.msal_cache
+
+# Dagster files
+.dagster
+.tmp_dagster_home_*
