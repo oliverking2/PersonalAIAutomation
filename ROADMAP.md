@@ -11,7 +11,8 @@
 
 ## Email Summaries
 - ~~TLDR Newsletter~~
-  - Move from "days_back" to a timestamp in db
+  - ~~Move from "days_back" to a timestamp in db~~
+  - Summaries of the description down to ~100chars
 - Medium Daily Digest
 - Substack - likely different configs per feed
   - Joe Reis
@@ -20,7 +21,7 @@
   - Seattle Data Guy
 
 ## API
-- ~~Trigger orchestration tasks manually~~ (Removed - use Dagster UI instead)
+- ~~Trigger orchestration tasks manually~~
 
 ## AI
 - Integrate with AWS Bedrock for models
@@ -38,4 +39,4 @@
 - ~~Dockerise~~
 - ~~Postgres for DB~~
 - Connect GlitchTip to Telegram using webhook and FastAPI
-- ~~Standardise to a single PG database~~ (All services now use main postgres)
+- ~~Standardise to a single PG database~~

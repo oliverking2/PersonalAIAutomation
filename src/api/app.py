@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from src.api.health import router as health_router
 from src.api.models import ErrorResponse
+from src.api.notion import router as notion_router
 from src.observability.sentry import init_sentry
 from src.utils.logging import configure_logging
 
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
 
     # Register routers
     application.include_router(health_router)
+    application.include_router(notion_router)
 
     logger.info("FastAPI application created")
 

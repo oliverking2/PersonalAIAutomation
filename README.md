@@ -131,6 +131,50 @@ poetry run uvicorn src.api.app:app --reload
 ```
 
 #### Endpoints
-| Method   | Path    | Auth | Description  |
-|----------|---------|------|--------------|
-| GET      | /health | No   | Health check |
+
+##### Health
+| Method | Path    | Auth | Description  |
+|--------|---------|------|--------------|
+| GET    | /health | No   | Health check |
+
+##### Notion
+| Method | Path                                        | Auth  | Description                       |
+|--------|---------------------------------------------|-------|-----------------------------------|
+| GET    | /notion/databases/{database_id}             | Yes   | Retrieve database structure       |
+| GET    | /notion/data-sources/{data_source_id}       | Yes   | Retrieve data source config       |
+| POST   | /notion/data-sources/{data_source_id}/query | Yes   | Query all pages (auto-pagination) |
+| GET    | /notion/data-sources/templates              | Yes   | List data source templates        |
+| GET    | /notion/pages/{page_id}                     | Yes   | Retrieve a single page            |
+| POST   | /notion/pages                               | Yes   | Create a new page                 |
+| PATCH  | /notion/pages/{page_id}                     | Yes   | Update page properties            |
+
+### Notion Integration
+API wrapper for Notion to query and manage tasks in data sources. Pagination is handled automatically - all matching results are returned in a single response.
+
+#### Configuration
+- `NOTION_INTEGRATION_SECRET`: Notion integration token from https://www.notion.so/my-integrations
+
+#### Usage
+Query tasks with filters:
+```bash
+curl -X POST http://localhost:8000/notion/data-sources/{data_source_id}/query \
+  -H "Authorization: Bearer $API_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"filter": {"property": "Status", "status": {"does_not_equal": "Complete"}}}'
+```
+
+Create a new task:
+```bash
+curl -X POST http://localhost:8000/notion/pages \
+  -H "Authorization: Bearer $API_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"data_source_id": "...", "task_name": "New Task", "status": "Not started"}'
+```
+
+Update task status:
+```bash
+curl -X PATCH http://localhost:8000/notion/pages/{page_id} \
+  -H "Authorization: Bearer $API_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "Complete"}'
+```
