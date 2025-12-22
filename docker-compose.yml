@@ -1,103 +1,32 @@
 services:
+  # ----------------------------
+  # Postgres (Database)
+  # ----------------------------
   postgres:
     image: postgres:18-alpine
     container_name: personal_automation_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DATABASE_USER}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      GLITCHTIP_DB_PASSWORD: ${GLITCHTIP_DB_PASSWORD}
     ports:
       - "${DATABASE_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./setup/postgres:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:8-alpine
-    container_name: personal_automation_redis
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT}:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  celery-worker:
-    build: .
-    container_name: personal_automation_celery_worker
-    restart: unless-stopped
-    command: [
-      "celery",
-      "-A",
-      "src.orchestration.celery_app",
-      "worker",
-      "--loglevel=info",
-      "-Q",
-      "personal_automation"
-    ]
-    env_file: .env
-    environment:
-      - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - msal_cache:/app/.msal_cache
-
-  celery-beat:
-    build: .
-    container_name: personal_automation_celery_beat
-    restart: unless-stopped
-    command: [
-      "celery",
-      "-A",
-      "src.orchestration.celery_app",
-      "beat",
-      "--loglevel=info"
-    ]
-    env_file: .env
-    environment:
-      - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  flower:
-    build: .
-    container_name: personal_automation_flower
-    restart: unless-stopped
-    command: [
-      "celery",
-      "-A",
-      "src.orchestration.celery_app",
-      "flower",
-      "--port=5555"
-    ]
-    ports:
-      - "${FLOWER_PORT}:5555"
-    env_file: .env
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - redis
-
+  # ----------------------------
+  # FastAPI (API)
+  # ----------------------------
   api:
     build: .
     container_name: personal_automation_api
@@ -113,51 +42,64 @@ services:
     env_file: .env
     environment:
       - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - REDIS_URL=redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+
+  # ----------------------------
+  # Dagster (orchestration)
+  # ----------------------------
+  dagster-webserver:
+    build: .
+    container_name: personal_automation_dagster_webserver
+    restart: unless-stopped
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
+    ports:
+      - "${DAGSTER_WEBSERVER_PORT}:3000"
+    env_file: .env
+    environment:
+      - DAGSTER_HOME=/app
+      - DAGSTER_POSTGRES_URL=postgresql://dagster:${DAGSTER_DB_PASSWORD}@postgres:5432/dagster
+      - DATABASE_HOST=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dagster-daemon:
+    build: .
+    container_name: personal_automation_dagster_daemon
+    restart: unless-stopped
+    command: ["dagster-daemon", "run"]
+    env_file: .env
+    environment:
+      - DAGSTER_HOME=/app
+      - DAGSTER_POSTGRES_URL=postgresql://dagster:${DAGSTER_DB_PASSWORD}@postgres:5432/dagster
+      - DATABASE_HOST=postgres
+    depends_on:
+      postgres:
         condition: service_healthy
 
   # ----------------------------
-  # GlitchTip (minimal, all-in-one)
+  # GlitchTip (error tracking)
   # ----------------------------
-  glitchtip-postgres:
-    image: postgres:16-alpine
-    container_name: glitchtip_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${GLITCHTIP_DB_NAME}
-      POSTGRES_USER: ${GLITCHTIP_DB_USER}
-      POSTGRES_PASSWORD: ${GLITCHTIP_DB_PASSWORD}
-    volumes:
-      - glitchtip_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${GLITCHTIP_DB_USER} -d ${GLITCHTIP_DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   glitchtip:
     image: glitchtip/glitchtip:latest
-    container_name: glitchtip
+    container_name: personal_automation_glitchtip
     restart: unless-stopped
     depends_on:
-      glitchtip-postgres:
+      postgres:
         condition: service_healthy
     ports:
       - "${GLITCHTIP_PORT}:8000"
     environment:
-      DATABASE_URL: "postgres://${GLITCHTIP_DB_USER}:${GLITCHTIP_DB_PASSWORD}@glitchtip-postgres:5432/${GLITCHTIP_DB_NAME}"
+      DATABASE_URL: "postgres://glitchtip:${GLITCHTIP_DB_PASSWORD}@postgres:5432/glitchtip"
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
       GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN}
       VALKEY_URL: ""
 
       # Minimal setup: no real email for now (emails go to container logs)
       EMAIL_URL: "consolemail://"
-      DEFAULT_FROM_EMAIL: ${GLITCHTIP_FROM_EMAIL}
+      DEFAULT_FROM_EMAIL: "glitchtip@local"
 
       # Keep it private unless you explicitly want signups
       ENABLE_OPEN_USER_REGISTRATION: "False"
@@ -168,6 +110,4 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
   msal_cache:
-  glitchtip_postgres_data:

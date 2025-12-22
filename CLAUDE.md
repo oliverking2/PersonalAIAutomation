@@ -24,7 +24,6 @@ poetry run alembic revision --autogenerate -m "description"
 # Start services locally
 docker-compose up -d                    # All services
 poetry run uvicorn src.api.app:app --reload  # API only
-poetry run celery -A src.orchestration.celery_app worker --loglevel=info  # Worker only
 ```
 
 ## Architecture

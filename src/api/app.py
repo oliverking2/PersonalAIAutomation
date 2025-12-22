@@ -5,8 +5,7 @@ import logging
 from fastapi import FastAPI
 
 from src.api.health import router as health_router
-from src.api.tasks import router as tasks_router
-from src.api.tasks.models import ErrorResponse
+from src.api.models import ErrorResponse
 from src.observability.sentry import init_sentry
 from src.utils.logging import configure_logging
 
@@ -32,7 +31,6 @@ def create_app() -> FastAPI:
 
     # Register routers
     application.include_router(health_router)
-    application.include_router(tasks_router)
 
     logger.info("FastAPI application created")
 

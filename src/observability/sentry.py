@@ -4,7 +4,6 @@ import logging
 import os
 
 import sentry_sdk
-from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 
 
@@ -23,7 +22,6 @@ def init_sentry() -> None:
     sentry_sdk.init(
         dsn=dsn,
         integrations=[
-            CeleryIntegration(),
             logging_integration,
         ],
         environment=os.environ.get("APP_ENV", "local"),

@@ -27,17 +27,23 @@ poetry install
 Copy `.env_example` to `.env` and populate the required values.
 
 #### Logging
-Logging outputs to both stdout and a file. Configure via environment variables:
+Logging outputs to stdout. Configure via environment variables:
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
-- `LOG_FILE`: Log file path. Relative paths use project root (default: app.log)
+- `LOG_UVICORN_ACCESS`: Enable uvicorn access logs (default: false)
 
 #### Database
-PostgreSQL database for storing newsletters and articles:
+PostgreSQL database for storing newsletters and articles.
+
+For local development:
 - `DATABASE_HOST`: Database host (default: localhost)
 - `DATABASE_PORT`: Database port (default: 5432)
-- `DATABASE_NAME`: Database name
-- `DATABASE_USER`: Database user
-- `DATABASE_PASSWORD`: Database password
+
+For Docker (used by init script to create databases/users):
+- `POSTGRES_USER`: PostgreSQL superuser
+- `POSTGRES_PASSWORD`: PostgreSQL superuser password
+- `APP_DB_PASSWORD`: Password for `app` user (main application)
+- `DAGSTER_DB_PASSWORD`: Password for `dagster` user (orchestration)
+- `GLITCHTIP_DB_PASSWORD`: Password for `glitchtip` user (error tracking)
 
 #### Telegram
 Send newsletter alerts via Telegram bot:
@@ -68,12 +74,10 @@ Supported newsletters:
 Sends newsletter summaries to Telegram with article titles and links. Newsletters are tracked to prevent duplicate alerts.
 
 ### Scheduled Processing
-Newsletter processing and alerting runs automatically using Celery with Redis as the message broker.
+Newsletter processing and alerting runs automatically using Dagster for orchestration.
 
 #### Configuration
-- `REDIS_URL`: Redis connection URL (default: redis://localhost:6379/0)
-- `REDIS_PORT`: Redis port for Docker (default: 6379)
-- `FLOWER_PORT`: Flower monitoring UI port (default: 5555)
+- `DAGSTER_WEBSERVER_PORT`: Dagster webserver UI port (default: 3000)
 
 #### Running with Docker
 Start all services including the scheduler:
@@ -82,43 +86,38 @@ docker-compose up -d
 ```
 
 This starts:
-- PostgreSQL database
-- Redis message broker
-- Celery worker (processes tasks)
-- Celery beat (schedules hourly tasks)
-- Flower (monitoring at http://localhost:5555)
+- PostgreSQL database with three databases and users:
+  - `personal_ai_automation` (user: `app`) - main application data
+  - `dagster` (user: `dagster`) - orchestration storage
+  - `glitchtip` (user: `glitchtip`) - error tracking
+- Dagster webserver (UI at http://localhost:3000)
+- Dagster daemon (runs schedules)
+- FastAPI (API at http://localhost:8000)
 - GlitchTip (error tracking at http://localhost:8001)
 
 #### Running Locally
-Start Redis (via Docker or locally), then run:
+Run Dagster dev server for local development:
 ```bash
-# Start the worker
-poetry run celery -A src.orchestration.celery_app worker --loglevel=info
-
-# In another terminal, start the scheduler
-poetry run celery -A src.orchestration.celery_app beat --loglevel=info
-
-# Optional: Start Flower for monitoring
-poetry run celery -A src.orchestration.celery_app flower --port=5555
+poetry run dagster dev
 ```
 
-#### Manual Task Execution
-Trigger tasks manually via Python:
+This uses SQLite storage and doesn't require PostgreSQL.
+
+#### Manual Job Execution
+Trigger jobs manually via the Dagster UI at http://localhost:3000 or via Python:
+
 ```python
-from src.orchestration.tasks import process_newsletters_task, send_alerts_task
+from src.dagster.newsletters.jobs import newsletter_pipeline_job
 
-# Process newsletters from the last day
-process_newsletters_task.delay()
-
-# Send pending Telegram alerts
-send_alerts_task.delay()
+# Execute the job
+newsletter_pipeline_job.execute_in_process()
 ```
 
 ### REST API
-FastAPI REST API for triggering tasks programmatically.
+FastAPI REST API for health checks and future endpoints.
 
 #### Configuration
-- `API_AUTH_TOKEN`: Bearer token for API authentication (required)
+- `API_AUTH_TOKEN`: Bearer token for API authentication
 - `API_PORT`: API server port (default: 8000)
 
 #### Running with Docker
@@ -130,22 +129,6 @@ poetry run uvicorn src.api.app:app --reload
 ```
 
 #### Endpoints
-| Method   | Path                       | Auth  | Description                   |
-|----------|----------------------------|-------|-------------------------------|
-| GET      | /health                    | No    | Health check                  |
-| POST     | /tasks/process-newsletters | Yes   | Trigger newsletter processing |
-| POST     | /tasks/send-alerts         | Yes   | Trigger Telegram alerts       |
-| GET      | /tasks/{task_id}           | Yes   | Get task status               |
-
-#### Example Usage
-```bash
-# Trigger newsletter processing
-curl -X POST http://localhost:8000/tasks/process-newsletters \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"days_back": 3}'
-
-# Check task status
-curl http://localhost:8000/tasks/TASK_ID \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
+| Method   | Path    | Auth | Description  |
+|----------|---------|------|--------------|
+| GET      | /health | No   | Health check |

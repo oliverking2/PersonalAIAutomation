@@ -6,10 +6,12 @@
 
 ## Orchestration
 - ~~Add a scheduler to run daily/hourly jobs~~
-  - ~~Daily jobs which can be run and updates sent through Telegram (Celery?)~~
+  - ~~Daily jobs which can be run and updates sent through Telegram~~
+- ~~Migrate from Celery/Redis to Dagster~~
 
 ## Email Summaries
 - ~~TLDR Newsletter~~
+  - Move from "days_back" to a timestamp in db
 - Medium Daily Digest
 - Substack - likely different configs per feed
   - Joe Reis
@@ -18,7 +20,7 @@
   - Seattle Data Guy
 
 ## API
-- Trigger celery tasks manually 
+- ~~Trigger orchestration tasks manually~~ (Removed - use Dagster UI instead)
 
 ## AI
 - Integrate with AWS Bedrock for models
@@ -36,4 +38,4 @@
 - ~~Dockerise~~
 - ~~Postgres for DB~~
 - Connect GlitchTip to Telegram using webhook and FastAPI
-- Standardise to a single PG database
+- ~~Standardise to a single PG database~~ (All services now use main postgres)

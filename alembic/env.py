@@ -2,13 +2,13 @@
 
 from logging.config import fileConfig
 
-
+from dotenv import load_dotenv
 from sqlalchemy.engine import Engine
 
 from alembic import context
 from src.database.connection import create_db_engine, get_database_url
 from src.database.core import Base
-from src.database.newsletters.models import *
+from src.database.newsletters.models import *  # noqa: F403
 
 # Load environment variables
 load_dotenv()

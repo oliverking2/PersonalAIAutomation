@@ -1,0 +1,10 @@
+# Dagster instance configuration for local development
+# Uses SQLite storage - no postgres required for `dagster dev`
+
+storage:
+  sqlite:
+    base_dir: .dagster
+
+scheduler:
+  module: dagster.core.scheduler
+  class: DagsterDaemonScheduler

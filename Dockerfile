@@ -25,3 +25,7 @@ COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY .msal_cache ./.msal_cache
+
+# Dagster configuration (Docker-specific)
+COPY setup/dagster/dagster.yaml ./dagster.yaml
+COPY setup/dagster/workspace.yaml ./workspace.yaml

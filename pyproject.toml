@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai_automation"
-version = "0.1.0"
+version = "1.0.0"
 readme = "README.md"
 
 package-mode = false
@@ -20,12 +20,12 @@ sqlalchemy = "^2.0.45"
 alembic = "^1.17.2"
 psycopg2-binary = "^2.9.11"
 pydantic = "^2.12.5"
-celery = "^5.6.0"
-redis = "^7.1.0"
-flower = "^2.0.1"
 fastapi = "^0.127.0"
 uvicorn = {extras = ["standard"], version = "^0.40.0"}
-sentry-sdk = "^2.48.0"
+dagster = "^1.12.7"
+dagster-webserver = "^1.12.7"
+dagster-postgres = "^0.28.7"
+sentry-sdk = {extras = ["fastapi"], version = "^2.0.0"}
 
 [tool.poetry.group.checks]
 optional = true
@@ -87,7 +87,10 @@ max-complexity = 10              # Maximum cyclomatic complexity threshold
 [tool.mypy]
 # MyPy Configuration
 # Static type checking configuration for enhanced type safety
-exclude = "^testing/"            # Don't type check testing directory
+exclude = [                      # Don't type check testing and alembic directories
+    "^testing/",
+    "^alembic/"
+]
 warn_redundant_casts = true      # Warn about unnecessary casts
 warn_unused_ignores = true       # Warn about unused type ignore comments
 

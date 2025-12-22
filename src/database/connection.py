@@ -18,11 +18,9 @@ def get_database_url() -> str:
     """
     host = os.environ["DATABASE_HOST"]
     port = os.environ.get("DATABASE_PORT", "5432")
-    name = os.environ["DATABASE_NAME"]
-    user = os.environ["DATABASE_USER"]
-    password = os.environ["DATABASE_PASSWORD"]
+    password = os.environ["APP_DB_PASSWORD"]
 
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+    return f"postgresql://app:{password}@{host}:{port}/personal_ai_automation"
 
 
 def create_db_engine(*, echo: bool = False) -> Engine:

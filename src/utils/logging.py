@@ -43,7 +43,7 @@ def configure_logging() -> None:
     root_logger.addHandler(handler)
 
     # Ensure libs don't attach their own handlers; they should propagate to root.
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "celery"):
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         lib_logger = logging.getLogger(name)
         lib_logger.handlers.clear()
         lib_logger.propagate = True
