@@ -20,9 +20,6 @@ def telegram_on_run_failure(context: RunFailureSensorContext) -> None:
     """Send a Telegram alert once per failed run."""
     run = context.dagster_run
 
-    dagster_ui = os.environ.get("DAGSTER_WEB_URL", "").rstrip("/")
-    link = f"{dagster_ui}/runs/{run.run_id}" if dagster_ui else run.run_id
-
     subject = f"Dagster failure: {run.job_name}"
 
     # Keep it simple and readable in Telegram.
@@ -34,7 +31,6 @@ def telegram_on_run_failure(context: RunFailureSensorContext) -> None:
         f"*{_escape_md(subject)}*\n"
         f"Pipeline: `{_escape_md(run.job_name)}`\n"
         f"Run ID: `{_escape_md(run.run_id)}`\n"
-        f"[Open in Dagster]({_escape_md(link)})"
     )
     context.log.info(f"Message: {text}")
 
