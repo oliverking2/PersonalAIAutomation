@@ -23,6 +23,7 @@ class ProcessingResult(BaseModel):
     articles_new: int = 0
     articles_duplicate: int = 0
     errors: list[str] = Field(default_factory=list)
+    latest_received_at: datetime | None = None
 
 
 class NewsletterService:
@@ -111,3 +112,7 @@ class NewsletterService:
         result.articles_extracted += len(articles)
         result.articles_new += new_count
         result.articles_duplicate += dup_count
+
+        # Track the latest received_at for watermark updates
+        if result.latest_received_at is None or parsed.received_at > result.latest_received_at:
+            result.latest_received_at = parsed.received_at

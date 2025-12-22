@@ -1,6 +1,7 @@
 # Project Files
 .idea
 .env
+_testbed.py
 
 # Data files
 data
@@ -14,3 +15,6 @@ data
 # Dagster files
 .dagster
 .tmp_dagster_home_*
+
+# Testing files
+.coverage

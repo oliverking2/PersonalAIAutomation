@@ -65,6 +65,8 @@ poetry run alembic upgrade head
 ### Newsletter Extraction
 Fetches TLDR newsletters (standard, AI, Dev) from Outlook via Microsoft Graph API, extracts articles, and stores them in PostgreSQL.
 
+Uses watermark-based incremental extraction to track the last processed timestamp, ensuring only new newsletters are fetched on each run. The watermark can be overridden via Dagster job configuration for backfills.
+
 Supported newsletters:
 - TLDR (general tech news)
 - TLDR AI (AI/ML focused)

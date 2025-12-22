@@ -6,10 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install dependencies
-poetry install
+make install
 
-# Run all validation
-poetry run ruff check --fix && poetry run ruff format && poetry run mypy . && poetry run coverage run -m unittest discover testing/ && poetry run coverage report --fail-under=80
+# Run all validation (lint, format, types, coverage)
+make check
+
+# Individual validation commands
+make lint      # Ruff linting with fixes
+make format    # Ruff formatter
+make types     # mypy type checking
+make test      # Unit tests only
+make coverage  # Tests with coverage (80% threshold)
 
 # Run single test file
 poetry run python -m unittest testing/api/test_health.py
@@ -22,8 +29,12 @@ poetry run alembic upgrade head
 poetry run alembic revision --autogenerate -m "description"
 
 # Start services locally
-docker-compose up -d                    # All services
+docker-compose up -d                         # All services
+poetry run dagster dev                       # Dagster dev server
 poetry run uvicorn src.api.app:app --reload  # API only
+
+# Clean build artefacts
+make clean
 ```
 
 ## Architecture
@@ -33,8 +44,8 @@ poetry run uvicorn src.api.app:app --reload  # API only
 2. **Newsletter Parsing**: `src/newsletters/tldr/` extracts articles from HTML
 3. **Storage**: `src/database/newsletters/` persists to PostgreSQL via SQLAlchemy
 4. **Alerting**: `src/telegram/` sends formatted messages to Telegram
-5. **Orchestration**: `src/orchestration/` schedules hourly Celery tasks
-6. **API**: `src/api/` exposes FastAPI endpoints for manual triggers
+5. **Orchestration**: `src/dagster/` schedules jobs via Dagster
+6. **API**: `src/api/` exposes FastAPI endpoints
 
 ### Key Patterns
 - **Service layer**: Business logic in `*Service` classes (e.g., `NewsletterService`, `TelegramService`)
@@ -47,11 +58,11 @@ poetry run uvicorn src.api.app:app --reload  # API only
 | Module               | Purpose                                        |
 |----------------------|------------------------------------------------|
 | `src/api/`           | FastAPI REST endpoints with HTTPBearer auth    |
+| `src/dagster/`       | Dagster jobs, ops, schedules, and resources    |
 | `src/database/`      | SQLAlchemy models and database operations      |
 | `src/graph/`         | Microsoft Graph API client for email access    |
 | `src/newsletters/`   | Email parsing and article extraction           |
 | `src/observability/` | Sentry/GlitchTip error tracking integration    |
-| `src/orchestration/` | Celery tasks and scheduling                    |
 | `src/telegram/`      | Telegram Bot API client and alerting           |
 
 ## Project Rules
@@ -163,10 +174,11 @@ poetry run uvicorn src.api.app:app --reload  # API only
 - For all changes, update the `README.md` to reflect new or modified behaviour.
 
 ## Validation Commands
-- Lint: `poetry run ruff check --fix`
-- Format: `poetry run ruff format`
-- Types: `poetry run mypy .`
-- Tests with coverage: `poetry run coverage run -m unittest discover testing/ && poetry run coverage report --fail-under=80`
+- All checks: `make check`
+- Lint: `make lint`
+- Format: `make format`
+- Types: `make types`
+- Tests with coverage: `make coverage`
 
 ## Git
 - Write clear, imperative commit messages.
@@ -178,5 +190,5 @@ poetry run uvicorn src.api.app:app --reload  # API only
 - Confirm types line up (no obvious mypy failures).
 - Confirm tests match the behaviour and run in isolation.
 - Confirm no secrets, tokens, or private data are introduced.
-- Run `ruff check`, `mypy`, and coverage tests before considering work complete.
-- Make sure `README.md` is up to date with any changes
+- Run `make check` before considering work complete.
+- Make sure `README.md` is up to date with any changes.

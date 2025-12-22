@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from dagster import Backoff, Jitter, OpExecutionContext, RetryPolicy, op
+from dagster import Backoff, Config, Jitter, OpExecutionContext, RetryPolicy, op
 from src.database.connection import get_session
+from src.database.extraction_state import get_watermark, set_watermark
 from src.database.newsletters import backfill_article_urls
+from src.enums import ExtractionSource
 from src.graph.auth import GraphAPI
 from src.newsletters.tldr.service import NewsletterService
 from src.telegram import TelegramClient, TelegramService
@@ -33,29 +35,59 @@ NEWSLETTER_RETRY_POLICY = RetryPolicy(
 )
 
 
+class NewsletterOpConfig(Config):
+    """Configuration for newsletter processing op."""
+
+    since_override: str | None = None
+    """Optional ISO format datetime to override the watermark.
+
+    If provided, newsletters will be fetched from this time instead of
+    using the stored watermark. Useful for backfills or debugging.
+    """
+
+
 @op(
     retry_policy=NEWSLETTER_RETRY_POLICY,
     description="Fetch and process newsletters from Microsoft Graph API.",
 )
-def process_newsletters_op(context: OpExecutionContext) -> dict[str, int]:
-    """Process newsletters from the past day.
+def process_newsletters_op(
+    context: OpExecutionContext, config: NewsletterOpConfig
+) -> dict[str, int]:
+    """Process newsletters using watermark-based incremental extraction.
 
-    Fetches newsletters from Graph API, parses them, and stores in database.
+    Fetches newsletters from Graph API (since the last watermark or override),
+    parses them, stores in database, and updates the watermark.
     Also backfills any missing parsed URLs for articles.
 
     :param context: Dagster execution context.
+    :param config: Op configuration with optional since_override.
     :returns: Dictionary with processing statistics.
     """
-    days_back = 1
-
-    context.log.info(f"Starting newsletter processing (days_back={days_back})")
-
     graph_client = GraphAPI(GRAPH_USER_EMAIL)
-    since = datetime.now(UTC) - timedelta(days=days_back)
 
     with get_session() as session:
+        # Determine the since datetime
+        since: datetime | None = None
+        if config.since_override:
+            since = datetime.fromisoformat(config.since_override)
+            context.log.info(f"Using since_override: {since}")
+        else:
+            since = get_watermark(session, ExtractionSource.NEWSLETTER_TLDR)
+            if since is not None:
+                context.log.info(f"Using watermark: {since}")
+            else:
+                # default to 7 days ago if no watermark is found
+                since = datetime.now(UTC) - timedelta(days=7)
+                context.log.info("No watermark found, processing last 7 days of emails")
+
+        # Process newsletters
         newsletter_service = NewsletterService(session, graph_client)
         result = newsletter_service.process_newsletters(since=since)
+
+        # Update watermark if we processed any newsletters
+        if result.latest_received_at is not None:
+            set_watermark(session, ExtractionSource.NEWSLETTER_TLDR, result.latest_received_at)
+            context.log.info(f"Updated watermark to: {result.latest_received_at}")
 
         # Backfill any articles missing parsed URLs
         backfill_result = backfill_article_urls(session)
