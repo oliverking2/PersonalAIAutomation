@@ -88,7 +88,6 @@ def create_task(
             priority=request.priority,
             effort_level=request.effort_level,
             task_group=request.task_group,
-            description=request.description,
         )
         data = client.create_page(
             data_source_id=data_source_id,
@@ -121,7 +120,6 @@ def update_task(
             priority=request.priority,
             effort_level=request.effort_level,
             task_group=request.task_group,
-            description=request.description,
         )
 
         if not properties:

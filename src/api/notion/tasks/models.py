@@ -26,12 +26,13 @@ class TaskCreateRequest(BaseModel):
     """Request model for task creation with validated enum fields."""
 
     task_name: str = Field(..., min_length=1, description="Task title")
-    status: TaskStatus | None = Field(None, description="Task status")
+    status: TaskStatus | None = Field(default=TaskStatus.NOT_STARTED, description="Task status")
     due_date: date | None = Field(None, description="Task due date")
-    priority: Priority | None = Field(None, description="Task priority")
-    effort_level: EffortLevel | None = Field(None, description="Task effort level")
+    priority: Priority | None = Field(default=Priority.LOW, description="Task priority")
+    effort_level: EffortLevel | None = Field(
+        default=EffortLevel.SMALL, description="Task effort level"
+    )
     task_group: TaskGroup | None = Field(None, description="Task group category")
-    description: str | None = Field(None, description="Task description")
 
 
 class TaskUpdateRequest(BaseModel):
@@ -43,7 +44,6 @@ class TaskUpdateRequest(BaseModel):
     priority: Priority | None = Field(None, description="Task priority")
     effort_level: EffortLevel | None = Field(None, description="Task effort level")
     task_group: TaskGroup | None = Field(None, description="Task group category")
-    description: str | None = Field(None, description="Task description")
 
 
 class TaskQueryRequest(BaseModel):
