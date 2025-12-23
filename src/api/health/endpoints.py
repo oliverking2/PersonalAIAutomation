@@ -8,7 +8,7 @@ from src.api.health.models import HealthResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter(prefix="/health", tags=["Health"])
 
 
 @router.get(

@@ -11,7 +11,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from src.api.dependencies import get_api_token, verify_token
+from src.api.security import get_api_token, verify_token
 
 
 class TestGetApiToken(unittest.TestCase):

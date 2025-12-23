@@ -4,10 +4,42 @@ This module handles the conversion between raw Notion API responses
 and the Pydantic models used by the application.
 """
 
+from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
 from typing import Any
 
 from src.notion.models import NotionTask, TaskFilter
+
+
+class FieldType(StrEnum):
+    """Notion property types for building API payloads."""
+
+    TITLE = "title"
+    STATUS = "status"
+    DATE = "date"
+    SELECT = "select"
+    RICH_TEXT = "rich_text"
+
+
+@dataclass(frozen=True)
+class TaskField:
+    """Metadata for a task field mapping to Notion properties."""
+
+    notion_name: str
+    field_type: FieldType
+
+
+# Field registry - add new fields here
+TASK_FIELDS: dict[str, TaskField] = {
+    "task_name": TaskField("Task name", FieldType.TITLE),
+    "status": TaskField("Status", FieldType.STATUS),
+    "due_date": TaskField("Due date", FieldType.DATE),
+    "priority": TaskField("Priority", FieldType.SELECT),
+    "effort_level": TaskField("Effort level", FieldType.SELECT),
+    "task_group": TaskField("Task Group", FieldType.SELECT),
+    "description": TaskField("Description", FieldType.RICH_TEXT),
+}
 
 
 def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
@@ -24,27 +56,22 @@ def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
         status=_extract_status(properties.get("Status", {})),
         due_date=_extract_date(properties.get("Due date", {})),
         priority=_extract_select(properties.get("Priority", {})),
-        work_personal=_extract_select(properties.get("Work/Personal", {})),
+        effort_level=_extract_select(properties.get("Effort level", {})),
+        task_group=_extract_select(properties.get("Task Group", {})),
+        description=_extract_rich_text(properties.get("Description", {})),
+        assignee=_extract_people(properties.get("Assignee", {})),
         url=page.get("url", ""),
     )
 
 
 def _extract_title(prop: dict[str, Any]) -> str:
-    """Extract plain text from a title property.
-
-    :param prop: Title property object from Notion.
-    :returns: Combined plain text from all title segments.
-    """
+    """Extract plain text from a title property."""
     title_items = prop.get("title", [])
     return "".join(item.get("plain_text", "") for item in title_items)
 
 
 def _extract_status(prop: dict[str, Any]) -> str | None:
-    """Extract status name from a status property.
-
-    :param prop: Status property object from Notion.
-    :returns: Status name or None if not set.
-    """
+    """Extract status name from a status property."""
     status = prop.get("status")
     if status is None:
         return None
@@ -52,11 +79,7 @@ def _extract_status(prop: dict[str, Any]) -> str | None:
 
 
 def _extract_date(prop: dict[str, Any]) -> date | None:
-    """Extract date from a date property.
-
-    :param prop: Date property object from Notion.
-    :returns: Date object or None if not set.
-    """
+    """Extract date from a date property."""
     date_obj = prop.get("date")
     if date_obj is None:
         return None
@@ -67,15 +90,29 @@ def _extract_date(prop: dict[str, Any]) -> date | None:
 
 
 def _extract_select(prop: dict[str, Any]) -> str | None:
-    """Extract selected value from a select property.
-
-    :param prop: Select property object from Notion.
-    :returns: Selected option name or None if not set.
-    """
+    """Extract selected value from a select property."""
     select = prop.get("select")
     if select is None:
         return None
     return select.get("name")
+
+
+def _extract_rich_text(prop: dict[str, Any]) -> str | None:
+    """Extract plain text from a rich_text property."""
+    rich_text_items = prop.get("rich_text", [])
+    if not rich_text_items:
+        return None
+    text = "".join(item.get("plain_text", "") for item in rich_text_items)
+    return text if text else None
+
+
+def _extract_people(prop: dict[str, Any]) -> str | None:
+    """Extract first person's name from a people property."""
+    people = prop.get("people", [])
+    if not people:
+        return None
+    first_person = people[0]
+    return first_person.get("name")
 
 
 def build_query_filter(filter_: TaskFilter) -> dict[str, Any]:
@@ -119,97 +156,43 @@ def build_query_filter(filter_: TaskFilter) -> dict[str, Any]:
     return {"filter": {"and": conditions}}
 
 
-def build_status_property(status: str) -> dict[str, Any]:
-    """Build a Notion status property update payload.
-
-    :param status: Status name to set.
-    :returns: Property update object for the Notion API.
-    """
-    return {
-        "Status": {
-            "status": {"name": status},
-        },
-    }
-
-
-def build_date_property(date_value: date | None) -> dict[str, Any]:
-    """Build a Notion date property update payload.
-
-    :param date_value: Date to set, or None to clear.
-    :returns: Property update object for the Notion API.
-    """
-    if date_value is None:
-        return {
-            "Due date": {
-                "date": None,
-            },
-        }
-
-    return {
-        "Due date": {
-            "date": {"start": date_value.isoformat()},
-        },
-    }
+def _build_property(field: TaskField, value: Any) -> dict[str, Any]:
+    """Build a single Notion property payload."""
+    match field.field_type:
+        case FieldType.TITLE:
+            return {field.notion_name: {"title": [{"text": {"content": value}}]}}
+        case FieldType.STATUS:
+            return {field.notion_name: {"status": {"name": value}}}
+        case FieldType.DATE:
+            if value is None:
+                return {field.notion_name: {"date": None}}
+            return {field.notion_name: {"date": {"start": value.isoformat()}}}
+        case FieldType.SELECT:
+            return {field.notion_name: {"select": {"name": value}}}
+        case FieldType.RICH_TEXT:
+            return {field.notion_name: {"rich_text": [{"text": {"content": value}}]}}
 
 
-def build_title_property(title: str) -> dict[str, Any]:
-    """Build a Notion title property payload for page creation.
+def build_task_properties(**kwargs: Any) -> dict[str, Any]:
+    """Build properties payload from keyword arguments.
 
-    :param title: Title text to set.
-    :returns: Property object for the Notion API.
-    """
-    return {
-        "Task name": {
-            "title": [
-                {
-                    "text": {"content": title},
-                },
-            ],
-        },
-    }
+    Only includes properties that are explicitly set (not None).
+    Adding a new field requires only adding it to TASK_FIELDS.
 
-
-def build_create_properties(
-    task_name: str,
-    status: str | None = None,
-    due_date: date | None = None,
-) -> dict[str, Any]:
-    """Build properties payload for creating a new page.
-
-    :param task_name: Title for the new task.
-    :param status: Optional initial status.
-    :param due_date: Optional due date.
+    :param kwargs: Field name to value mappings.
     :returns: Combined properties object for the Notion API.
-    """
-    properties: dict[str, Any] = build_title_property(task_name)
-
-    if status is not None:
-        properties.update(build_status_property(status))
-
-    if due_date is not None:
-        properties.update(build_date_property(due_date))
-
-    return properties
-
-
-def build_update_properties(
-    status: str | None = None,
-    due_date: date | None = None,
-) -> dict[str, Any]:
-    """Build properties payload for updating a page.
-
-    Only includes properties that are explicitly set.
-
-    :param status: New status value, or None to leave unchanged.
-    :param due_date: New due date, or None to leave unchanged.
-    :returns: Properties object for the Notion API.
+    :raises ValueError: If an unknown field name is provided.
     """
     properties: dict[str, Any] = {}
 
-    if status is not None:
-        properties.update(build_status_property(status))
+    for field_name, value in kwargs.items():
+        if value is None:
+            continue
 
-    if due_date is not None:
-        properties.update(build_date_property(due_date))
+        if field_name not in TASK_FIELDS:
+            raise ValueError(f"Unknown field: {field_name}")
+
+        field = TASK_FIELDS[field_name]
+        properties.update(_build_property(field, value))
 
     return properties

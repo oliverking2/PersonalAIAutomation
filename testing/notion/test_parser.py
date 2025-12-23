@@ -7,12 +7,8 @@ from pydantic import ValidationError
 
 from src.notion.models import TaskFilter
 from src.notion.parser import (
-    build_create_properties,
-    build_date_property,
     build_query_filter,
-    build_status_property,
-    build_title_property,
-    build_update_properties,
+    build_task_properties,
     parse_page_to_task,
 )
 
@@ -26,21 +22,14 @@ class TestParsePageToTask(unittest.TestCase):
             "id": "page-123",
             "url": "https://notion.so/My-Task",
             "properties": {
-                "Task name": {
-                    "title": [{"plain_text": "My Task"}],
-                },
-                "Status": {
-                    "status": {"name": "In progress"},
-                },
-                "Due date": {
-                    "date": {"start": "2025-12-25"},
-                },
-                "Priority": {
-                    "select": {"name": "High"},
-                },
-                "Work/Personal": {
-                    "select": {"name": "Work"},
-                },
+                "Task name": {"title": [{"plain_text": "My Task"}]},
+                "Status": {"status": {"name": "In progress"}},
+                "Due date": {"date": {"start": "2025-12-25"}},
+                "Priority": {"select": {"name": "High"}},
+                "Effort level": {"select": {"name": "Medium"}},
+                "Task Group": {"select": {"name": "Work"}},
+                "Description": {"rich_text": [{"plain_text": "Task description"}]},
+                "Assignee": {"people": [{"name": "John Doe"}]},
             },
         }
 
@@ -51,7 +40,10 @@ class TestParsePageToTask(unittest.TestCase):
         self.assertEqual(task.status, "In progress")
         self.assertEqual(task.due_date, date(2025, 12, 25))
         self.assertEqual(task.priority, "High")
-        self.assertEqual(task.work_personal, "Work")
+        self.assertEqual(task.effort_level, "Medium")
+        self.assertEqual(task.task_group, "Work")
+        self.assertEqual(task.description, "Task description")
+        self.assertEqual(task.assignee, "John Doe")
         self.assertEqual(task.url, "https://notion.so/My-Task")
 
     def test_parse_page_with_missing_optional_properties(self) -> None:
@@ -60,13 +52,14 @@ class TestParsePageToTask(unittest.TestCase):
             "id": "page-456",
             "url": "https://notion.so/Minimal-Task",
             "properties": {
-                "Task name": {
-                    "title": [{"plain_text": "Minimal Task"}],
-                },
+                "Task name": {"title": [{"plain_text": "Minimal Task"}]},
                 "Status": {"status": None},
                 "Due date": {"date": None},
                 "Priority": {"select": None},
-                "Work/Personal": {"select": None},
+                "Effort level": {"select": None},
+                "Task Group": {"select": None},
+                "Description": {"rich_text": []},
+                "Assignee": {"people": []},
             },
         }
 
@@ -77,7 +70,10 @@ class TestParsePageToTask(unittest.TestCase):
         self.assertIsNone(task.status)
         self.assertIsNone(task.due_date)
         self.assertIsNone(task.priority)
-        self.assertIsNone(task.work_personal)
+        self.assertIsNone(task.effort_level)
+        self.assertIsNone(task.task_group)
+        self.assertIsNone(task.description)
+        self.assertIsNone(task.assignee)
 
     def test_parse_page_with_multi_segment_title(self) -> None:
         """Test parsing a page with a title split across multiple segments."""
@@ -173,95 +169,98 @@ class TestBuildQueryFilter(unittest.TestCase):
         self.assertTrue(result["filter"]["title"]["is_not_empty"])
 
 
-class TestBuildStatusProperty(unittest.TestCase):
-    """Tests for build_status_property function."""
+class TestBuildTaskProperties(unittest.TestCase):
+    """Tests for build_task_properties function."""
+
+    def test_build_properties_with_all_fields(self) -> None:
+        """Test building properties with all fields."""
+        result = build_task_properties(
+            task_name="New Task",
+            status="Not started",
+            due_date=date(2025, 12, 31),
+            priority="High",
+            effort_level="Medium",
+            task_group="Work",
+            description="A description",
+        )
+
+        self.assertIn("Task name", result)
+        self.assertIn("Status", result)
+        self.assertIn("Due date", result)
+        self.assertIn("Priority", result)
+        self.assertIn("Effort level", result)
+        self.assertIn("Task Group", result)
+        self.assertIn("Description", result)
+
+    def test_build_properties_with_name_only(self) -> None:
+        """Test building properties with task name only."""
+        result = build_task_properties(task_name="Simple Task")
+
+        self.assertIn("Task name", result)
+        self.assertEqual(len(result), 1)
+
+    def test_build_properties_with_none_values_excluded(self) -> None:
+        """Test that None values are excluded from properties."""
+        result = build_task_properties(
+            task_name="Task",
+            status=None,
+            priority="High",
+        )
+
+        self.assertIn("Task name", result)
+        self.assertIn("Priority", result)
+        self.assertNotIn("Status", result)
+
+    def test_build_properties_with_no_fields_returns_empty(self) -> None:
+        """Test building properties with no fields returns empty dict."""
+        result = build_task_properties()
+
+        self.assertEqual(result, {})
+
+    def test_build_properties_unknown_field_raises_error(self) -> None:
+        """Test that unknown field name raises ValueError."""
+        with self.assertRaises(ValueError) as context:
+            build_task_properties(unknown_field="value")
+
+        self.assertIn("Unknown field", str(context.exception))
 
     def test_build_status_property(self) -> None:
-        """Test building a status property update."""
-        result = build_status_property("In progress")
+        """Test building a status property."""
+        result = build_task_properties(status="In progress")
 
         self.assertIn("Status", result)
         self.assertEqual(result["Status"]["status"]["name"], "In progress")
 
-
-class TestBuildDateProperty(unittest.TestCase):
-    """Tests for build_date_property function."""
-
-    def test_build_date_property_with_value(self) -> None:
-        """Test building a date property update with a value."""
-        result = build_date_property(date(2025, 12, 25))
+    def test_build_date_property(self) -> None:
+        """Test building a date property."""
+        result = build_task_properties(due_date=date(2025, 12, 25))
 
         self.assertIn("Due date", result)
         self.assertEqual(result["Due date"]["date"]["start"], "2025-12-25")
 
-    def test_build_date_property_with_none(self) -> None:
-        """Test building a date property update to clear the value."""
-        result = build_date_property(None)
-
-        self.assertIn("Due date", result)
-        self.assertIsNone(result["Due date"]["date"])
-
-
-class TestBuildTitleProperty(unittest.TestCase):
-    """Tests for build_title_property function."""
-
     def test_build_title_property(self) -> None:
         """Test building a title property."""
-        result = build_title_property("My New Task")
+        result = build_task_properties(task_name="My New Task")
 
         self.assertIn("Task name", result)
         self.assertEqual(result["Task name"]["title"][0]["text"]["content"], "My New Task")
 
+    def test_build_select_property(self) -> None:
+        """Test building a select property."""
+        result = build_task_properties(priority="High")
 
-class TestBuildCreateProperties(unittest.TestCase):
-    """Tests for build_create_properties function."""
+        self.assertIn("Priority", result)
+        self.assertEqual(result["Priority"]["select"]["name"], "High")
 
-    def test_build_create_properties_with_all_fields(self) -> None:
-        """Test building properties with all fields."""
-        result = build_create_properties(
-            task_name="New Task",
-            status="Not started",
-            due_date=date(2025, 12, 31),
+    def test_build_rich_text_property(self) -> None:
+        """Test building a rich_text property."""
+        result = build_task_properties(description="Task description")
+
+        self.assertIn("Description", result)
+        self.assertEqual(
+            result["Description"]["rich_text"][0]["text"]["content"],
+            "Task description",
         )
-
-        self.assertIn("Task name", result)
-        self.assertIn("Status", result)
-        self.assertIn("Due date", result)
-
-    def test_build_create_properties_with_name_only(self) -> None:
-        """Test building properties with task name only."""
-        result = build_create_properties(task_name="Simple Task")
-
-        self.assertIn("Task name", result)
-        self.assertNotIn("Status", result)
-        self.assertNotIn("Due date", result)
-
-
-class TestBuildUpdateProperties(unittest.TestCase):
-    """Tests for build_update_properties function."""
-
-    def test_build_update_properties_with_both_fields(self) -> None:
-        """Test building update properties with both fields."""
-        result = build_update_properties(
-            status="Complete",
-            due_date=date(2025, 12, 25),
-        )
-
-        self.assertIn("Status", result)
-        self.assertIn("Due date", result)
-
-    def test_build_update_properties_with_status_only(self) -> None:
-        """Test building update properties with status only."""
-        result = build_update_properties(status="In progress")
-
-        self.assertIn("Status", result)
-        self.assertNotIn("Due date", result)
-
-    def test_build_update_properties_with_no_fields(self) -> None:
-        """Test building update properties with no fields returns empty dict."""
-        result = build_update_properties()
-
-        self.assertEqual(result, {})
 
 
 if __name__ == "__main__":

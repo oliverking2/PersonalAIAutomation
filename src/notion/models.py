@@ -14,10 +14,13 @@ class NotionTask(BaseModel):
 
     id: str = Field(..., min_length=1, description="Notion page ID")
     task_name: str = Field(..., min_length=1, description="Task title")
-    status: str | None = Field(None, description="Task status (e.g., 'Not started', 'In progress')")
+    status: str | None = Field(None, description="Task status")
     due_date: date | None = Field(None, description="Task due date")
     priority: str | None = Field(None, description="Task priority level")
-    work_personal: str | None = Field(None, description="Work or Personal category")
+    effort_level: str | None = Field(None, description="Task effort level")
+    task_group: str | None = Field(None, description="Work or Personal category")
+    description: str | None = Field(None, description="Task description")
+    assignee: str | None = Field(None, description="Assigned user name")
     url: str = Field(..., description="Notion page URL")
 
 

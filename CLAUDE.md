@@ -85,6 +85,44 @@ make clean
 - Tests live under `testing/` and mirror `src/` structure.
 - Do not create new top-level folders unless explicitly asked.
 
+### API File Structure
+API endpoints follow a modular structure organised by resource:
+
+```
+src/api/<domain>/
+├── __init__.py           # Exports router
+├── router.py             # Combines sub-routers
+├── dependencies.py       # FastAPI dependencies (shared across resources)
+├── common/
+│   ├── __init__.py
+│   ├── models.py         # Shared response models
+│   └── utils.py          # Shared utility functions
+└── <resource>/           # One directory per resource (e.g., tasks, pages)
+    ├── __init__.py
+    ├── endpoints.py      # FastAPI route handlers
+    └── models.py         # Request/response Pydantic models
+```
+
+Guidelines:
+- **One resource per directory**: Keep endpoints, models, and logic for each resource together.
+- **Separate concerns**: `endpoints.py` handles HTTP, `models.py` defines schemas.
+- **Shared code in `common/`**: Put reusable models and utilities in the `common/` subdirectory.
+- **Dependencies at domain level**: Place FastAPI dependencies (e.g., `get_notion_client`) in `dependencies.py`.
+- **Avoid monolithic files**: Do not put all endpoints in a single `endpoints.py` file.
+
+### Core Module File Structure
+Core modules (non-API) follow a simpler structure:
+
+```
+src/<module>/
+├── __init__.py           # Exports public API
+├── client.py             # External API client (if applicable)
+├── models.py             # Pydantic models for data
+├── parser.py             # Data transformation functions
+├── enums.py              # StrEnum definitions (if applicable)
+└── exceptions.py         # Custom exceptions
+```
+
 ## Coding Style
 - Ruff compatible formatting. Follow settings in `pyproject.toml`.
 - British English spelling in comments, docstrings, user-facing text, and error messages.

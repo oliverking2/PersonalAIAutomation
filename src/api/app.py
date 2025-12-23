@@ -2,11 +2,12 @@
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from src.api.health import router as health_router
 from src.api.models import ErrorResponse
 from src.api.notion import router as notion_router
+from src.api.security import verify_token
 from src.observability.sentry import init_sentry
 from src.utils.logging import configure_logging
 
@@ -32,7 +33,7 @@ def create_app() -> FastAPI:
 
     # Register routers
     application.include_router(health_router)
-    application.include_router(notion_router)
+    application.include_router(notion_router, dependencies=[Depends(verify_token)])
 
     logger.info("FastAPI application created")
 

@@ -137,7 +137,7 @@ poetry run uvicorn src.api.app:app --reload
 |--------|---------|------|--------------|
 | GET    | /health | No   | Health check |
 
-##### Notion
+##### Notion (Generic)
 | Method | Path                                        | Auth  | Description                       |
 |--------|---------------------------------------------|-------|-----------------------------------|
 | GET    | /notion/databases/{database_id}             | Yes   | Retrieve database structure       |
@@ -148,33 +148,50 @@ poetry run uvicorn src.api.app:app --reload
 | POST   | /notion/pages                               | Yes   | Create a new page                 |
 | PATCH  | /notion/pages/{page_id}                     | Yes   | Update page properties            |
 
+##### Tasks (Task Tracker)
+| Method | Path                   | Auth  | Description                              |
+|--------|------------------------|-------|------------------------------------------|
+| POST   | /notion/tasks/query    | Yes   | Query tasks (auto-pagination)            |
+| GET    | /notion/tasks/{id}     | Yes   | Retrieve a task                          |
+| POST   | /notion/tasks          | Yes   | Create a task with validated enum fields |
+| PATCH  | /notion/tasks/{id}     | Yes   | Update a task                            |
+
 ### Notion Integration
-API wrapper for Notion to query and manage tasks in data sources. Pagination is handled automatically - all matching results are returned in a single response.
+API wrapper for Notion to query and manage tasks. The generic endpoints work with any data source, while the task endpoints use a pre-configured task tracker with validated field values.
 
 #### Configuration
 - `NOTION_INTEGRATION_SECRET`: Notion integration token from https://www.notion.so/my-integrations
+- `NOTION_DATABASE_ID`: Database ID for the task tracker
+- `NOTION_DATA_SOURCE_ID`: Data source ID for the task tracker
+
+#### Task Fields
+Task endpoints validate field values using enums:
+- **Status**: Thought, Not started, In progress, Done
+- **Priority**: High, Medium, Low
+- **Effort level**: Small, Medium, Large
+- **Task Group**: Personal, Work, Photography
 
 #### Usage
-Query tasks with filters:
+Query tasks:
 ```bash
-curl -X POST http://localhost:8000/notion/data-sources/{data_source_id}/query \
+curl -X POST http://localhost:8000/notion/tasks/query \
   -H "Authorization: Bearer $API_AUTH_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"filter": {"property": "Status", "status": {"does_not_equal": "Complete"}}}'
+  -d '{"filter": {"property": "Status", "status": {"does_not_equal": "Done"}}}'
 ```
 
-Create a new task:
+Create a task:
 ```bash
-curl -X POST http://localhost:8000/notion/pages \
+curl -X POST http://localhost:8000/notion/tasks \
   -H "Authorization: Bearer $API_AUTH_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"data_source_id": "...", "task_name": "New Task", "status": "Not started"}'
+  -d '{"task_name": "New Task", "status": "Not started", "priority": "High"}'
 ```
 
-Update task status:
+Update a task:
 ```bash
-curl -X PATCH http://localhost:8000/notion/pages/{page_id} \
+curl -X PATCH http://localhost:8000/notion/tasks/{task_id} \
   -H "Authorization: Bearer $API_AUTH_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"status": "Complete"}'
+  -d '{"status": "Done"}'
 ```
