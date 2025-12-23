@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
+from src.api.app import app
 
 
 class TestGetDataSourceEndpoint(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestGetDataSourceEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 
@@ -51,7 +51,7 @@ class TestQueryDataSourceEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 
@@ -109,7 +109,7 @@ class TestListTemplatesEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 

@@ -11,7 +11,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
+from src.api.app import app
 
 
 class TestNotionEndpointsAuthentication(unittest.TestCase):
@@ -19,8 +19,7 @@ class TestNotionEndpointsAuthentication(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
-        self.client = TestClient(self.app)
+        self.client = TestClient(app)
 
     def test_get_database_without_auth_returns_401(self) -> None:
         """Test that requests without auth token are rejected."""

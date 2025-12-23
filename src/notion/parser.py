@@ -38,7 +38,6 @@ TASK_FIELDS: dict[str, TaskField] = {
     "priority": TaskField("Priority", FieldType.SELECT),
     "effort_level": TaskField("Effort level", FieldType.SELECT),
     "task_group": TaskField("Task Group", FieldType.SELECT),
-    "description": TaskField("Description", FieldType.RICH_TEXT),
 }
 
 
@@ -58,7 +57,6 @@ def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
         priority=_extract_select(properties.get("Priority", {})),
         effort_level=_extract_select(properties.get("Effort level", {})),
         task_group=_extract_select(properties.get("Task Group", {})),
-        description=_extract_rich_text(properties.get("Description", {})),
         assignee=_extract_people(properties.get("Assignee", {})),
         url=page.get("url", ""),
     )

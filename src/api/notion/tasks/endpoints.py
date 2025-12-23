@@ -148,7 +148,6 @@ def _task_to_response(task: NotionTask) -> TaskResponse:
         priority=task.priority,
         effort_level=task.effort_level,
         task_group=task.task_group,
-        description=task.description,
         assignee=task.assignee,
         url=task.url,
     )

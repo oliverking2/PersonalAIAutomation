@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
+from src.api.app import app
 
 
 class TestQueryTasksEndpoint(unittest.TestCase):
@@ -21,7 +21,7 @@ class TestQueryTasksEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 
@@ -85,7 +85,7 @@ class TestGetTaskEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 
@@ -126,7 +126,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 
@@ -144,7 +144,6 @@ class TestCreateTaskEndpoint(unittest.TestCase):
                 "Priority": {"select": {"name": "High"}},
                 "Effort level": {"select": {"name": "Large"}},
                 "Task Group": {"select": {"name": "Work"}},
-                "Description": {"rich_text": [{"plain_text": "Task description"}]},
                 "Assignee": {"people": []},
             },
         }
@@ -160,7 +159,6 @@ class TestCreateTaskEndpoint(unittest.TestCase):
                 "priority": "High",
                 "effort_level": "Large",
                 "task_group": "Work",
-                "description": "Task description",
             },
         )
 
@@ -199,7 +197,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_create_task_missing_name_returns_422(self) -> None:
-        """Test that missing task_name returns 422."""
+        """Test that missing task_name returns 422 with readable error."""
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
@@ -207,9 +205,12 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"]
+        self.assertIn("task_name", detail)
+        self.assertIn("field required", detail)
 
     def test_create_task_invalid_status_returns_422(self) -> None:
-        """Test that invalid status enum value returns 422."""
+        """Test that invalid status enum value returns 422 with readable error."""
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
@@ -217,9 +218,13 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"]
+        self.assertIn("status", detail)
+        self.assertIn("invalid value 'Invalid'", detail)
+        self.assertIn("Expected:", detail)
 
     def test_create_task_invalid_priority_returns_422(self) -> None:
-        """Test that invalid priority enum value returns 422."""
+        """Test that invalid priority enum value returns 422 with readable error."""
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
@@ -227,6 +232,9 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"]
+        self.assertIn("priority", detail)
+        self.assertIn("invalid value 'Critical'", detail)
 
 
 class TestUpdateTaskEndpoint(unittest.TestCase):
@@ -234,7 +242,7 @@ class TestUpdateTaskEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 

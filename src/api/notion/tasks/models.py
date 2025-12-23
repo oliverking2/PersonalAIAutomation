@@ -18,7 +18,6 @@ class TaskResponse(BaseModel):
     priority: str | None = Field(None, description="Task priority")
     effort_level: str | None = Field(None, description="Task effort level")
     task_group: str | None = Field(None, description="Work or Personal category")
-    description: str | None = Field(None, description="Task description")
     assignee: str | None = Field(None, description="Assigned user name")
     url: str = Field(..., description="Notion page URL")
 

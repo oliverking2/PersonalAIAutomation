@@ -28,7 +28,6 @@ class TestParsePageToTask(unittest.TestCase):
                 "Priority": {"select": {"name": "High"}},
                 "Effort level": {"select": {"name": "Medium"}},
                 "Task Group": {"select": {"name": "Work"}},
-                "Description": {"rich_text": [{"plain_text": "Task description"}]},
                 "Assignee": {"people": [{"name": "John Doe"}]},
             },
         }
@@ -42,7 +41,6 @@ class TestParsePageToTask(unittest.TestCase):
         self.assertEqual(task.priority, "High")
         self.assertEqual(task.effort_level, "Medium")
         self.assertEqual(task.task_group, "Work")
-        self.assertEqual(task.description, "Task description")
         self.assertEqual(task.assignee, "John Doe")
         self.assertEqual(task.url, "https://notion.so/My-Task")
 
@@ -72,7 +70,6 @@ class TestParsePageToTask(unittest.TestCase):
         self.assertIsNone(task.priority)
         self.assertIsNone(task.effort_level)
         self.assertIsNone(task.task_group)
-        self.assertIsNone(task.description)
         self.assertIsNone(task.assignee)
 
     def test_parse_page_with_multi_segment_title(self) -> None:
@@ -181,7 +178,6 @@ class TestBuildTaskProperties(unittest.TestCase):
             priority="High",
             effort_level="Medium",
             task_group="Work",
-            description="A description",
         )
 
         self.assertIn("Task name", result)
@@ -190,7 +186,6 @@ class TestBuildTaskProperties(unittest.TestCase):
         self.assertIn("Priority", result)
         self.assertIn("Effort level", result)
         self.assertIn("Task Group", result)
-        self.assertIn("Description", result)
 
     def test_build_properties_with_name_only(self) -> None:
         """Test building properties with task name only."""
@@ -252,15 +247,15 @@ class TestBuildTaskProperties(unittest.TestCase):
         self.assertIn("Priority", result)
         self.assertEqual(result["Priority"]["select"]["name"], "High")
 
-    def test_build_rich_text_property(self) -> None:
-        """Test building a rich_text property."""
-        result = build_task_properties(description="Task description")
-
-        self.assertIn("Description", result)
-        self.assertEqual(
-            result["Description"]["rich_text"][0]["text"]["content"],
-            "Task description",
-        )
+    # def test_build_rich_text_property(self) -> None:
+    #     """Test building a rich_text property."""
+    #     result = build_task_properties(description="Task description")
+    #
+    #     self.assertIn("Description", result)
+    #     self.assertEqual(
+    #         result["Description"]["rich_text"][0]["text"]["content"],
+    #         "Task description",
+    #     )
 
 
 if __name__ == "__main__":

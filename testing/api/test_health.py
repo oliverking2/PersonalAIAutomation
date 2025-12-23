@@ -9,7 +9,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
+from src.api.app import app
 
 
 class TestHealthEndpoint(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestHealthEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
+        self.app = app
         self.client = TestClient(self.app)
 
     def test_health_check_returns_200(self) -> None:

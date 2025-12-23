@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
+from src.api.app import app
 from src.notion.exceptions import NotionClientError
 
 
@@ -21,8 +21,7 @@ class TestGetDatabaseEndpoint(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test client."""
-        self.app = create_app()
-        self.client = TestClient(self.app)
+        self.client = TestClient(app)
         self.auth_headers = {"Authorization": "Bearer test-auth-token"}
 
     @patch("src.api.notion.dependencies.NotionClient")
