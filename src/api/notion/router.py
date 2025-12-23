@@ -11,7 +11,7 @@ from src.api.notion.tasks.endpoints import router as tasks_router
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/notion", tags=["notion"])
+router = APIRouter(prefix="/notion")
 
 router.include_router(databases_router)
 router.include_router(datasources_router)
