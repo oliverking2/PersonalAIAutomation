@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.notion.dependencies import get_data_source_id, get_notion_client
+from src.api.notion.dependencies import get_notion_client, get_task_data_source_id
 from src.api.notion.tasks.models import (
     TaskCreateRequest,
     TaskQueryRequest,
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/tasks", tags=["Notion - Task Management"])
 def query_tasks(
     request: TaskQueryRequest,
     client: NotionClient = Depends(get_notion_client),
-    data_source_id: str = Depends(get_data_source_id),
+    data_source_id: str = Depends(get_task_data_source_id),
 ) -> TaskQueryResponse:
     """Query all tasks from the configured task tracker."""
     logger.debug("Querying tasks")
@@ -76,7 +76,7 @@ def get_task(
 def create_task(
     request: TaskCreateRequest,
     client: NotionClient = Depends(get_notion_client),
-    data_source_id: str = Depends(get_data_source_id),
+    data_source_id: str = Depends(get_task_data_source_id),
 ) -> TaskResponse:
     """Create a new task in the task tracker."""
     logger.debug("Creating task")

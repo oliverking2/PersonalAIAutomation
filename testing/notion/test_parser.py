@@ -7,8 +7,12 @@ from pydantic import ValidationError
 
 from src.notion.models import TaskFilter
 from src.notion.parser import (
+    build_goal_properties,
     build_query_filter,
+    build_reading_properties,
     build_task_properties,
+    parse_page_to_goal,
+    parse_page_to_reading_item,
     parse_page_to_task,
 )
 
@@ -256,6 +260,196 @@ class TestBuildTaskProperties(unittest.TestCase):
     #         result["Description"]["rich_text"][0]["text"]["content"],
     #         "Task description",
     #     )
+
+
+class TestParsePageToGoal(unittest.TestCase):
+    """Tests for parse_page_to_goal function."""
+
+    def test_parse_complete_goal_page(self) -> None:
+        """Test parsing a goal page with all properties populated."""
+        page = {
+            "id": "goal-123",
+            "url": "https://notion.so/My-Goal",
+            "properties": {
+                "Goal name": {"title": [{"plain_text": "Learn Python"}]},
+                "Status": {"status": {"name": "In progress"}},
+                "Priority": {"select": {"name": "High"}},
+                "Progress": {"number": 50},
+                "Due date": {"date": {"start": "2025-12-31"}},
+            },
+        }
+
+        goal = parse_page_to_goal(page)
+
+        self.assertEqual(goal.id, "goal-123")
+        self.assertEqual(goal.goal_name, "Learn Python")
+        self.assertEqual(goal.status, "In progress")
+        self.assertEqual(goal.priority, "High")
+        self.assertEqual(goal.progress, 50)
+        self.assertEqual(goal.due_date, date(2025, 12, 31))
+        self.assertEqual(goal.url, "https://notion.so/My-Goal")
+
+    def test_parse_goal_page_with_missing_optional_properties(self) -> None:
+        """Test parsing a goal page with missing optional properties."""
+        page = {
+            "id": "goal-456",
+            "url": "https://notion.so/Minimal-Goal",
+            "properties": {
+                "Goal name": {"title": [{"plain_text": "Minimal Goal"}]},
+                "Status": {"status": None},
+                "Priority": {"select": None},
+                "Progress": {"number": None},
+                "Due date": {"date": None},
+            },
+        }
+
+        goal = parse_page_to_goal(page)
+
+        self.assertEqual(goal.id, "goal-456")
+        self.assertEqual(goal.goal_name, "Minimal Goal")
+        self.assertIsNone(goal.status)
+        self.assertIsNone(goal.priority)
+        self.assertIsNone(goal.progress)
+        self.assertIsNone(goal.due_date)
+
+
+class TestParsePageToReadingItem(unittest.TestCase):
+    """Tests for parse_page_to_reading_item function."""
+
+    def test_parse_complete_reading_item_page(self) -> None:
+        """Test parsing a reading item page with all properties populated."""
+        page = {
+            "id": "reading-123",
+            "url": "https://notion.so/My-Book",
+            "properties": {
+                "Title": {"title": [{"plain_text": "Clean Code"}]},
+                "Status": {"status": {"name": "Reading Now"}},
+                "Priority": {"select": {"name": "High"}},
+                "Category": {"select": {"name": "Data Engineering"}},
+                "URL": {"url": "https://example.com/book"},
+                "Read Date": {"date": {"start": "2025-12-20"}},
+            },
+        }
+
+        item = parse_page_to_reading_item(page)
+
+        self.assertEqual(item.id, "reading-123")
+        self.assertEqual(item.title, "Clean Code")
+        self.assertEqual(item.status, "Reading Now")
+        self.assertEqual(item.priority, "High")
+        self.assertEqual(item.category, "Data Engineering")
+        self.assertEqual(item.item_url, "https://example.com/book")
+        self.assertEqual(item.read_date, date(2025, 12, 20))
+        self.assertEqual(item.url, "https://notion.so/My-Book")
+
+    def test_parse_reading_item_page_with_missing_optional_properties(self) -> None:
+        """Test parsing a reading item page with missing optional properties."""
+        page = {
+            "id": "reading-456",
+            "url": "https://notion.so/Minimal-Article",
+            "properties": {
+                "Title": {"title": [{"plain_text": "Minimal Article"}]},
+                "Status": {"status": None},
+                "Priority": {"select": None},
+                "Category": {"select": None},
+                "URL": {"url": None},
+                "Read Date": {"date": None},
+            },
+        }
+
+        item = parse_page_to_reading_item(page)
+
+        self.assertEqual(item.id, "reading-456")
+        self.assertEqual(item.title, "Minimal Article")
+        self.assertIsNone(item.status)
+        self.assertIsNone(item.priority)
+        self.assertIsNone(item.category)
+        self.assertIsNone(item.item_url)
+        self.assertIsNone(item.read_date)
+
+
+class TestBuildGoalProperties(unittest.TestCase):
+    """Tests for build_goal_properties function."""
+
+    def test_build_goal_properties_with_all_fields(self) -> None:
+        """Test building goal properties with all fields."""
+        result = build_goal_properties(
+            goal_name="New Goal",
+            status="Not started",
+            priority="High",
+            progress=25,
+            due_date=date(2025, 12, 31),
+        )
+
+        self.assertIn("Goal name", result)
+        self.assertIn("Status", result)
+        self.assertIn("Priority", result)
+        self.assertIn("Progress", result)
+        self.assertIn("Due date", result)
+
+    def test_build_goal_properties_with_name_only(self) -> None:
+        """Test building goal properties with goal name only."""
+        result = build_goal_properties(goal_name="Simple Goal")
+
+        self.assertIn("Goal name", result)
+        self.assertEqual(len(result), 1)
+
+    def test_build_goal_number_property(self) -> None:
+        """Test building a number property for progress."""
+        result = build_goal_properties(progress=75)
+
+        self.assertIn("Progress", result)
+        self.assertEqual(result["Progress"]["number"], 75)
+
+    def test_build_goal_properties_unknown_field_raises_error(self) -> None:
+        """Test that unknown field name raises ValueError."""
+        with self.assertRaises(ValueError) as context:
+            build_goal_properties(unknown_field="value")
+
+        self.assertIn("Unknown field", str(context.exception))
+
+
+class TestBuildReadingProperties(unittest.TestCase):
+    """Tests for build_reading_properties function."""
+
+    def test_build_reading_properties_with_all_fields(self) -> None:
+        """Test building reading properties with all fields."""
+        result = build_reading_properties(
+            title="New Article",
+            status="To Read",
+            priority="High",
+            category="Data Science",
+            item_url="https://example.com/article",
+            read_date=date(2025, 12, 20),
+        )
+
+        self.assertIn("Title", result)
+        self.assertIn("Status", result)
+        self.assertIn("Priority", result)
+        self.assertIn("Category", result)
+        self.assertIn("URL", result)
+        self.assertIn("Read Date", result)
+
+    def test_build_reading_properties_with_title_only(self) -> None:
+        """Test building reading properties with title only."""
+        result = build_reading_properties(title="Simple Article")
+
+        self.assertIn("Title", result)
+        self.assertEqual(len(result), 1)
+
+    def test_build_reading_url_property(self) -> None:
+        """Test building a URL property."""
+        result = build_reading_properties(item_url="https://example.com/book")
+
+        self.assertIn("URL", result)
+        self.assertEqual(result["URL"]["url"], "https://example.com/book")
+
+    def test_build_reading_properties_unknown_field_raises_error(self) -> None:
+        """Test that unknown field name raises ValueError."""
+        with self.assertRaises(ValueError) as context:
+            build_reading_properties(unknown_field="value")
+
+        self.assertIn("Unknown field", str(context.exception))
 
 
 if __name__ == "__main__":

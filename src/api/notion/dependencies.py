@@ -22,12 +22,32 @@ def get_notion_client() -> NotionClient:
         ) from e
 
 
-def get_data_source_id() -> str:
-    """Get the configured data source ID from environment."""
-    data_source_id = os.environ.get("NOTION_DATA_SOURCE_ID")
-    if not data_source_id:
+def _get_env_or_error(var_name: str) -> str:
+    """Get environment variable or raise HTTP 500 error.
+
+    :param var_name: Name of the environment variable to retrieve.
+    :returns: The value of the environment variable.
+    :raises HTTPException: If the variable is not set.
+    """
+    value = os.environ.get(var_name)
+    if not value:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="NOTION_DATA_SOURCE_ID not configured",
+            detail=f"{var_name} not configured",
         )
-    return data_source_id
+    return value
+
+
+def get_task_data_source_id() -> str:
+    """Get the configured task data source ID from environment."""
+    return _get_env_or_error("NOTION_TASK_DATA_SOURCE_ID")
+
+
+def get_goals_data_source_id() -> str:
+    """Get the configured goals data source ID from environment."""
+    return _get_env_or_error("NOTION_GOALS_DATA_SOURCE_ID")
+
+
+def get_reading_data_source_id() -> str:
+    """Get the configured reading list data source ID from environment."""
+    return _get_env_or_error("NOTION_READING_LIST_DATA_SOURCE_ID")

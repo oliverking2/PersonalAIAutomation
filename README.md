@@ -156,13 +156,31 @@ poetry run uvicorn src.api.app:app --reload
 | POST   | /notion/tasks          | Yes   | Create a task with validated enum fields |
 | PATCH  | /notion/tasks/{id}     | Yes   | Update a task                            |
 
+##### Goals (Goals Tracker)
+| Method | Path                   | Auth  | Description                              |
+|--------|------------------------|-------|------------------------------------------|
+| POST   | /notion/goals/query    | Yes   | Query goals (auto-pagination)            |
+| GET    | /notion/goals/{id}     | Yes   | Retrieve a goal                          |
+| POST   | /notion/goals          | Yes   | Create a goal with validated enum fields |
+| PATCH  | /notion/goals/{id}     | Yes   | Update a goal                            |
+
+##### Reading List
+| Method | Path                       | Auth  | Description                                   |
+|--------|----------------------------|-------|-----------------------------------------------|
+| POST   | /notion/reading-list/query | Yes   | Query reading items (auto-pagination)         |
+| GET    | /notion/reading-list/{id}  | Yes   | Retrieve a reading item                       |
+| POST   | /notion/reading            | Yes   | Create a reading item with validated enums    |
+| PATCH  | /notion/reading-list/{id}  | Yes   | Update a reading item                         |
+
 ### Notion Integration
-API wrapper for Notion to query and manage tasks. The generic endpoints work with any data source, while the task endpoints use a pre-configured task tracker with validated field values.
+API wrapper for Notion to query and manage tasks, goals, and reading items. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.
 
 #### Configuration
 - `NOTION_INTEGRATION_SECRET`: Notion integration token from https://www.notion.so/my-integrations
-- `NOTION_DATABASE_ID`: Database ID for the task tracker
-- `NOTION_DATA_SOURCE_ID`: Data source ID for the task tracker
+- `NOTION_DATABASE_ID`: Database ID for the task tracker (legacy, not used)
+- `NOTION_TASK_DATA_SOURCE_ID`: Data source ID for the task tracker
+- `NOTION_GOALS_DATA_SOURCE_ID`: Data source ID for the goals tracker
+- `NOTION_READING_LIST_DATA_SOURCE_ID`: Data source ID for the reading list
 
 #### Task Fields
 Task endpoints validate field values using enums:
@@ -170,6 +188,18 @@ Task endpoints validate field values using enums:
 - **Priority**: High, Medium, Low
 - **Effort level**: Small, Medium, Large
 - **Task Group**: Personal, Work, Photography
+
+#### Goal Fields
+Goal endpoints validate field values using enums:
+- **Status**: Not started, In progress, Done
+- **Priority**: High, Medium, Low
+- **Progress**: 0-100 (numeric)
+
+#### Reading List Fields
+Reading list endpoints validate field values using enums:
+- **Status**: To Read, Reading Now, Completed
+- **Priority**: High, Medium, Low
+- **Category**: Data Analytics, Data Science, Data Engineering, AI
 
 #### Usage
 Query tasks:

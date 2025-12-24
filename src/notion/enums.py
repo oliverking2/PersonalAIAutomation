@@ -34,3 +34,28 @@ class TaskGroup(StrEnum):
     PERSONAL = "Personal"
     WORK = "Work"
     PHOTOGRAPHY = "Photography"
+
+
+class GoalStatus(StrEnum):
+    """Valid status values for goals."""
+
+    NOT_STARTED = "Not started"
+    IN_PROGRESS = "In progress"
+    DONE = "Done"
+
+
+class ReadingStatus(StrEnum):
+    """Valid status values for reading list items."""
+
+    TO_READ = "To Read"
+    READING_NOW = "Reading Now"
+    COMPLETED = "Completed"
+
+
+class ReadingCategory(StrEnum):
+    """Valid category values for reading list items."""
+
+    DATA_ANALYTICS = "Data Analytics"
+    DATA_SCIENCE = "Data Science"
+    DATA_ENGINEERING = "Data Engineering"
+    AI = "AI"

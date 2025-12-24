@@ -9,7 +9,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Any
 
-from src.notion.models import NotionTask, TaskFilter
+from src.notion.models import NotionGoal, NotionReadingItem, NotionTask, TaskFilter
 
 
 class FieldType(StrEnum):
@@ -20,6 +20,8 @@ class FieldType(StrEnum):
     DATE = "date"
     SELECT = "select"
     RICH_TEXT = "rich_text"
+    NUMBER = "number"
+    URL = "url"
 
 
 @dataclass(frozen=True)
@@ -30,7 +32,7 @@ class TaskField:
     field_type: FieldType
 
 
-# Field registry - add new fields here
+# Field registries - add new fields here
 TASK_FIELDS: dict[str, TaskField] = {
     "task_name": TaskField("Task name", FieldType.TITLE),
     "status": TaskField("Status", FieldType.STATUS),
@@ -38,6 +40,23 @@ TASK_FIELDS: dict[str, TaskField] = {
     "priority": TaskField("Priority", FieldType.SELECT),
     "effort_level": TaskField("Effort level", FieldType.SELECT),
     "task_group": TaskField("Task Group", FieldType.SELECT),
+}
+
+GOAL_FIELDS: dict[str, TaskField] = {
+    "goal_name": TaskField("Goal name", FieldType.TITLE),
+    "status": TaskField("Status", FieldType.STATUS),
+    "priority": TaskField("Priority", FieldType.SELECT),
+    "progress": TaskField("Progress", FieldType.NUMBER),
+    "due_date": TaskField("Due date", FieldType.DATE),
+}
+
+READING_FIELDS: dict[str, TaskField] = {
+    "title": TaskField("Title", FieldType.TITLE),
+    "status": TaskField("Status", FieldType.STATUS),
+    "priority": TaskField("Priority", FieldType.SELECT),
+    "category": TaskField("Category", FieldType.SELECT),
+    "item_url": TaskField("URL", FieldType.URL),
+    "read_date": TaskField("Read Date", FieldType.DATE),
 }
 
 
@@ -58,6 +77,45 @@ def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
         effort_level=_extract_select(properties.get("Effort level", {})),
         task_group=_extract_select(properties.get("Task Group", {})),
         assignee=_extract_people(properties.get("Assignee", {})),
+        url=page.get("url", ""),
+    )
+
+
+def parse_page_to_goal(page: dict[str, Any]) -> NotionGoal:
+    """Parse a Notion page response into a NotionGoal model.
+
+    :param page: Raw page object from Notion API response.
+    :returns: Parsed NotionGoal with extracted properties.
+    """
+    properties = page.get("properties", {})
+
+    return NotionGoal(
+        id=page["id"],
+        goal_name=_extract_title(properties.get("Goal name", {})),
+        status=_extract_status(properties.get("Status", {})),
+        priority=_extract_select(properties.get("Priority", {})),
+        progress=_extract_number(properties.get("Progress", {})),
+        due_date=_extract_date(properties.get("Due date", {})),
+        url=page.get("url", ""),
+    )
+
+
+def parse_page_to_reading_item(page: dict[str, Any]) -> NotionReadingItem:
+    """Parse a Notion page response into a NotionReadingItem model.
+
+    :param page: Raw page object from Notion API response.
+    :returns: Parsed NotionReadingItem with extracted properties.
+    """
+    properties = page.get("properties", {})
+
+    return NotionReadingItem(
+        id=page["id"],
+        title=_extract_title(properties.get("Title", {})),
+        status=_extract_status(properties.get("Status", {})),
+        priority=_extract_select(properties.get("Priority", {})),
+        category=_extract_select(properties.get("Category", {})),
+        item_url=_extract_url(properties.get("URL", {})),
+        read_date=_extract_date(properties.get("Read Date", {})),
         url=page.get("url", ""),
     )
 
@@ -113,6 +171,16 @@ def _extract_people(prop: dict[str, Any]) -> str | None:
     return first_person.get("name")
 
 
+def _extract_number(prop: dict[str, Any]) -> float | None:
+    """Extract number from a number property."""
+    return prop.get("number")
+
+
+def _extract_url(prop: dict[str, Any]) -> str | None:
+    """Extract URL from a url property."""
+    return prop.get("url")
+
+
 def build_query_filter(filter_: TaskFilter) -> dict[str, Any]:
     """Build a Notion API filter from a TaskFilter model.
 
@@ -154,7 +222,7 @@ def build_query_filter(filter_: TaskFilter) -> dict[str, Any]:
     return {"filter": {"and": conditions}}
 
 
-def _build_property(field: TaskField, value: Any) -> dict[str, Any]:
+def _build_property(field: TaskField, value: Any) -> dict[str, Any]:  # noqa: PLR0911
     """Build a single Notion property payload."""
     match field.field_type:
         case FieldType.TITLE:
@@ -169,14 +237,18 @@ def _build_property(field: TaskField, value: Any) -> dict[str, Any]:
             return {field.notion_name: {"select": {"name": value}}}
         case FieldType.RICH_TEXT:
             return {field.notion_name: {"rich_text": [{"text": {"content": value}}]}}
+        case FieldType.NUMBER:
+            return {field.notion_name: {"number": value}}
+        case FieldType.URL:
+            return {field.notion_name: {"url": value}}
 
 
-def build_task_properties(**kwargs: Any) -> dict[str, Any]:
-    """Build properties payload from keyword arguments.
+def _build_properties(field_registry: dict[str, TaskField], **kwargs: Any) -> dict[str, Any]:
+    """Build properties payload from keyword arguments using a field registry.
 
     Only includes properties that are explicitly set (not None).
-    Adding a new field requires only adding it to TASK_FIELDS.
 
+    :param field_registry: Mapping of field names to TaskField metadata.
     :param kwargs: Field name to value mappings.
     :returns: Combined properties object for the Notion API.
     :raises ValueError: If an unknown field name is provided.
@@ -187,10 +259,40 @@ def build_task_properties(**kwargs: Any) -> dict[str, Any]:
         if value is None:
             continue
 
-        if field_name not in TASK_FIELDS:
+        if field_name not in field_registry:
             raise ValueError(f"Unknown field: {field_name}")
 
-        field = TASK_FIELDS[field_name]
+        field = field_registry[field_name]
         properties.update(_build_property(field, value))
 
     return properties
+
+
+def build_task_properties(**kwargs: Any) -> dict[str, Any]:
+    """Build task properties payload from keyword arguments.
+
+    :param kwargs: Field name to value mappings.
+    :returns: Combined properties object for the Notion API.
+    :raises ValueError: If an unknown field name is provided.
+    """
+    return _build_properties(TASK_FIELDS, **kwargs)
+
+
+def build_goal_properties(**kwargs: Any) -> dict[str, Any]:
+    """Build goal properties payload from keyword arguments.
+
+    :param kwargs: Field name to value mappings.
+    :returns: Combined properties object for the Notion API.
+    :raises ValueError: If an unknown field name is provided.
+    """
+    return _build_properties(GOAL_FIELDS, **kwargs)
+
+
+def build_reading_properties(**kwargs: Any) -> dict[str, Any]:
+    """Build reading item properties payload from keyword arguments.
+
+    :param kwargs: Field name to value mappings.
+    :returns: Combined properties object for the Notion API.
+    :raises ValueError: If an unknown field name is provided.
+    """
+    return _build_properties(READING_FIELDS, **kwargs)

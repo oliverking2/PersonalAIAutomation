@@ -52,3 +52,36 @@ class QueryResult(BaseModel):
     tasks: list[NotionTask] = Field(default_factory=list)
     has_more: bool = Field(default=False)
     next_cursor: str | None = Field(None)
+
+
+class NotionGoal(BaseModel):
+    """A goal from Notion with parsed properties.
+
+    Represents a page from the goals tracker data source
+    with goal-specific properties extracted and normalised.
+    """
+
+    id: str = Field(..., min_length=1, description="Notion page ID")
+    goal_name: str = Field(..., min_length=1, description="Goal title")
+    status: str | None = Field(None, description="Goal status")
+    priority: str | None = Field(None, description="Goal priority level")
+    progress: float | None = Field(None, description="Goal progress (0-100)")
+    due_date: date | None = Field(None, description="Goal due date")
+    url: str = Field(..., description="Notion page URL")
+
+
+class NotionReadingItem(BaseModel):
+    """A reading list item from Notion with parsed properties.
+
+    Represents a page from the reading list data source
+    with reading-specific properties extracted and normalised.
+    """
+
+    id: str = Field(..., min_length=1, description="Notion page ID")
+    title: str = Field(..., min_length=1, description="Reading item title")
+    status: str | None = Field(None, description="Reading status")
+    priority: str | None = Field(None, description="Reading priority level")
+    category: str | None = Field(None, description="Reading category")
+    item_url: str | None = Field(None, description="URL of the article/book")
+    read_date: date | None = Field(None, description="Date read")
+    url: str = Field(..., description="Notion page URL")

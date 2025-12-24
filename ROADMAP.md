@@ -3,6 +3,11 @@
 ## Notion
 - Daily updates of tasks due or overdue
 - Add tasks via the Telegram chat
+- Check if any open tasks have the same name when task created through API - error if so
+  - Long term: maybe needs a clever incremental extract of current tasks to store task names to save a large extract each time
+- Goals reminders
+- Reading list, track when read
+- Ability to add additional options to a select if doesn't match existing options
 
 ## Orchestration
 - ~~Add a scheduler to run daily/hourly jobs~~
@@ -19,6 +24,7 @@
   - DataExpert.io (Subscription needed?)
   - Daily Dose of Data Science
   - Seattle Data Guy
+  - more added recently
 
 ## API
 - ~~Trigger orchestration tasks manually~~
@@ -26,6 +32,7 @@
 ## AI
 - Integrate with AWS Bedrock for models
 - Add in AI for summarising news articles
+- Tool calls for the different Notion tasks
 
 ## Telegram
 - ~~Notifications~~
@@ -35,8 +42,9 @@
 ## Other
 - ~~Standardised logging config~~
 - ~~FastAPI API~~
-- Add CI/CD
 - ~~Dockerise~~
 - ~~Postgres for DB~~
-- Connect GlitchTip to Telegram using webhook and FastAPI
 - ~~Standardise to a single PG database~~
+- Host application
+- Add CI/CD
+- Connect GlitchTip to Telegram using webhook and FastAPI

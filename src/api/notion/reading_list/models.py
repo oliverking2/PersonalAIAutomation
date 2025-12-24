@@ -1,0 +1,67 @@
+"""Pydantic models for Reading List API endpoints."""
+
+from datetime import date
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from src.notion.enums import Priority, ReadingCategory, ReadingStatus
+
+
+class ReadingItemResponse(BaseModel):
+    """Response model for reading item endpoints."""
+
+    id: str = Field(..., description="Reading item page ID")
+    title: str = Field(..., description="Reading item title")
+    status: str | None = Field(None, description="Reading status")
+    priority: str | None = Field(None, description="Reading priority")
+    category: str | None = Field(None, description="Reading category")
+    item_url: str | None = Field(None, description="URL of the article/book")
+    read_date: date | None = Field(None, description="Date read")
+    url: str = Field(..., description="Notion page URL")
+
+
+class ReadingItemCreateRequest(BaseModel):
+    """Request model for reading item creation with validated enum fields."""
+
+    title: str = Field(..., min_length=1, description="Reading item title")
+    status: ReadingStatus | None = Field(
+        default=ReadingStatus.TO_READ, description="Reading status"
+    )
+    priority: Priority | None = Field(None, description="Reading priority")
+    category: ReadingCategory | None = Field(None, description="Reading category")
+    item_url: str | None = Field(None, description="URL of the article/book")
+    read_date: date | None = Field(None, description="Date read")
+
+
+class ReadingItemUpdateRequest(BaseModel):
+    """Request model for reading item update with validated enum fields."""
+
+    title: str | None = Field(None, min_length=1, description="Reading item title")
+    status: ReadingStatus | None = Field(None, description="Reading status")
+    priority: Priority | None = Field(None, description="Reading priority")
+    category: ReadingCategory | None = Field(None, description="Reading category")
+    item_url: str | None = Field(None, description="URL of the article/book")
+    read_date: date | None = Field(None, description="Date read")
+
+
+class ReadingQueryRequest(BaseModel):
+    """Request model for reading query endpoint."""
+
+    filter: dict[str, Any] | None = Field(
+        None,
+        description="Notion filter object",
+    )
+    sorts: list[dict[str, Any]] | None = Field(
+        None,
+        description="List of sort objects",
+    )
+
+
+class ReadingQueryResponse(BaseModel):
+    """Response model for reading query endpoint."""
+
+    results: list[ReadingItemResponse] = Field(
+        default_factory=list,
+        description="List of all reading items matching the query",
+    )
