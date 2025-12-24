@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.utils import check_duplicate_name
 from src.api.notion.dependencies import get_goals_data_source_id, get_notion_client
 from src.api.notion.goals.models import (
     GoalCreateRequest,
@@ -80,6 +81,15 @@ def create_goal(
 ) -> GoalResponse:
     """Create a new goal in the goals tracker."""
     logger.debug("Creating goal")
+
+    check_duplicate_name(
+        client=client,
+        data_source_id=data_source_id,
+        name_property="Goal name",
+        complete_status="Done",
+        new_name=request.goal_name,
+    )
+
     try:
         properties = build_goal_properties(
             goal_name=request.goal_name,
@@ -108,9 +118,21 @@ def update_goal(
     goal_id: str,
     request: GoalUpdateRequest,
     client: NotionClient = Depends(get_notion_client),
+    data_source_id: str = Depends(get_goals_data_source_id),
 ) -> GoalResponse:
     """Update a goal's properties."""
     logger.debug(f"Updating goal: {goal_id}")
+
+    if request.goal_name is not None:
+        check_duplicate_name(
+            client=client,
+            data_source_id=data_source_id,
+            name_property="Goal name",
+            complete_status="Done",
+            new_name=request.goal_name,
+            exclude_id=goal_id,
+        )
+
     try:
         properties = build_goal_properties(
             goal_name=request.goal_name,

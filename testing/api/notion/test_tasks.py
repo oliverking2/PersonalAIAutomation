@@ -236,6 +236,64 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         self.assertIn("priority", detail)
         self.assertIn("invalid value 'Critical'", detail)
 
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_create_task_duplicate_name_returns_409(self, mock_client_class: MagicMock) -> None:
+        """Test that duplicate task name returns 409 Conflict."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "existing-task",
+                "properties": {
+                    "Task name": {"title": [{"plain_text": "Existing Task"}]},
+                },
+            }
+        ]
+        mock_client_class.return_value = mock_client
+
+        response = self.client.post(
+            "/notion/tasks",
+            headers=self.auth_headers,
+            json={"task_name": "existing task"},  # case insensitive match
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.json()["detail"])
+
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_create_task_no_duplicate_succeeds(self, mock_client_class: MagicMock) -> None:
+        """Test that non-duplicate task name succeeds."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "existing-task",
+                "properties": {
+                    "Task name": {"title": [{"plain_text": "Other Task"}]},
+                },
+            }
+        ]
+        mock_client.create_page.return_value = {
+            "id": "new-task",
+            "url": "https://notion.so/New-Task",
+            "properties": {
+                "Task name": {"title": [{"plain_text": "New Task"}]},
+                "Status": {"status": {"name": "Not started"}},
+                "Due date": {"date": None},
+                "Priority": {"select": None},
+                "Effort level": {"select": None},
+                "Task Group": {"select": None},
+                "Assignee": {"people": []},
+            },
+        }
+        mock_client_class.return_value = mock_client
+
+        response = self.client.post(
+            "/notion/tasks",
+            headers=self.auth_headers,
+            json={"task_name": "New Task"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+
 
 class TestUpdateTaskEndpoint(unittest.TestCase):
     """Tests for PATCH /notion/tasks/{task_id} endpoint."""
@@ -290,6 +348,64 @@ class TestUpdateTaskEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("No properties to update", response.json()["detail"])
+
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_update_task_duplicate_name_returns_409(self, mock_client_class: MagicMock) -> None:
+        """Test that updating to duplicate task name returns 409 Conflict."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "other-task",
+                "properties": {
+                    "Task name": {"title": [{"plain_text": "Other Task"}]},
+                },
+            }
+        ]
+        mock_client_class.return_value = mock_client
+
+        response = self.client.patch(
+            "/notion/tasks/task-123",
+            headers=self.auth_headers,
+            json={"task_name": "OTHER TASK"},  # case insensitive match
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.json()["detail"])
+
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_update_task_same_name_excludes_self(self, mock_client_class: MagicMock) -> None:
+        """Test that updating to same name excludes current task from check."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "task-123",  # Same ID as the task being updated
+                "properties": {
+                    "Task name": {"title": [{"plain_text": "My Task"}]},
+                },
+            }
+        ]
+        mock_client.update_page.return_value = {
+            "id": "task-123",
+            "url": "https://notion.so/Task",
+            "properties": {
+                "Task name": {"title": [{"plain_text": "My Task"}]},
+                "Status": {"status": {"name": "Done"}},
+                "Due date": {"date": None},
+                "Priority": {"select": None},
+                "Effort level": {"select": None},
+                "Task Group": {"select": None},
+                "Assignee": {"people": []},
+            },
+        }
+        mock_client_class.return_value = mock_client
+
+        response = self.client.patch(
+            "/notion/tasks/task-123",
+            headers=self.auth_headers,
+            json={"task_name": "My Task"},
+        )
+
+        self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":

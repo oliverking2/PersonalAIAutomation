@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.utils import check_duplicate_name
 from src.api.notion.dependencies import get_notion_client, get_task_data_source_id
 from src.api.notion.tasks.models import (
     TaskCreateRequest,
@@ -80,6 +81,15 @@ def create_task(
 ) -> TaskResponse:
     """Create a new task in the task tracker."""
     logger.debug("Creating task")
+
+    check_duplicate_name(
+        client=client,
+        data_source_id=data_source_id,
+        name_property="Task name",
+        complete_status="Done",
+        new_name=request.task_name,
+    )
+
     try:
         properties = build_task_properties(
             task_name=request.task_name,
@@ -109,9 +119,21 @@ def update_task(
     task_id: str,
     request: TaskUpdateRequest,
     client: NotionClient = Depends(get_notion_client),
+    data_source_id: str = Depends(get_task_data_source_id),
 ) -> TaskResponse:
     """Update a task's properties."""
     logger.debug(f"Updating task: {task_id}")
+
+    if request.task_name is not None:
+        check_duplicate_name(
+            client=client,
+            data_source_id=data_source_id,
+            name_property="Task name",
+            complete_status="Done",
+            new_name=request.task_name,
+            exclude_id=task_id,
+        )
+
     try:
         properties = build_task_properties(
             task_name=request.task_name,

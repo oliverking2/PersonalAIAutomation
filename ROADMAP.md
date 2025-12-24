@@ -3,7 +3,7 @@
 ## Notion
 - Daily updates of tasks due or overdue
 - Add tasks via the Telegram chat
-- Check if any open tasks have the same name when task created through API - error if so
+- ~~Check if any open tasks have the same name when task created through API - error if so~~
   - Long term: maybe needs a clever incremental extract of current tasks to store task names to save a large extract each time
 - Goals reminders
 - Reading list, track when read

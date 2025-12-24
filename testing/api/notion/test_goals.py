@@ -3,7 +3,7 @@
 import os
 
 # Set required environment variables before importing API modules
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+
 os.environ.setdefault("API_AUTH_TOKEN", "test-auth-token")
 os.environ.setdefault("NOTION_INTEGRATION_SECRET", "test-notion-token")
 os.environ.setdefault("NOTION_GOALS_DATA_SOURCE_ID", "test-goals-data-source-id")
@@ -223,6 +223,29 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         detail = response.json()["detail"]
         self.assertIn("progress", detail)
 
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_create_goal_duplicate_name_returns_409(self, mock_client_class: MagicMock) -> None:
+        """Test that duplicate goal name returns 409 Conflict."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "existing-goal",
+                "properties": {
+                    "Goal name": {"title": [{"plain_text": "Existing Goal"}]},
+                },
+            }
+        ]
+        mock_client_class.return_value = mock_client
+
+        response = self.client.post(
+            "/notion/goals",
+            headers=self.auth_headers,
+            json={"goal_name": "existing goal"},  # case insensitive match
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.json()["detail"])
+
 
 class TestUpdateGoalEndpoint(unittest.TestCase):
     """Tests for PATCH /notion/goals/{goal_id} endpoint."""
@@ -274,6 +297,29 @@ class TestUpdateGoalEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("No properties to update", response.json()["detail"])
+
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_update_goal_duplicate_name_returns_409(self, mock_client_class: MagicMock) -> None:
+        """Test that updating to duplicate goal name returns 409 Conflict."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "other-goal",
+                "properties": {
+                    "Goal name": {"title": [{"plain_text": "Other Goal"}]},
+                },
+            }
+        ]
+        mock_client_class.return_value = mock_client
+
+        response = self.client.patch(
+            "/notion/goals/goal-123",
+            headers=self.auth_headers,
+            json={"goal_name": "OTHER GOAL"},  # case insensitive match
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.json()["detail"])
 
 
 if __name__ == "__main__":

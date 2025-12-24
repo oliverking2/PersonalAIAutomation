@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.utils import check_duplicate_name
 from src.api.notion.dependencies import get_notion_client, get_reading_data_source_id
 from src.api.notion.reading_list.models import (
     ReadingItemCreateRequest,
@@ -80,6 +81,15 @@ def create_reading_item(
 ) -> ReadingItemResponse:
     """Create a new item in the reading list."""
     logger.debug("Creating reading item")
+
+    check_duplicate_name(
+        client=client,
+        data_source_id=data_source_id,
+        name_property="Title",
+        complete_status="Completed",
+        new_name=request.title,
+    )
+
     try:
         properties = build_reading_properties(
             title=request.title,
@@ -109,9 +119,21 @@ def update_reading_item(
     item_id: str,
     request: ReadingItemUpdateRequest,
     client: NotionClient = Depends(get_notion_client),
+    data_source_id: str = Depends(get_reading_data_source_id),
 ) -> ReadingItemResponse:
     """Update a reading item's properties."""
     logger.debug(f"Updating reading item: {item_id}")
+
+    if request.title is not None:
+        check_duplicate_name(
+            client=client,
+            data_source_id=data_source_id,
+            name_property="Title",
+            complete_status="Completed",
+            new_name=request.title,
+            exclude_id=item_id,
+        )
+
     try:
         properties = build_reading_properties(
             title=request.title,

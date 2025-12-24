@@ -1,9 +1,7 @@
 """Tests for health check endpoints."""
 
-import os
 
 # Set required environment variables before importing API modules
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 import unittest
 

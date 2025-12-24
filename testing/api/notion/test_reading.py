@@ -3,7 +3,7 @@
 import os
 
 # Set required environment variables before importing API modules
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+
 os.environ.setdefault("API_AUTH_TOKEN", "test-auth-token")
 os.environ.setdefault("NOTION_INTEGRATION_SECRET", "test-notion-token")
 os.environ.setdefault("NOTION_READING_LIST_DATA_SOURCE_ID", "test-reading-data-source-id")
@@ -120,7 +120,7 @@ class TestGetReadingItemEndpoint(unittest.TestCase):
 
 
 class TestCreateReadingItemEndpoint(unittest.TestCase):
-    """Tests for POST /notion/reading endpoint."""
+    """Tests for POST /notion/reading-list endpoint."""
 
     def setUp(self) -> None:
         """Set up test client."""
@@ -147,7 +147,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         mock_client_class.return_value = mock_client
 
         response = self.client.post(
-            "/notion/reading",
+            "/notion/reading-list",
             headers=self.auth_headers,
             json={
                 "title": "New Article",
@@ -184,7 +184,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         mock_client_class.return_value = mock_client
 
         response = self.client.post(
-            "/notion/reading",
+            "/notion/reading-list",
             headers=self.auth_headers,
             json={"title": "Minimal"},
         )
@@ -194,7 +194,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
     def test_create_reading_item_missing_title_returns_422(self) -> None:
         """Test that missing title returns 422 with readable error."""
         response = self.client.post(
-            "/notion/reading",
+            "/notion/reading-list",
             headers=self.auth_headers,
             json={"status": "To Read"},
         )
@@ -207,7 +207,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
     def test_create_reading_item_invalid_status_returns_422(self) -> None:
         """Test that invalid status enum value returns 422 with readable error."""
         response = self.client.post(
-            "/notion/reading",
+            "/notion/reading-list",
             headers=self.auth_headers,
             json={"title": "Article", "status": "Invalid"},
         )
@@ -220,7 +220,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
     def test_create_reading_item_invalid_category_returns_422(self) -> None:
         """Test that invalid category enum value returns 422 with readable error."""
         response = self.client.post(
-            "/notion/reading",
+            "/notion/reading-list",
             headers=self.auth_headers,
             json={"title": "Article", "category": "Invalid Category"},
         )
@@ -229,6 +229,31 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         detail = response.json()["detail"]
         self.assertIn("category", detail)
         self.assertIn("invalid value 'Invalid Category'", detail)
+
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_create_reading_item_duplicate_title_returns_409(
+        self, mock_client_class: MagicMock
+    ) -> None:
+        """Test that duplicate title returns 409 Conflict."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "existing-item",
+                "properties": {
+                    "Title": {"title": [{"plain_text": "Existing Article"}]},
+                },
+            }
+        ]
+        mock_client_class.return_value = mock_client
+
+        response = self.client.post(
+            "/notion/reading-list",
+            headers=self.auth_headers,
+            json={"title": "existing article"},  # case insensitive match
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.json()["detail"])
 
 
 class TestUpdateReadingItemEndpoint(unittest.TestCase):
@@ -282,6 +307,31 @@ class TestUpdateReadingItemEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("No properties to update", response.json()["detail"])
+
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_update_reading_item_duplicate_title_returns_409(
+        self, mock_client_class: MagicMock
+    ) -> None:
+        """Test that updating to duplicate title returns 409 Conflict."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = [
+            {
+                "id": "other-item",
+                "properties": {
+                    "Title": {"title": [{"plain_text": "Other Article"}]},
+                },
+            }
+        ]
+        mock_client_class.return_value = mock_client
+
+        response = self.client.patch(
+            "/notion/reading-list/reading-123",
+            headers=self.auth_headers,
+            json={"title": "OTHER ARTICLE"},  # case insensitive match
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.json()["detail"])
 
 
 if __name__ == "__main__":
