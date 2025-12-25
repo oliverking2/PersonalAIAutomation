@@ -52,6 +52,31 @@ def configure_logging() -> None:
     if not access_enabled:
         logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
-    _set_logger_levels(("urllib3", "httpx"), level=max(level, logging.INFO))
+    # AWS noise
+    _set_logger_levels(
+        (
+            "boto3",
+            "botocore",
+            "botocore.auth",
+            "botocore.endpoint",
+            "botocore.parsers",
+            "botocore.regions",
+            "botocore.hooks",
+            "botocore.retryhandler",
+            "botocore.credentials",
+        ),
+        logging.INFO,
+    )
 
+    # HTTP noise
+    _set_logger_levels(
+        ("urllib3", "urllib3.connectionpool", "httpx"),
+        logging.WARNING,
+    )
+
+    # Sentry / GlitchTip
+    _set_logger_levels(
+        ("sentry_sdk", "sentry_sdk.transport"),
+        logging.ERROR,
+    )
     logging.getLogger(__name__).info("Logging configured: level=%s", level_name.upper())
