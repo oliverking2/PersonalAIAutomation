@@ -233,6 +233,12 @@ src/agent/
   - the relevant identifier(s)
   - the expected shape/state
 
+## Enums
+- Use `StrEnum` for any parameter or field with a defined set of valid string values.
+- Never use string literals where an enum exists (e.g., use `CallType.CHAT` not `"chat"`).
+- Define enums in `enums.py` within the relevant module (e.g., `src/agent/enums.py`, `src/notion/enums.py`).
+- StrEnum values automatically convert to strings for database storage and JSON serialisation.
+
 ## Logging
 - Use the standard library `logging` module.
 - Use module-level loggers: `logger = logging.getLogger(__name__)`.

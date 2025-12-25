@@ -12,3 +12,10 @@ class RiskLevel(StrEnum):
 
     SAFE = "safe"
     SENSITIVE = "sensitive"
+
+
+class CallType(StrEnum):
+    """Type of LLM call for tracking purposes."""
+
+    CHAT = "chat"
+    SELECTOR = "selector"

@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import TYPE_CHECKING, Any
 
 import boto3
 from botocore.exceptions import ClientError
 
+from src.agent.call_tracking import get_tracking_context
+from src.agent.enums import CallType
 from src.agent.exceptions import BedrockClientError
 
 if TYPE_CHECKING:
@@ -82,6 +85,7 @@ class BedrockClient:
         tool_config: ToolConfigurationTypeDef | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        call_type: CallType = CallType.CHAT,
     ) -> dict[str, Any]:
         """Invoke the Bedrock Converse API.
 
@@ -91,6 +95,7 @@ class BedrockClient:
         :param tool_config: Optional tool configuration for tool use.
         :param max_tokens: Maximum tokens in response.
         :param temperature: Sampling temperature (0.0 for deterministic).
+        :param call_type: Type of call for tracking (chat or selector).
         :returns: Converse API response.
         :raises BedrockClientError: If the API call fails.
         :raises ValueError: If model_id is not a valid alias.
@@ -115,12 +120,29 @@ class BedrockClient:
             logger.debug(
                 f"Calling Bedrock Converse: model={effective_model}, messages_count={len(messages)}"
             )
+            start_time = time.perf_counter()
             response = self._client.converse(**request_params)
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+
             logger.debug(
                 f"Bedrock response: stop_reason={response.get('stopReason')}, "
-                f"usage={response.get('usage')}"
+                f"usage={response.get('usage')}, latency_ms={latency_ms}"
             )
-            return dict(response)
+
+            # Record call if tracking context is active
+            response_dict = dict(response)
+            tracking_context = get_tracking_context()
+            if tracking_context is not None:
+                tracking_context.record_call(
+                    model_alias=model_id.lower(),
+                    model_id=effective_model,
+                    call_type=call_type,
+                    request_messages=[dict(m) for m in messages],
+                    response=response_dict,
+                    latency_ms=latency_ms,
+                )
+
+            return response_dict
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
 
-from src.agent.client import (
+from src.agent.bedrock_client import (
     MODEL_ALIASES,
     VALID_MODEL_OPTIONS,
     BedrockClient,
@@ -52,7 +52,7 @@ class TestResolveModelId(unittest.TestCase):
 class TestBedrockClient(unittest.TestCase):
     """Tests for BedrockClient."""
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_init_default_region(self, mock_boto_client: MagicMock) -> None:
         """Test client initialisation with default region."""
         with patch.dict("os.environ", {}, clear=True):
@@ -61,7 +61,7 @@ class TestBedrockClient(unittest.TestCase):
             self.assertEqual(client.region_name, "eu-west-2")
             mock_boto_client.assert_called_once_with("bedrock-runtime", region_name="eu-west-2")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_init_with_custom_region(self, mock_boto_client: MagicMock) -> None:
         """Test client initialisation with custom region."""
         client = BedrockClient(region_name="us-east-1")
@@ -69,7 +69,7 @@ class TestBedrockClient(unittest.TestCase):
         self.assertEqual(client.region_name, "us-east-1")
         mock_boto_client.assert_called_once_with("bedrock-runtime", region_name="us-east-1")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_init_from_environment(self, mock_boto_client: MagicMock) -> None:
         """Test client reads region from environment variable."""
         with patch.dict("os.environ", {"AWS_REGION": "ap-southeast-1"}):
@@ -77,7 +77,7 @@ class TestBedrockClient(unittest.TestCase):
 
             self.assertEqual(client.region_name, "ap-southeast-1")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_converse_basic(self, mock_boto_client: MagicMock) -> None:
         """Test basic converse call."""
         mock_bedrock = MagicMock()
@@ -98,7 +98,7 @@ class TestBedrockClient(unittest.TestCase):
         call_kwargs = mock_bedrock.converse.call_args.kwargs
         self.assertEqual(call_kwargs["modelId"], MODEL_ALIASES["sonnet"])
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_converse_with_system_prompt(self, mock_boto_client: MagicMock) -> None:
         """Test converse with system prompt."""
         mock_bedrock = MagicMock()
@@ -114,7 +114,7 @@ class TestBedrockClient(unittest.TestCase):
         self.assertIn("system", call_args.kwargs)
         self.assertEqual(call_args.kwargs["system"][0]["text"], "Be helpful")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_converse_with_tool_config(self, mock_boto_client: MagicMock) -> None:
         """Test converse with tool configuration."""
         mock_bedrock = MagicMock()
@@ -130,7 +130,7 @@ class TestBedrockClient(unittest.TestCase):
         call_args = mock_bedrock.converse.call_args
         self.assertIn("toolConfig", call_args.kwargs)
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_converse_handles_client_error(self, mock_boto_client: MagicMock) -> None:
         """Test that ClientError is converted to BedrockClientError."""
         mock_bedrock = MagicMock()
@@ -148,7 +148,7 @@ class TestBedrockClient(unittest.TestCase):
 
         self.assertIn("ValidationException", str(ctx.exception))
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_converse_invalid_model_raises_error(self, mock_boto_client: MagicMock) -> None:
         """Test that invalid model alias raises ValueError."""
         client = BedrockClient()
@@ -159,7 +159,7 @@ class TestBedrockClient(unittest.TestCase):
 
         self.assertIn("Invalid model 'invalid'", str(ctx.exception))
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_parse_tool_use(self, mock_boto_client: MagicMock) -> None:
         """Test parsing tool use blocks from response."""
         client = BedrockClient()
@@ -187,7 +187,7 @@ class TestBedrockClient(unittest.TestCase):
         self.assertEqual(tool_uses[0]["name"], "search")
         self.assertEqual(tool_uses[0]["input"], {"query": "test"})
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_parse_tool_use_empty(self, mock_boto_client: MagicMock) -> None:
         """Test parsing response with no tool uses."""
         client = BedrockClient()
@@ -197,7 +197,7 @@ class TestBedrockClient(unittest.TestCase):
 
         self.assertEqual(len(tool_uses), 0)
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_parse_text_response(self, mock_boto_client: MagicMock) -> None:
         """Test parsing text from response."""
         client = BedrockClient()
@@ -216,7 +216,7 @@ class TestBedrockClient(unittest.TestCase):
 
         self.assertEqual(text, "Hello\nWorld")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_create_tool_result_message(self, mock_boto_client: MagicMock) -> None:
         """Test creating tool result message."""
         client = BedrockClient()
@@ -232,7 +232,7 @@ class TestBedrockClient(unittest.TestCase):
         self.assertEqual(tool_result["toolUseId"], "tool-1")
         self.assertEqual(tool_result["status"], "success")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_create_tool_result_message_error(self, mock_boto_client: MagicMock) -> None:
         """Test creating error tool result message."""
         client = BedrockClient()
@@ -246,7 +246,7 @@ class TestBedrockClient(unittest.TestCase):
         tool_result = message["content"][0]["toolResult"]
         self.assertEqual(tool_result["status"], "error")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_create_user_message(self, mock_boto_client: MagicMock) -> None:
         """Test creating user message."""
         client = BedrockClient()
@@ -256,7 +256,7 @@ class TestBedrockClient(unittest.TestCase):
         self.assertEqual(message["role"], "user")
         self.assertEqual(message["content"][0]["text"], "Hello")
 
-    @patch("src.agent.client.boto3.client")
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_get_stop_reason(self, mock_boto_client: MagicMock) -> None:
         """Test extracting stop reason."""
         client = BedrockClient()

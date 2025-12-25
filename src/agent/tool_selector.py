@@ -3,11 +3,11 @@
 import json
 import logging
 
-from src.agent.client import BedrockClient
-from src.agent.enums import RiskLevel
+from src.agent.bedrock_client import BedrockClient
+from src.agent.enums import CallType, RiskLevel
 from src.agent.exceptions import BedrockClientError, ToolSelectionError
 from src.agent.models import ToolMetadata, ToolSelectionResult
-from src.agent.registry import ToolRegistry
+from src.agent.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,7 @@ class ToolSelector:
                     system_prompt=system_prompt,
                     max_tokens=512,
                     temperature=0.0,
+                    call_type=CallType.SELECTOR,
                 )
 
                 response_text = self.client.parse_text_response(response)

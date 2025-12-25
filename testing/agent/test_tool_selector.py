@@ -7,12 +7,12 @@ from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
 
-from src.agent.client import BedrockClient
+from src.agent.bedrock_client import BedrockClient
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import BedrockClientError, ToolSelectionError
 from src.agent.models import ToolDef
-from src.agent.registry import ToolRegistry
-from src.agent.selector import ToolSelector
+from src.agent.tool_registry import ToolRegistry
+from src.agent.tool_selector import ToolSelector
 
 
 class DummyArgs(BaseModel):

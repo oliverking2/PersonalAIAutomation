@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import DuplicateToolError, ToolNotFoundError
 from src.agent.models import ToolDef
-from src.agent.registry import ToolRegistry, create_default_registry
+from src.agent.tool_registry import ToolRegistry, create_default_registry
 
 
 class DummyArgs(BaseModel):

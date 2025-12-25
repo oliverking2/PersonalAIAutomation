@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
-from src.agent.client import BedrockClient
+from src.agent.bedrock_client import BedrockClient
+from src.agent.call_tracking import TrackingContext, set_tracking_context
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import (
     BedrockClientError,
@@ -17,14 +19,20 @@ from src.agent.exceptions import (
     ToolExecutionError,
 )
 from src.agent.models import AgentRunResult, ConfirmationRequest, ToolCall, ToolDef
-from src.agent.registry import ToolRegistry
-from src.agent.selector import ToolSelector
+from src.agent.tool_registry import ToolRegistry
+from src.agent.tool_selector import ToolSelector
+from src.database.agent_tracking import (
+    complete_agent_run,
+    create_agent_conversation,
+    create_agent_run,
+)
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime.type_defs import (
         MessageTypeDef,
         ToolConfigurationTypeDef,
     )
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -126,11 +134,14 @@ class AgentRunner:
         if self._standard_tool_names:
             logger.debug(f"Standard tools cached: {self._standard_tool_names}")
 
-    def run(
+    def run(  # noqa: PLR0913 - Agent run has multiple configuration options
         self,
         user_message: str,
         tool_names: list[str] | None = None,
         confirmed_tool_use_ids: set[str] | None = None,
+        tracking_context: TrackingContext | None = None,
+        session: Session | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> AgentRunResult:
         """Execute the agent with the given user message and tools.
 
@@ -141,10 +152,72 @@ class AgentRunner:
         :param user_message: The user's input message.
         :param tool_names: Optional list of tool names. If None, auto-selects.
         :param confirmed_tool_use_ids: Set of tool use IDs that have been confirmed.
+        :param tracking_context: Tracking context for recording LLM calls. If not
+            provided, a new context is created automatically.
+        :param session: Database session for persisting tracking data. If provided,
+            conversation and agent run records are created and updated automatically.
+        :param conversation_id: Existing conversation ID to add this run to. Only used
+            when session is provided. If not provided, a new conversation is created.
         :returns: Result of the agent run.
         :raises MaxStepsExceededError: If the agent exceeds max_steps.
         :raises BedrockClientError: If the Bedrock API call fails.
         :raises ToolNotFoundError: If a requested tool is not found.
+        """
+        # Create database records if session provided
+        db_conversation_id: uuid.UUID | None = None
+        db_agent_run_id: uuid.UUID | None = None
+
+        if session is not None:
+            if conversation_id is not None:
+                db_conversation_id = conversation_id
+            else:
+                conversation = create_agent_conversation(session)
+                db_conversation_id = conversation.id
+
+            agent_run = create_agent_run(
+                session, conversation_id=db_conversation_id, user_message=user_message
+            )
+            db_agent_run_id = agent_run.id
+
+        # Always track - create context if not provided
+        if tracking_context is None:
+            tracking_context = TrackingContext(
+                run_id=db_agent_run_id or uuid.uuid4(),
+                conversation_id=db_conversation_id or uuid.uuid4(),
+            )
+
+        set_tracking_context(tracking_context)
+
+        try:
+            result = self._execute_run(user_message, tool_names, confirmed_tool_use_ids)
+
+            # Persist tracking data if session provided
+            if session is not None and db_agent_run_id is not None:
+                complete_agent_run(
+                    session,
+                    agent_run_id=db_agent_run_id,
+                    tracking_context=tracking_context,
+                    final_response=result.response,
+                    stop_reason=result.stop_reason,
+                    steps_taken=result.steps_taken,
+                )
+
+            return result
+        finally:
+            set_tracking_context(None)
+
+    def _execute_run(
+        self,
+        user_message: str,
+        tool_names: list[str] | None,
+        confirmed_tool_use_ids: set[str] | None,
+    ) -> AgentRunResult:
+        """Execute the agent run logic.
+
+        :param user_message: The user's input message.
+        :param tool_names: Optional list of tool names. If None, auto-selects.
+        :param confirmed_tool_use_ids: Set of tool use IDs that have been confirmed.
+        :returns: Result of the agent run.
         """
         # Auto-select tools if not provided
         if tool_names is None:
@@ -355,12 +428,15 @@ class AgentRunner:
             stop_reason=stop_reason,
         )
 
-    def run_with_confirmation(
+    def run_with_confirmation(  # noqa: PLR0913 - Mirrors run() parameters
         self,
         user_message: str,
         pending_result: AgentRunResult,
         confirmed: bool,
         tool_names: list[str] | None = None,
+        tracking_context: TrackingContext | None = None,
+        session: Session | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> AgentRunResult:
         """Continue a run after user confirmation for a sensitive tool.
 
@@ -368,6 +444,9 @@ class AgentRunner:
         :param pending_result: Previous result that required confirmation.
         :param confirmed: Whether the user confirmed the action.
         :param tool_names: Optional list of tool names. If None, auto-selects.
+        :param tracking_context: Tracking context for recording LLM calls.
+        :param session: Database session for persisting tracking data.
+        :param conversation_id: Existing conversation ID to add this run to.
         :returns: Updated result after processing confirmation.
         :raises ValueError: If pending_result does not require confirmation.
         """
@@ -393,6 +472,9 @@ class AgentRunner:
             user_message=user_message,
             tool_names=tool_names,
             confirmed_tool_use_ids=confirmed_ids,
+            tracking_context=tracking_context,
+            session=session,
+            conversation_id=conversation_id,
         )
 
     def _execute_tool(self, tool: ToolDef, input_args: dict[str, Any]) -> dict[str, Any]:

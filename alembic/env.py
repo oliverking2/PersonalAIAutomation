@@ -8,6 +8,7 @@ from sqlalchemy.engine import Engine
 from alembic import context
 from src.database.connection import create_db_engine, get_database_url
 from src.database.core import Base
+from src.database.agent_tracking.models import *  # noqa: F403
 from src.database.extraction_state.models import *  # noqa: F403
 from src.database.newsletters.models import *  # noqa: F403
 

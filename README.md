@@ -438,6 +438,70 @@ print(result.response)
 
 The agent automatically selects relevant tools using a cheap model (Haiku) and executes with the main model (Sonnet). Standard tools tagged with `standard` are always included.
 
+#### Cost and Token Tracking
+The agent automatically tracks all LLM calls, tokens, and costs. Each Bedrock API call is recorded with:
+- Request messages and response content (stored as JSONB)
+- Input, output, and cache-read token counts
+- Estimated cost based on model pricing
+- Call latency in milliseconds
+- Call type (chat vs selector)
+
+Tracking data is organised in three tables:
+- **conversations**: Multi-run conversation containers with aggregated totals
+- **agent_runs**: Individual executions with user message, response, and step count
+- **llm_calls**: Individual Bedrock API calls with full request/response data
+
+##### Persisting Tracking Data
+Pass a database session to automatically persist tracking data:
+
+```python
+from src.agent import AgentRunner, create_default_registry
+from src.database.core import SessionLocal
+
+runner = AgentRunner(registry=create_default_registry())
+
+# With database persistence - creates conversation and agent_run records
+with SessionLocal() as session:
+    result = runner.run("Show my tasks", session=session)
+    session.commit()
+
+# For multi-turn conversations, pass the conversation_id
+with SessionLocal() as session:
+    result1 = runner.run("Show my tasks", session=session)
+    conversation_id = ...  # Get from first run's tracking context
+    result2 = runner.run("Mark first task done", session=session, conversation_id=conversation_id)
+    session.commit()
+```
+
+##### Accessing Tracking Data (without persistence)
+Pass a `TrackingContext` to access recorded data after a run without database persistence:
+
+```python
+import uuid
+from src.agent import AgentRunner, create_default_registry
+from src.agent.call_tracking import TrackingContext
+
+tracking = TrackingContext(
+    run_id=uuid.uuid4(),
+    conversation_id=uuid.uuid4(),
+)
+
+runner = AgentRunner(registry=create_default_registry())
+result = runner.run("Show my tasks", tracking_context=tracking)
+
+print(f"Total tokens: {tracking.total_input_tokens}/{tracking.total_output_tokens}")
+print(f"Estimated cost: ${tracking.total_estimated_cost}")
+```
+
+##### Model Pricing
+Costs are estimated per 1,000 tokens:
+
+| Model  | Input   | Output  | Cache Read |
+|--------|---------|---------|------------|
+| Haiku  | $0.001  | $0.005  | $0.0001    |
+| Sonnet | $0.003  | $0.015  | $0.0003    |
+| Opus   | $0.005  | $0.025  | $0.0005    |
+
 ### Notion Integration
 API wrapper for Notion to query and manage tasks, goals, and reading items. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.
 

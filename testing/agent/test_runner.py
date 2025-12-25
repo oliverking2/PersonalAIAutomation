@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError
 from src.agent.models import AgentRunResult, ConfirmationRequest, ToolDef
-from src.agent.registry import ToolRegistry
 from src.agent.runner import DEFAULT_MAX_STEPS, DEFAULT_SYSTEM_PROMPT, AgentRunner
+from src.agent.tool_registry import ToolRegistry
 
 
 class DummyArgs(BaseModel):

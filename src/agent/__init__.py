@@ -4,7 +4,7 @@ This module provides a reusable agent runtime built on AWS Bedrock Converse
 with structured tool calling, validation, and safety guardrails.
 """
 
-from src.agent.client import MODEL_ALIASES, BedrockClient, resolve_model_id
+from src.agent.bedrock_client import MODEL_ALIASES, BedrockClient, resolve_model_id
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import (
     AgentError,
@@ -24,9 +24,9 @@ from src.agent.models import (
     ToolMetadata,
     ToolSelectionResult,
 )
-from src.agent.registry import ToolRegistry, create_default_registry
 from src.agent.runner import AgentRunner
-from src.agent.selector import ToolSelector
+from src.agent.tool_registry import ToolRegistry, create_default_registry
+from src.agent.tool_selector import ToolSelector
 
 __all__ = [
     "MODEL_ALIASES",
