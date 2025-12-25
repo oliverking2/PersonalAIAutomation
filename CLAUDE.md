@@ -57,13 +57,77 @@ make clean
 ### Module Responsibilities
 | Module               | Purpose                                        |
 |----------------------|------------------------------------------------|
+| `src/agent/`         | AI agent runtime with Bedrock tool calling     |
 | `src/api/`           | FastAPI REST endpoints with HTTPBearer auth    |
 | `src/dagster/`       | Dagster jobs, ops, schedules, and resources    |
 | `src/database/`      | SQLAlchemy models and database operations      |
 | `src/graph/`         | Microsoft Graph API client for email access    |
 | `src/newsletters/`   | Email parsing and article extraction           |
+| `src/notion/`        | Notion API client, models, and parsing logic   |
 | `src/observability/` | Sentry/GlitchTip error tracking integration    |
 | `src/telegram/`      | Telegram Bot API client and alerting           |
+
+### Separation of Concerns
+
+**Domain logic belongs in domain modules, not in consumers.**
+
+The project follows a strict separation where:
+- **Domain modules** (`src/notion/`, `src/telegram/`, etc.) contain all business logic, models, clients, and parsing
+- **Consumer layers** (`src/api/`, `src/agent/`, `src/dagster/`) are thin wrappers that orchestrate domain modules
+
+#### Example: Notion Integration
+
+```
+src/notion/           <- Domain logic lives here
+├── client.py         # NotionClient with all API operations
+├── models.py         # NotionTask, NotionGoal, NotionReadingItem
+├── parser.py         # build_task_properties(), parse_page_to_task()
+└── enums.py          # Priority, TaskStatus, ReadingStatus, etc.
+
+src/api/notion/       <- Thin HTTP wrapper
+└── tasks/
+    ├── endpoints.py  # HTTP handlers that call NotionClient
+    └── models.py     # Request/response models (can reuse from src/notion/)
+
+src/agent/tools/      <- Thin tool wrapper
+└── tasks.py          # Tool handlers that call NotionClient
+```
+
+#### Rules for Consumer Layers
+
+1. **Never duplicate domain logic**: If logic exists in a domain module, import and use it
+2. **Reuse models**: Prefer importing models from domain modules over creating duplicates
+3. **Keep wrappers thin**: Consumer code should only handle:
+   - Input/output transformation specific to that interface (HTTP, tool spec, etc.)
+   - Orchestration of domain operations
+   - Interface-specific error handling
+4. **Shared models**: If the same model is needed across API and Agent, place it in the domain module (`src/notion/models.py`) or create a shared location
+
+#### Agent Tools Pattern
+
+Agent tools in `src/agent/tools/` should:
+- Import and reuse models from domain modules (e.g., `src/notion/models.py`)
+- Call domain clients directly (e.g., `NotionClient`)
+- Only define tool-specific metadata (name, description, risk level)
+- Convert between tool arguments and domain models
+
+```python
+# Good: Thin wrapper reusing domain logic
+from src.notion.client import NotionClient
+from src.notion.models import NotionReadingItem
+from src.notion.parser import build_reading_properties
+
+def create_reading_item(args: CreateReadingItemArgs) -> dict[str, Any]:
+    client = NotionClient()
+    properties = build_reading_properties(...)  # Reuse existing parser
+    data = client.create_page(...)
+    return {"item": data, "created": True}
+
+# Bad: Duplicating logic that exists elsewhere
+def create_reading_item(args: CreateReadingItemArgs) -> dict[str, Any]:
+    # DON'T: Build properties manually here
+    properties = {"Title": {"title": [{"text": {"content": args.title}}]}}  # Duplicated!
+```
 
 ## Project Rules
 
@@ -122,6 +186,29 @@ src/<module>/
 ├── enums.py              # StrEnum definitions (if applicable)
 └── exceptions.py         # Custom exceptions
 ```
+
+### Agent Module Structure
+
+The agent module provides AI-powered tool calling via AWS Bedrock:
+
+```
+src/agent/
+├── __init__.py           # Exports public API
+├── client.py             # BedrockClient for Converse API
+├── models.py             # ToolDef, ToolMetadata, ToolSelectionResult
+├── registry.py           # ToolRegistry for tool management
+├── selector.py           # ToolSelector (AI-first with fallback)
+├── enums.py              # RiskLevel enum
+├── exceptions.py         # Agent-specific exceptions
+└── tools/                # Tool handlers by domain
+    ├── __init__.py
+    └── reading_list.py   # Reading list tool wrappers
+```
+
+**Important**: Tool handlers in `src/agent/tools/` must be thin wrappers:
+- Reuse argument models from domain modules where possible
+- Call domain clients/parsers, never duplicate their logic
+- Only add tool-specific concerns (ToolDef metadata, serialisation)
 
 ## Coding Style
 - Ruff compatible formatting. Follow settings in `pyproject.toml`.

@@ -172,6 +172,22 @@ poetry run uvicorn src.api.app:app --reload
 | POST   | /notion/reading            | Yes   | Create a reading item with validated enums    |
 | PATCH  | /notion/reading-list/{id}  | Yes   | Update a reading item                         |
 
+### AI Agent
+Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely execute internal tools. The agent provides structured tool calling via LLMs with validation and safety guardrails.
+
+#### Components
+- **ToolRegistry**: Central registry for available tools with JSON schema generation
+- **ToolSelector**: AI-first tool selection using Bedrock Converse with fallback to keyword matching
+- **BedrockClient**: Typed client for AWS Bedrock Converse API
+
+#### Configuration
+- `AWS_REGION`: AWS region for Bedrock (default: eu-west-2)
+- `BEDROCK_MODEL_ID`: Model ID for Bedrock Converse (default: Claude Sonnet 4)
+
+#### Tool Risk Levels
+- **Safe**: Read-only or additive operations (e.g., query, get)
+- **Sensitive**: Destructive or irreversible operations (e.g., create, update, delete)
+
 ### Notion Integration
 API wrapper for Notion to query and manage tasks, goals, and reading items. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.
 

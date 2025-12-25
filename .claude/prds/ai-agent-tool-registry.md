@@ -199,11 +199,11 @@ The agent layer supports confirmation but does not own UI concerns.
 
 ## 9. Implementation Checklist (Phase 1)
 
-* [ ] ToolDef and ToolRegistry
-* [ ] Tool registration for reading list domain
-* [ ] ToolSelector (AI-first)
+* [x] ToolDef and ToolRegistry
+* [x] Tool registration for reading list domain
+* [x] ToolSelector (AI-first)
 * [ ] AgentRunner with Bedrock Converse
-* [ ] Tool schema generation
+* [x] Tool schema generation
 * [ ] Max-step enforcement
 * [ ] HITL confirmation contract
 
