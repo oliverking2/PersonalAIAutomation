@@ -40,12 +40,17 @@ class TestParseClassificationResponse(unittest.TestCase):
         result = _parse_classification_response(response)
         self.assertEqual(result, ConfirmationType.CONFIRM)
 
-    def test_parse_markdown_code_block_raises_error(self) -> None:
-        """Test that markdown code block raises ClassificationParseError."""
+    def test_parse_markdown_code_block_extracts_json(self) -> None:
+        """Test that markdown code block is handled and JSON is extracted."""
         response = '```json\n{"classification": "CONFIRM", "reasoning": "Yes"}\n```'
-        with self.assertRaises(ClassificationParseError) as ctx:
-            _parse_classification_response(response)
-        self.assertIn("markdown code block", str(ctx.exception))
+        result = _parse_classification_response(response)
+        self.assertEqual(result, ConfirmationType.CONFIRM)
+
+    def test_parse_markdown_code_block_without_language_tag(self) -> None:
+        """Test that markdown code block without language tag is handled."""
+        response = '```\n{"classification": "DENY", "reasoning": "No"}\n```'
+        result = _parse_classification_response(response)
+        self.assertEqual(result, ConfirmationType.DENY)
 
     def test_parse_invalid_json_raises_error(self) -> None:
         """Test that invalid JSON raises ClassificationParseError."""
@@ -133,18 +138,19 @@ class TestClassifyConfirmationResponse(unittest.TestCase):
 
         self.assertEqual(result, ConfirmationType.NEW_INTENT)
 
-    def test_classify_error_returns_new_intent(self) -> None:
-        """Test that API errors return NEW_INTENT as fallback."""
+    def test_classify_raises_on_api_error(self) -> None:
+        """Test that API errors raise ClassificationParseError."""
         self.mock_client.converse.side_effect = BedrockClientError("API error")
         self.mock_client.create_user_message.return_value = {"role": "user", "content": []}
 
-        result = classify_confirmation_response(
-            client=self.mock_client,
-            user_message="yes",
-            pending=self.pending,
-        )
+        with self.assertRaises(ClassificationParseError) as ctx:
+            classify_confirmation_response(
+                client=self.mock_client,
+                user_message="yes",
+                pending=self.pending,
+            )
 
-        self.assertEqual(result, ConfirmationType.NEW_INTENT)
+        self.assertIn("API call failed", str(ctx.exception))
 
     def test_classify_uses_haiku_model(self) -> None:
         """Test that classifier uses haiku model for cost efficiency."""
@@ -182,20 +188,21 @@ class TestClassifyConfirmationResponse(unittest.TestCase):
         self.assertEqual(result, ConfirmationType.CONFIRM)
         self.assertEqual(self.mock_client.converse.call_count, 2)
 
-    def test_classify_returns_new_intent_after_all_retries_exhausted(self) -> None:
-        """Test that classification returns NEW_INTENT after all retries fail."""
+    def test_classify_raises_after_all_retries_exhausted(self) -> None:
+        """Test that classification raises error after all retries fail."""
         self.mock_client.converse.return_value = {"output": {"message": {}}}
         self.mock_client.create_user_message.return_value = {"role": "user", "content": []}
         # All calls return invalid JSON
         self.mock_client.parse_text_response.return_value = "invalid json"
 
-        result = classify_confirmation_response(
-            client=self.mock_client,
-            user_message="yes",
-            pending=self.pending,
-        )
+        with self.assertRaises(ClassificationParseError) as ctx:
+            classify_confirmation_response(
+                client=self.mock_client,
+                user_message="yes",
+                pending=self.pending,
+            )
 
-        self.assertEqual(result, ConfirmationType.NEW_INTENT)
+        self.assertIn("Failed to classify response after 3 attempts", str(ctx.exception))
         # Should have tried 3 times (initial + 2 retries)
         self.assertEqual(self.mock_client.converse.call_count, 3)
 
@@ -204,13 +211,13 @@ class TestClassifyConfirmationResponse(unittest.TestCase):
         self.mock_client.converse.side_effect = BedrockClientError("API error")
         self.mock_client.create_user_message.return_value = {"role": "user", "content": []}
 
-        result = classify_confirmation_response(
-            client=self.mock_client,
-            user_message="yes",
-            pending=self.pending,
-        )
+        with self.assertRaises(ClassificationParseError):
+            classify_confirmation_response(
+                client=self.mock_client,
+                user_message="yes",
+                pending=self.pending,
+            )
 
-        self.assertEqual(result, ConfirmationType.NEW_INTENT)
         # Should only try once for API errors
         self.assertEqual(self.mock_client.converse.call_count, 1)
 

@@ -191,7 +191,11 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json={"task_name": "Minimal"},
+            json={
+                "task_name": "Minimal",
+                "due_date": "2025-06-01",
+                "task_group": "Personal",
+            },
         )
 
         self.assertEqual(response.status_code, 201)
@@ -253,7 +257,11 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json={"task_name": "existing task"},  # case insensitive match
+            json={
+                "task_name": "existing task",  # case insensitive match
+                "due_date": "2025-06-01",
+                "task_group": "Work",
+            },
         )
 
         self.assertEqual(response.status_code, 409)
@@ -289,7 +297,11 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json={"task_name": "New Task"},
+            json={
+                "task_name": "New Task",
+                "due_date": "2025-06-01",
+                "task_group": "Work",
+            },
         )
 
         self.assertEqual(response.status_code, 201)

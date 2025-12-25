@@ -6,11 +6,11 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from src.agent.bedrock_client import BedrockClient
 from src.agent.enums import CallType, ConfirmationType
 from src.agent.exceptions import BedrockClientError
 
 if TYPE_CHECKING:
-    from src.agent.bedrock_client import BedrockClient
     from src.agent.models import PendingConfirmation
 
 logger = logging.getLogger(__name__)
@@ -23,10 +23,23 @@ CLASSIFIER_SYSTEM_PROMPT = """You are a confirmation classifier. Given a pending
 2. DENY - declining the action (e.g., "no", "stop", "cancel", "don't", "wait", "never mind", "actually no")
 3. NEW_INTENT - providing a new request unrelated to the confirmation (e.g., "what about...", "can you also...", "show me something else")
 
-IMPORTANT: Respond with ONLY valid JSON, no markdown formatting, no code blocks, no other text:
-{"classification": "CONFIRM", "reasoning": "Brief explanation"}
+Respond with valid JSON only, no other text:
+{{
+  "classification": "CONFIRM" | "DENY" | "NEW_INTENT"
+}}
 
-Do NOT wrap the JSON in ```json``` or any other formatting."""
+If you are unable to determine the classification, respond with {"classification": "NEW_INTENT"}.
+
+Example:
+Input: "yes, go ahead"
+Output: {"classification": "CONFIRM"}
+
+Input: "no, cancel"
+Output: {"classification": "DENY"}
+
+Input: "what about..."
+Output: {"classification": "NEW_INTENT"}
+"""
 
 
 class ClassificationParseError(Exception):
@@ -94,15 +107,16 @@ Classify this response."""
             continue
 
         except BedrockClientError as e:
-            logger.warning(f"Classification API call failed, defaulting to NEW_INTENT: {e}")
-            return ConfirmationType.NEW_INTENT
+            logger.error(f"Classification API call failed: {e}")
+            raise ClassificationParseError(f"Classification API call failed: {e}") from e
 
-    # All retries exhausted
-    logger.warning(
-        f"Classification failed after {MAX_CLASSIFICATION_RETRIES + 1} attempts, "
-        f"defaulting to NEW_INTENT: {last_error}"
+    # All retries exhausted - raise error instead of silently defaulting
+    logger.error(
+        f"Classification failed after {MAX_CLASSIFICATION_RETRIES + 1} attempts: {last_error}"
     )
-    return ConfirmationType.NEW_INTENT
+    raise ClassificationParseError(
+        f"Failed to classify response after {MAX_CLASSIFICATION_RETRIES + 1} attempts: {last_error}"
+    )
 
 
 def _parse_classification_response(response_text: str) -> ConfirmationType:
@@ -112,13 +126,8 @@ def _parse_classification_response(response_text: str) -> ConfirmationType:
     :returns: Parsed confirmation type.
     :raises ClassificationParseError: If the response cannot be parsed.
     """
-    text = response_text.strip()
-
-    # Reject markdown code blocks - the model should not use them
-    if text.startswith("```"):
-        raise ClassificationParseError(
-            f"Response contains markdown code block, expected plain JSON: {text[:100]}"
-        )
+    # Extract JSON from markdown code blocks if present (Haiku often ignores instructions)
+    text = BedrockClient.extract_json_from_markdown(response_text)
 
     try:
         data = json.loads(text)

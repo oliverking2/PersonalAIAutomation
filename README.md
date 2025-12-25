@@ -433,36 +433,45 @@ from src.database.connection import get_session
 
 # Create registry with all tools
 registry = create_default_registry()
-bedrock = BedrockClient()
-runner = AgentRunner(registry=registry, client=bedrock)
+runner = AgentRunner(registry=registry, client=BedrockClient())
 
 # Run the agent with database session (required for state management)
 with get_session() as session:
-    # Create a conversation to track state across runs
     conversation = create_agent_conversation(session)
     conversation_id = conversation.id
 
     # First run - tool selection happens automatically
-    result = runner.run(
-        "Create a task to review the Q4 report",
-        session,
-        conversation_id,
-    )
+    result = runner.run("Create a task to review the Q4 report", session, conversation_id)
 
-    # If confirmation is required, the user responds naturally
-    if result.stop_reason == "confirmation_required":
-        print(f"Confirm: {result.confirmation_request.action_summary}")
+    # Multi-turn conversation loop
+    while True:
+        print(f"\nAgent: {result.response}")
 
-        # Continue with same conversation_id - response is classified automatically
-        result = runner.run(
-            "yes, go ahead",  # or "no", or a completely new request
-            session,
-            conversation_id,
-        )
+        # Show confirmation prompt if required
+        if result.stop_reason == "confirmation_required" and result.confirmation_request:
+            print(f"⚠️  Confirm: {result.confirmation_request.action_summary}")
 
-    session.commit()
+        # Get user input (conversation state is preserved across runs)
+        user_input = input("\nYou: ").strip()
+        if not user_input:
+            break
 
-print(result.response)
+        # Continue with same conversation_id - full context is maintained
+        result = runner.run(user_input, session, conversation_id)
+
+    # Session auto-commits on exit
+```
+
+Example conversation flow:
+```
+Agent: I need a few more details - what's the due date and task group?
+You: Work task, due 2025-01-15
+
+Agent: [requests create_task tool]
+⚠️  Confirm: Create task 'Review the Q4 report' in Work group, due 2025-01-15
+You: yes
+
+Agent: Task created successfully!
 ```
 
 The agent:
@@ -498,9 +507,8 @@ with get_session() as session:
     # Creates conversation and agent_run records automatically
     conversation = create_agent_conversation(session)
     result = runner.run("Show my tasks", session, conversation.id)
-    session.commit()
 
-    # Access totals from the conversation record
+    # Access totals from the conversation record (session auto-commits on exit)
     print(f"Total cost: ${conversation.total_cost_usd}")
 ```
 

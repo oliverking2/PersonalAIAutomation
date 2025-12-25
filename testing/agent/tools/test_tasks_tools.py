@@ -126,14 +126,18 @@ class TestTaskCreateRequest(unittest.TestCase):
 
     def test_minimal_args(self) -> None:
         """Test creating with only required fields."""
-        args = TaskCreateRequest(task_name="Test Task")
+        args = TaskCreateRequest(
+            task_name="Test Task",
+            due_date=date(2025, 6, 1),
+            task_group=TaskGroup.PERSONAL,
+        )
 
         self.assertEqual(args.task_name, "Test Task")
         self.assertEqual(args.status, TaskStatus.NOT_STARTED)
         self.assertEqual(args.priority, Priority.LOW)
         self.assertEqual(args.effort_level, EffortLevel.SMALL)
-        self.assertIsNone(args.task_group)
-        self.assertIsNone(args.due_date)
+        self.assertEqual(args.task_group, TaskGroup.PERSONAL)
+        self.assertEqual(args.due_date, date(2025, 6, 1))
 
     def test_full_args(self) -> None:
         """Test creating with all fields."""
@@ -258,13 +262,19 @@ class TestCreateTaskHandler(unittest.TestCase):
 
     @patch("src.agent.tools.tasks._get_client")
     def test_create_task_minimal(self, mock_get_client: MagicMock) -> None:
-        """Test creating a task with minimal fields."""
+        """Test creating a task with required fields only."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.post.return_value = {"id": "new-task", "task_name": "New Task"}
 
-        result = create_task(TaskCreateRequest(task_name="New Task"))
+        result = create_task(
+            TaskCreateRequest(
+                task_name="New Task",
+                due_date=date(2025, 6, 1),
+                task_group=TaskGroup.PERSONAL,
+            )
+        )
 
         self.assertTrue(result["created"])
         self.assertEqual(result["item"]["task_name"], "New Task")
@@ -277,6 +287,8 @@ class TestCreateTaskHandler(unittest.TestCase):
         self.assertEqual(payload["status"], "Not started")
         self.assertEqual(payload["priority"], "Low")
         self.assertEqual(payload["effort_level"], "Small")
+        self.assertEqual(payload["task_group"], "Personal")
+        self.assertEqual(payload["due_date"], "2025-06-01")
 
     @patch("src.agent.tools.tasks._get_client")
     def test_create_task_full(self, mock_get_client: MagicMock) -> None:
@@ -293,6 +305,7 @@ class TestCreateTaskHandler(unittest.TestCase):
                 priority=Priority.HIGH,
                 effort_level=EffortLevel.LARGE,
                 task_group=TaskGroup.WORK,
+                due_date=date(2025, 7, 15),
             )
         )
 
@@ -304,6 +317,7 @@ class TestCreateTaskHandler(unittest.TestCase):
         self.assertEqual(payload["priority"], "High")
         self.assertEqual(payload["effort_level"], "Large")
         self.assertEqual(payload["task_group"], "Work")
+        self.assertEqual(payload["due_date"], "2025-07-15")
 
 
 class TestUpdateTaskHandler(unittest.TestCase):

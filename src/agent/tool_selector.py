@@ -92,15 +92,8 @@ class ToolSelector:
         :raises ToolSelectionError: If the response cannot be parsed.
         """
         try:
-            # Try to extract JSON from the response
-            text = response_text.strip()
-
-            # Handle markdown code blocks
-            if text.startswith("```"):
-                lines = text.split("\n")
-                # Remove first and last lines (code block markers)
-                json_lines = [line for line in lines[1:-1] if not line.startswith("```")]
-                text = "\n".join(json_lines)
+            # Extract JSON from markdown code blocks if present
+            text = BedrockClient.extract_json_from_markdown(response_text)
 
             data = json.loads(text)
 

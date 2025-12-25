@@ -6,13 +6,17 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
 from src.agent.bedrock_client import BedrockClient
 from src.agent.call_tracking import TrackingContext, set_tracking_context
-from src.agent.confirmation_classifier import classify_confirmation_response
+from src.agent.confirmation_classifier import (
+    ClassificationParseError,
+    classify_confirmation_response,
+)
 from src.agent.context_manager import (
     append_messages,
     apply_sliding_window,
@@ -66,8 +70,10 @@ DEFAULT_CHAT_MODEL = "sonnet"
 ENV_SELECTOR_MODEL = "AGENT_SELECTOR_MODEL"
 ENV_CHAT_MODEL = "AGENT_CHAT_MODEL"
 
-# Default system prompt for the agent
+# Default system prompt for the agent (use {current_date} placeholder)
 DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, and reading lists.
+
+Today's date is {current_date}.
 
 When using tools:
 1. Analyse the user's request carefully
@@ -75,6 +81,7 @@ When using tools:
 3. If a query returns no results, inform the user rather than guessing
 4. For updates or creates, confirm what was done after completion
 5. Handle errors gracefully and explain any issues to the user
+6. When users mention relative dates (e.g., "end of week", "next Friday"), calculate the actual date
 
 Always be concise and helpful in your responses."""
 
@@ -221,7 +228,6 @@ class AgentRunner:
                 result = self._handle_confirmation_response(
                     user_message=user_message,
                     conv_state=conv_state,
-                    tool_names=tool_names,
                 )
             else:
                 # Normal execution flow
@@ -255,7 +261,6 @@ class AgentRunner:
         self,
         user_message: str,
         conv_state: ConversationState,
-        tool_names: list[str] | None,
     ) -> AgentRunResult:
         """Handle a user response when there's a pending confirmation.
 
@@ -264,36 +269,46 @@ class AgentRunner:
 
         :param user_message: The user's response message.
         :param conv_state: Conversation state with pending confirmation.
-        :param tool_names: Optional tool names override.
         :returns: Result of handling the confirmation.
         """
         pending = conv_state.pending_confirmation
         if pending is None:
             # Should not happen, but handle gracefully
-            return self._execute_run(user_message, tool_names, conv_state)
+            return self._execute_run(user_message, None, conv_state)
 
         # Classify the user's response
-        confirmation_type = classify_confirmation_response(
-            client=self.client,
-            user_message=user_message,
-            pending=pending,
-        )
+        try:
+            confirmation_type = classify_confirmation_response(
+                client=self.client,
+                user_message=user_message,
+                pending=pending,
+            )
+        except ClassificationParseError as e:
+            logger.error(
+                f"Failed to classify confirmation response: {e}, "
+                f"conversation_id={conv_state.conversation_id}"
+            )
+            # Clear pending and return error to user
+            clear_pending_confirmation(conv_state)
+
+            return AgentRunResult(
+                response="I couldn't understand your response. Please try again with a clearer answer.",
+                tool_calls=[],
+                steps_taken=0,
+                stop_reason="classification_error",
+            )
 
         logger.info(f"Confirmation response classified as: {confirmation_type}")
 
         if confirmation_type == ConfirmationType.CONFIRM:
-            # Clear pending and execute with confirmed tool
-            confirmed_tool_use_id = pending.tool_use_id
-            selected_tools = pending.selected_tools
+            # Clear pending and execute the tool directly
             clear_pending_confirmation(conv_state)
 
             logger.info(f"User confirmed action, executing tool: {pending.tool_name}")
 
-            return self._execute_run(
-                user_message=user_message,
-                tool_names=selected_tools if selected_tools else tool_names,
+            return self._execute_confirmed_tool(
+                pending=pending,
                 conv_state=conv_state,
-                confirmed_tool_use_ids={confirmed_tool_use_id},
             )
 
         if confirmation_type == ConfirmationType.DENY:
@@ -314,13 +329,10 @@ class AgentRunner:
             )
 
         # NEW_INTENT
-        # Clear pending and process as new request with fresh tool selection
+        # Clear pending and process as new request
         clear_pending_confirmation(conv_state)
 
-        # Clear selected tools to force re-evaluation for the new intent
-        conv_state.selected_tools = []
-
-        logger.info("User provided new intent, processing as new request with tool re-selection")
+        logger.info("User provided new intent, processing as new request")
 
         return self._execute_run(
             user_message=user_message,
@@ -328,33 +340,175 @@ class AgentRunner:
             conv_state=conv_state,
         )
 
+    def _execute_confirmed_tool(
+        self,
+        pending: PendingConfirmation,
+        conv_state: ConversationState,
+    ) -> AgentRunResult:
+        """Execute a tool that was previously confirmed by the user.
+
+        Directly executes the tool with saved arguments, then hands off to
+        the agent loop to generate a response.
+
+        :param pending: The confirmed pending action with tool details.
+        :param conv_state: Conversation state for context.
+        :returns: Result of the agent run.
+        """
+        tool = self.registry.get(pending.tool_name)
+
+        # Execute the tool and create the call record
+        tool_result, tool_call = self._execute_and_create_tool_call(
+            tool=tool,
+            tool_use_id=pending.tool_use_id,
+            input_args=pending.input_args,
+        )
+
+        logger.info(
+            f"Confirmed tool executed: tool={pending.tool_name}, error={tool_call.is_error}"
+        )
+
+        # Build messages: previous context + assistant tool request + tool result
+        context_messages = build_context_messages(conv_state)
+        assistant_tool_request = self.client.create_assistant_tool_use_message(
+            tool_use_id=pending.tool_use_id,
+            name=pending.tool_name,
+            input_args=pending.input_args,
+        )
+        tool_result_msg = self.client.create_tool_result_message(
+            pending.tool_use_id, tool_result, is_error=tool_call.is_error
+        )
+
+        messages: list[Any] = [
+            *context_messages,
+            assistant_tool_request,
+            tool_result_msg,
+        ]
+
+        # Build tool config and state, then hand off to agent loop
+        all_tool_names = pending.selected_tools or []
+
+        state = _RunState(
+            messages=messages,
+            tool_calls=[tool_call],
+            steps_taken=1,
+            tools=self._build_tools_dict(all_tool_names),
+            confirmed_tool_use_ids=set(),
+            all_tool_names=all_tool_names,
+        )
+
+        return self._run_agent_loop(state, self._build_tool_config(all_tool_names), conv_state)
+
+    def _resolve_tools(
+        self,
+        user_message: str,
+        tool_names: list[str] | None,
+    ) -> list[str]:
+        """Resolve the tools to use for this run.
+
+        Always selects tools based on the current user message to handle
+        mid-conversation intent changes.
+
+        :param user_message: User message for auto-selection.
+        :param tool_names: Explicit tool names override.
+        :returns: List of selected tool names.
+        """
+        if tool_names is not None:
+            return tool_names
+
+        # Auto-select tools based on current message
+        selection = self._selector.select(user_message, model=self.selector_model)
+        logger.info(f"Auto-selected tools: {selection.tool_names}, reasoning={selection.reasoning}")
+        return selection.tool_names
+
+    def _build_initial_messages(
+        self,
+        user_message: str,
+        conv_state: ConversationState | None,
+    ) -> list[Any]:
+        """Build initial messages for the agent run.
+
+        :param user_message: The user's input message.
+        :param conv_state: Optional conversation state for context.
+        :returns: List of messages to start the conversation.
+        """
+        if conv_state is not None:
+            context_messages = build_context_messages(conv_state)
+            new_user_message = self.client.create_user_message(user_message)
+            return [*context_messages, new_user_message]
+        return [self.client.create_user_message(user_message)]
+
+    def _build_tool_config(
+        self,
+        tool_names: list[str],
+    ) -> ToolConfigurationTypeDef | None:
+        """Build Bedrock tool configuration from tool names.
+
+        :param tool_names: List of tool names to include.
+        :returns: Tool configuration or None if no tools.
+        """
+        if not tool_names:
+            logger.info("No tools available for this request")
+            return None
+        return cast(
+            "ToolConfigurationTypeDef",
+            self.registry.to_bedrock_tool_config(tool_names),
+        )
+
+    def _build_tools_dict(self, tool_names: list[str]) -> dict[str, ToolDef]:
+        """Build a dictionary of tools by name.
+
+        :param tool_names: List of tool names to include.
+        :returns: Dictionary mapping tool names to definitions.
+        """
+        if not tool_names:
+            return {}
+        return {t.name: t for t in self.registry.get_many(tool_names)}
+
+    def _execute_and_create_tool_call(
+        self,
+        tool: ToolDef,
+        tool_use_id: str,
+        input_args: dict[str, Any],
+    ) -> tuple[dict[str, Any], ToolCall]:
+        """Execute a tool and create a ToolCall record.
+
+        :param tool: Tool definition to execute.
+        :param tool_use_id: Unique ID for this tool use.
+        :param input_args: Arguments for the tool.
+        :returns: Tuple of (tool_result, ToolCall record).
+        """
+        try:
+            tool_result = self._execute_tool(tool, input_args)
+            is_error = False
+        except ToolExecutionError as e:
+            logger.warning(f"Tool execution failed: {e}")
+            tool_result = {"error": e.error}
+            is_error = True
+
+        tool_call = ToolCall(
+            tool_use_id=tool_use_id,
+            tool_name=tool.name,
+            input_args=input_args,
+            output=tool_result,
+            is_error=is_error,
+        )
+
+        return tool_result, tool_call
+
     def _execute_run(
         self,
         user_message: str,
         tool_names: list[str] | None,
         conv_state: ConversationState | None = None,
-        confirmed_tool_use_ids: set[str] | None = None,
     ) -> AgentRunResult:
         """Execute the agent run logic.
 
         :param user_message: The user's input message.
         :param tool_names: Optional list of tool names. If None, auto-selects.
         :param conv_state: Optional conversation state for context.
-        :param confirmed_tool_use_ids: Set of tool use IDs that have been confirmed.
         :returns: Result of the agent run.
         """
-        # Determine tools to use
-        if tool_names is not None:
-            selected_tools = tool_names
-        elif conv_state is not None and conv_state.selected_tools:
-            # Reuse previously selected tools
-            selected_tools = conv_state.selected_tools
-            logger.debug(f"Reusing previously selected tools: {selected_tools}")
-        else:
-            # Auto-select tools
-            selection = self._selector.select(user_message, model=self.selector_model)
-            selected_tools = selection.tool_names
-            logger.info(f"Auto-selected tools: {selected_tools}, reasoning={selection.reasoning}")
+        selected_tools = self._resolve_tools(user_message, tool_names)
 
         # Merge standard tools with selected tools (deduplicated)
         all_tool_names = list(dict.fromkeys(self._standard_tool_names + selected_tools))
@@ -363,31 +517,37 @@ class AgentRunner:
         if conv_state is not None:
             conv_state.selected_tools = selected_tools
 
-        tool_config = cast(
-            "ToolConfigurationTypeDef",
-            self.registry.to_bedrock_tool_config(all_tool_names),
-        )
-
-        # Build initial messages - include context if available
-        if conv_state is not None:
-            context_messages = build_context_messages(conv_state)
-            # Add new user message
-            new_user_message = self.client.create_user_message(user_message)
-            initial_messages = [*context_messages, new_user_message]
-        else:
-            initial_messages = [self.client.create_user_message(user_message)]
+        tool_config = self._build_tool_config(all_tool_names)
+        initial_messages = self._build_initial_messages(user_message, conv_state)
 
         state = _RunState(
             messages=initial_messages,
             tool_calls=[],
             steps_taken=0,
-            tools={t.name: t for t in self.registry.get_many(all_tool_names)},
-            confirmed_tool_use_ids=confirmed_tool_use_ids or set(),
+            tools=self._build_tools_dict(all_tool_names),
+            confirmed_tool_use_ids=set(),
             all_tool_names=all_tool_names,
         )
 
-        logger.info(f"Starting agent run: tools={all_tool_names}, max_steps={self.max_steps}")
+        logger.info(
+            f"Starting agent run: tools={all_tool_names or '(none)'}, max_steps={self.max_steps}"
+        )
 
+        return self._run_agent_loop(state, tool_config, conv_state)
+
+    def _run_agent_loop(
+        self,
+        state: _RunState,
+        tool_config: ToolConfigurationTypeDef | None,
+        conv_state: ConversationState | None,
+    ) -> AgentRunResult:
+        """Execute the main agent reasoning loop.
+
+        :param state: Mutable run state.
+        :param tool_config: Tool configuration for Bedrock.
+        :param conv_state: Conversation state for persistence.
+        :returns: Result of the agent run.
+        """
         while True:
             if state.steps_taken >= self.max_steps:
                 logger.warning(f"Agent exceeded max steps: max={self.max_steps}")
@@ -411,14 +571,17 @@ class AgentRunner:
     def _call_llm(
         self,
         messages: list[MessageTypeDef],
-        tool_config: ToolConfigurationTypeDef,
+        tool_config: ToolConfigurationTypeDef | None,
     ) -> dict[str, Any]:
         """Call the LLM and return the response."""
+        # Format system prompt with current date
+        formatted_prompt = self.system_prompt.format(current_date=date.today().isoformat())
+
         try:
             return self.client.converse(
                 messages=messages,
                 model_id=self.chat_model,
-                system_prompt=self.system_prompt,
+                system_prompt=formatted_prompt,
                 tool_config=tool_config,
                 cache_system_prompt=True,
             )
@@ -549,26 +712,18 @@ class AgentRunner:
         response: dict[str, Any],
     ) -> None:
         """Execute a tool and record the result."""
-        try:
-            tool_result = self._execute_tool(tool, ctx.input_args)
-            is_error = False
-        except ToolExecutionError as e:
-            logger.warning(f"Tool execution failed: {e}")
-            tool_result = {"error": e.error}
-            is_error = True
-
-        state.tool_calls.append(
-            ToolCall(
-                tool_use_id=ctx.tool_use_id,
-                tool_name=ctx.tool_name,
-                input_args=ctx.input_args,
-                output=tool_result,
-                is_error=is_error,
-            )
+        tool_result, tool_call = self._execute_and_create_tool_call(
+            tool=tool,
+            tool_use_id=ctx.tool_use_id,
+            input_args=ctx.input_args,
         )
+
+        state.tool_calls.append(tool_call)
         state.messages.append(response["output"]["message"])
         state.messages.append(
-            self.client.create_tool_result_message(ctx.tool_use_id, tool_result, is_error=is_error)
+            self.client.create_tool_result_message(
+                ctx.tool_use_id, tool_result, is_error=tool_call.is_error
+            )
         )
 
     def _build_final_result(

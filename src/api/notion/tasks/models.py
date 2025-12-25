@@ -29,7 +29,7 @@ class TaskCreateRequest(BaseModel):
         default=TaskStatus.NOT_STARTED,
         description=f"Task status (default: {TaskStatus.NOT_STARTED}) ({', '.join(TaskStatus)})",
     )
-    due_date: date | None = Field(None, description="Task due date")
+    due_date: date = Field(..., description="Task due date")
     priority: Priority | None = Field(
         default=Priority.LOW,
         description=f"Task priority (default: {Priority.LOW}) ({', '.join(Priority)})",
@@ -38,9 +38,7 @@ class TaskCreateRequest(BaseModel):
         default=EffortLevel.SMALL,
         description=f"Task effort level (default: {EffortLevel.SMALL}) ({', '.join(EffortLevel)})",
     )
-    task_group: TaskGroup | None = Field(
-        None, description=f"Task group category ({', '.join(TaskGroup)})"
-    )
+    task_group: TaskGroup = Field(..., description=f"Task group category ({', '.join(TaskGroup)})")
 
 
 class TaskUpdateRequest(BaseModel):

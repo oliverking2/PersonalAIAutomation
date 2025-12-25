@@ -75,10 +75,9 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Effort**: Small
 
 ### AGENT-008: Validate classification response type
+- **Status**: COMPLETED
 - **Location**: `confirmation_classifier.py:128-140` (`_parse_classification_response`)
-- **Issue**: Calls `.upper()` on classification value without checking it's a string. Could crash on malformed LLM response.
-- **Solution**: Add `if not isinstance(classification_str, str)` check before `.upper()`
-- **Effort**: Small
+- **Resolution**: Added robust error handling with retries and markdown extraction. Now raises `ClassificationParseError` on failure instead of silently defaulting.
 
 ### AGENT-009: Remove fake assistant acknowledgement
 - **Location**: `context_manager.py:268-285` (`build_context_messages`)
@@ -99,10 +98,9 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Effort**: Small
 
 ### AGENT-012: Fix state corruption on NEW_INTENT
+- **Status**: COMPLETED
 - **Location**: `runner.py:320-322`
-- **Issue**: Clears `conv_state.selected_tools = []` on new intent, losing context that might still be relevant for the new request.
-- **Solution**: Consider preserving previous tools or letting the selector decide based on history
-- **Effort**: Small
+- **Resolution**: Removed tool reuse logic entirely - now always re-selects tools on each turn based on current message. This handles mid-conversation intent changes naturally.
 
 ### AGENT-013: Validate tool selector response structure
 - **Location**: `tool_selector.py:84-122` (`_parse_selection_response`)
@@ -207,9 +205,16 @@ This document tracks improvements and technical debt for the `src/agent/` module
 
 ## Completed
 
-| ID | Description | Date |
-|----|-------------|------|
-| AGENT-021 | Remove unused session parameter from load_conversation_state | 2024-12-25 |
+| ID        | Description                                                                                                 | Date       |
+|-----------|-------------------------------------------------------------------------------------------------------------|------------|
+| AGENT-008 | Validate classification response - added retries, markdown handling, proper error raising                   | 2024-12-25 |
+| AGENT-012 | Tool re-selection - removed reuse logic, always re-select tools on each turn based on current message       | 2024-12-25 |
+| AGENT-021 | Remove unused session parameter from load_conversation_state                                                | 2024-12-25 |
+| AGENT-022 | Add BedrockClient helper methods (create_assistant_tool_use_message, extract_json_from_markdown)            | 2024-12-25 |
+| AGENT-023 | Refactor AgentRunner - extract _build_tool_config, _build_tools_dict, _execute_and_create_tool_call helpers | 2024-12-25 |
+| AGENT-024 | Remove unused parameters (confirmed_tool_use_ids, tool_names from _handle_confirmation_response)            | 2024-12-25 |
+| AGENT-025 | Fix HITL confirmation flow - execute confirmed tool directly instead of re-calling LLM                      | 2024-12-25 |
+| AGENT-026 | Add today's date to system prompt for relative date handling (e.g., "end of week", "next Friday")           | 2024-12-25 |
 
 ## Priority Legend
 

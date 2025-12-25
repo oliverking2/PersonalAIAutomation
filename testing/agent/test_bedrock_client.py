@@ -309,6 +309,77 @@ class TestBedrockClient(unittest.TestCase):
         response_empty: dict[str, Any] = {}
         self.assertEqual(client.get_stop_reason(response_empty), "")
 
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_create_assistant_tool_use_message(self, mock_boto_client: MagicMock) -> None:
+        """Test creating assistant tool use message."""
+        client = BedrockClient()
+
+        message = client.create_assistant_tool_use_message(
+            tool_use_id="tool-123",
+            name="create_task",
+            input_args={"name": "Test Task"},
+        )
+
+        self.assertEqual(message["role"], "assistant")
+        self.assertEqual(len(message["content"]), 1)
+        tool_use = message["content"][0]["toolUse"]
+        self.assertEqual(tool_use["toolUseId"], "tool-123")
+        self.assertEqual(tool_use["name"], "create_task")
+        self.assertEqual(tool_use["input"], {"name": "Test Task"})
+
+
+class TestExtractJsonFromMarkdown(unittest.TestCase):
+    """Tests for extract_json_from_markdown static method."""
+
+    def test_extract_plain_json(self) -> None:
+        """Test that plain JSON is returned unchanged."""
+        text = '{"key": "value"}'
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertEqual(result, '{"key": "value"}')
+
+    def test_extract_plain_json_with_whitespace(self) -> None:
+        """Test that plain JSON with leading/trailing whitespace is trimmed."""
+        text = '  {"key": "value"}  \n'
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertEqual(result, '{"key": "value"}')
+
+    def test_extract_from_json_code_block(self) -> None:
+        """Test extracting JSON from ```json code block."""
+        text = '```json\n{"key": "value"}\n```'
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertEqual(result, '{"key": "value"}')
+
+    def test_extract_from_plain_code_block(self) -> None:
+        """Test extracting JSON from plain ``` code block."""
+        text = '```\n{"key": "value"}\n```'
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertEqual(result, '{"key": "value"}')
+
+    def test_extract_multiline_json(self) -> None:
+        """Test extracting multiline JSON from code block."""
+        text = '```json\n{\n  "tool_names": ["query_tasks"],\n  "reasoning": "test"\n}\n```'
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertIn('"tool_names"', result)
+        self.assertIn('"reasoning"', result)
+
+    def test_extract_empty_code_block_returns_original(self) -> None:
+        """Test that empty code block returns original text."""
+        text = "```\n```"
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertEqual(result, text)
+
+    def test_extract_code_block_with_only_markers(self) -> None:
+        """Test code block with no content between markers returns original."""
+        text = "```json\n```"
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertEqual(result, text)
+
+    def test_extract_preserves_inner_backticks(self) -> None:
+        """Test that inner content with backticks is preserved."""
+        text = '```json\n{"code": "use `func()`"}\n```'
+        result = BedrockClient.extract_json_from_markdown(text)
+        self.assertEqual(result, '{"code": "use `func()`"}')
+
 
 if __name__ == "__main__":
     unittest.main()

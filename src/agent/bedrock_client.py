@@ -123,7 +123,7 @@ class BedrockClient:
 
         try:
             logger.debug(
-                f"Calling Bedrock Converse: model={effective_model}, "
+                f"Calling Bedrock Converse: type={call_type.value}, model={effective_model}, "
                 f"messages_count={len(messages)}, cache_enabled={cache_system_prompt}"
             )
             start_time = time.perf_counter()
@@ -241,6 +241,32 @@ class BedrockClient:
         """
         return {"role": "user", "content": [{"text": text}]}
 
+    def create_assistant_tool_use_message(
+        self,
+        tool_use_id: str,
+        name: str,
+        input_args: dict[str, Any],
+    ) -> MessageTypeDef:
+        """Create an assistant message containing a tool use request.
+
+        :param tool_use_id: Unique ID for this tool use.
+        :param name: Name of the tool being called.
+        :param input_args: Arguments for the tool.
+        :returns: Assistant message with tool use content.
+        """
+        return {
+            "role": "assistant",
+            "content": [
+                {
+                    "toolUse": {
+                        "toolUseId": tool_use_id,
+                        "name": name,
+                        "input": input_args,
+                    }
+                }
+            ],
+        }
+
     def get_stop_reason(self, response: dict[str, Any]) -> str:
         """Extract stop reason from a Converse response.
 
@@ -248,6 +274,43 @@ class BedrockClient:
         :returns: Stop reason string.
         """
         return str(response.get("stopReason", ""))
+
+    @staticmethod
+    def extract_json_from_markdown(text: str) -> str:
+        """Extract JSON content from markdown code blocks.
+
+        LLMs sometimes wrap JSON responses in markdown code blocks despite
+        instructions not to. This method extracts the JSON content.
+
+        :param text: Text potentially containing markdown code blocks.
+        :returns: Extracted JSON content, or original text if no code block.
+        """
+        text = text.strip()
+        if not text.startswith("```"):
+            return text
+
+        lines = text.split("\n")
+
+        # Find content between ``` markers
+        in_block = False
+        json_lines: list[str] = []
+
+        for line in lines:
+            if line.startswith("```"):
+                if in_block:
+                    # End of block
+                    break
+                # Start of block (skip the ``` line itself)
+                in_block = True
+                continue
+            if in_block:
+                json_lines.append(line)
+
+        if not json_lines:
+            # No content found, return original
+            return text
+
+        return "\n".join(json_lines).strip()
 
     def format_tool_use_as_json(self, tool_uses: list[dict[str, Any]]) -> str:
         """Format tool uses as JSON for logging/debugging.

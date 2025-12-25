@@ -159,9 +159,9 @@ def get_tasks_tools() -> list[ToolDef]:
         ToolDef(
             name="create_task",
             description=(
-                f"Create a new task. Requires a task name. "
-                f"Optional: status ({status_options}), priority ({priority_options}), "
-                f"effort level ({effort_options}), task group ({group_options}), and due date."
+                f"Create a new task. Requires a task name and a task group, task group ({group_options}) and due date. "
+                f"Optional: status ({status_options}), priority ({priority_options}) and "
+                f"effort level ({effort_options})."
             ),
             tags=frozenset({"tasks", "create", "item"}),
             risk_level=RiskLevel.SENSITIVE,
