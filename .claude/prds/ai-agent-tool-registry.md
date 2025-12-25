@@ -137,6 +137,7 @@ Rules:
 * No business logic
 * Single responsibility
 * Structured JSON return
+* These will be python functions. In some cases, it will be a wrapper around the FastAPI endpoints.
 
 ---
 
@@ -201,7 +202,6 @@ The agent layer supports confirmation but does not own UI concerns.
 * [ ] ToolDef and ToolRegistry
 * [ ] Tool registration for reading list domain
 * [ ] ToolSelector (AI-first)
-* [ ] Fallback heuristic selection
 * [ ] AgentRunner with Bedrock Converse
 * [ ] Tool schema generation
 * [ ] Max-step enforcement
