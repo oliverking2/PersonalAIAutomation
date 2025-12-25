@@ -86,14 +86,14 @@ User Message → ToolSelector (pick tools) → AgentRunner (reasoning loop)
 
 ### Key Design Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| **Thin API layer** | Endpoints only handle HTTP concerns; business logic lives in domain modules |
-| **Agent tools call API** | Tools are HTTP wrappers to the internal API, ensuring single source of truth for validation |
-| **Watermark extraction** | Incremental processing prevents reprocessing old data |
-| **HITL for sensitive ops** | Create/update/delete require explicit user confirmation |
-| **Single Telegram chat** | Private 1:1 assistant, not a multi-user bot |
-| **Dagster over Celery** | Better observability, native scheduling, no Redis dependency |
+| Decision                   | Rationale                                                                                   |
+|----------------------------|---------------------------------------------------------------------------------------------|
+| **Thin API layer**         | Endpoints only handle HTTP concerns; business logic lives in domain modules                 |
+| **Agent tools call API**   | Tools are HTTP wrappers to the internal API, ensuring single source of truth for validation |
+| **Watermark extraction**   | Incremental processing prevents reprocessing old data                                       |
+| **HITL for sensitive ops** | Create/update/delete require explicit user confirmation                                     |
+| **Single Telegram chat**   | Private 1:1 assistant, not a multi-user bot                                                 |
+| **Dagster over Celery**    | Better observability, native scheduling, no Redis dependency                                |
 
 ### Module Boundaries
 
@@ -113,17 +113,17 @@ src/
 
 ### Technology Stack
 
-| Layer | Technology |
-|-------|------------|
-| Language | Python 3.12+ |
-| API Framework | FastAPI |
-| Database | PostgreSQL + SQLAlchemy |
-| Orchestration | Dagster |
-| AI/LLM | AWS Bedrock (Claude) |
-| Messaging | Telegram Bot API |
-| Email Access | Microsoft Graph API |
-| Error Tracking | GlitchTip (Sentry-compatible) |
-| Containerisation | Docker Compose |
+| Layer            | Technology                    |
+|------------------|-------------------------------|
+| Language         | Python 3.12+                  |
+| API Framework    | FastAPI                       |
+| Database         | PostgreSQL + SQLAlchemy       |
+| Orchestration    | Dagster                       |
+| AI/LLM           | AWS Bedrock (Claude)          |
+| Messaging        | Telegram Bot API              |
+| Email Access     | Microsoft Graph API           |
+| Error Tracking   | GlitchTip (Sentry-compatible) |
+| Containerisation | Docker Compose                |
 
 ### PRD Context
 
@@ -138,7 +138,7 @@ When writing PRDs for this project, consider:
 
 Existing PRDs are in `.claude/prds/` and follow a consistent structure with overview, features, implementation notes, and checklist.
 
-## Areas for Improvement
+### Areas for Improvement
 1. Integration tests - currently all tests use mocking
 2. Structured logging - JSON format for production observability
 3. Agent tool resilience - needs retry logic and explicit timeouts
@@ -281,12 +281,12 @@ poetry run uvicorn src.api.app:app --reload
 | PATCH  | /notion/pages/{page_id}                     | Yes   | Update page properties            |
 
 ##### Tasks (Task Tracker)
-| Method | Path                   | Auth  | Description                              |
-|--------|------------------------|-------|------------------------------------------|
-| POST   | /notion/tasks/query    | Yes   | Query tasks (auto-pagination)            |
-| GET    | /notion/tasks/{id}     | Yes   | Retrieve a task                          |
-| POST   | /notion/tasks          | Yes   | Create a task with validated enum fields |
-| PATCH  | /notion/tasks/{id}     | Yes   | Update a task                            |
+| Method | Path                | Auth | Description                              |
+|--------|---------------------|------|------------------------------------------|
+| POST   | /notion/tasks/query | Yes  | Query tasks (auto-pagination)            |
+| GET    | /notion/tasks/{id}  | Yes  | Retrieve a task                          |
+| POST   | /notion/tasks       | Yes  | Create a task with validated enum fields |
+| PATCH  | /notion/tasks/{id}  | Yes  | Update a task                            |
 
 ##### Goals (Goals Tracker)
 | Method | Path                   | Auth  | Description                              |
@@ -297,12 +297,12 @@ poetry run uvicorn src.api.app:app --reload
 | PATCH  | /notion/goals/{id}     | Yes   | Update a goal                            |
 
 ##### Reading List
-| Method | Path                       | Auth  | Description                                   |
-|--------|----------------------------|-------|-----------------------------------------------|
-| POST   | /notion/reading-list/query | Yes   | Query reading items (auto-pagination)         |
-| GET    | /notion/reading-list/{id}  | Yes   | Retrieve a reading item                       |
-| POST   | /notion/reading            | Yes   | Create a reading item with validated enums    |
-| PATCH  | /notion/reading-list/{id}  | Yes   | Update a reading item                         |
+| Method | Path                       | Auth  | Description                                |
+|--------|----------------------------|-------|--------------------------------------------|
+| POST   | /notion/reading-list/query | Yes   | Query reading items (auto-pagination)      |
+| GET    | /notion/reading-list/{id}  | Yes   | Retrieve a reading item                    |
+| POST   | /notion/reading            | Yes   | Create a reading item with validated enums |
+| PATCH  | /notion/reading-list/{id}  | Yes   | Update a reading item                      |
 
 ### AI Agent
 Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely execute internal tools. The agent provides structured tool calling via LLMs with validation and safety guardrails.
