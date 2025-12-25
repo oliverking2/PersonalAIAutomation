@@ -561,10 +561,10 @@ class TestAgentRunnerConfirmation(unittest.TestCase):
         )
 
         result = runner.run_with_confirmation(
-            "Update something",
-            ["sensitive_tool"],
-            pending_result,
+            user_message="Update something",
+            pending_result=pending_result,
             confirmed=True,
+            tool_names=["sensitive_tool"],
         )
 
         self.assertEqual(result.stop_reason, "end_turn")
@@ -592,10 +592,10 @@ class TestAgentRunnerConfirmation(unittest.TestCase):
         )
 
         result = runner.run_with_confirmation(
-            "Update something",
-            ["sensitive_tool"],
-            pending_result,
+            user_message="Update something",
+            pending_result=pending_result,
             confirmed=False,
+            tool_names=["sensitive_tool"],
         )
 
         self.assertEqual(result.stop_reason, "user_cancelled")
@@ -617,10 +617,10 @@ class TestAgentRunnerConfirmation(unittest.TestCase):
 
         with self.assertRaises(ValueError) as ctx:
             runner.run_with_confirmation(
-                "Update something",
-                ["sensitive_tool"],
-                pending_result,
+                user_message="Update something",
+                pending_result=pending_result,
                 confirmed=True,
+                tool_names=["sensitive_tool"],
             )
 
         self.assertIn("does not require confirmation", str(ctx.exception))

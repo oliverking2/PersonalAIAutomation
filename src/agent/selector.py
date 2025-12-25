@@ -116,14 +116,23 @@ class ToolSelector:
             )
             raise ToolSelectionError(f"Failed to parse tool selection response: {e}") from e
 
-    def select(self, user_intent: str) -> ToolSelectionResult:
+    def select(
+        self,
+        user_intent: str,
+        model: str | None = None,
+    ) -> ToolSelectionResult:
         """Select tools for a user request using AI.
 
+        Standard tools (tagged with 'standard') are excluded from selection
+        as they are always included in agent runs.
+
         :param user_intent: The user's request or intent text.
+        :param model: Optional model ID/alias override for selection (e.g., 'haiku').
         :returns: Tool selection result with ordered tool names.
         :raises ToolSelectionError: If selection fails.
         """
-        metadata = self.registry.list_metadata()
+        # Only select from non-standard tools (standard tools are always included)
+        metadata = self.registry.list_selectable_metadata()
 
         if not metadata:
             logger.debug("No tools registered, returning empty selection")
@@ -141,8 +150,11 @@ class ToolSelector:
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
             try:
+                # model parameter is required - use 'haiku' as default for cost-effective selection
+                effective_model = model or "haiku"
                 response = self.client.converse(
                     messages=[self.client.create_user_message(user_message)],
+                    model_id=effective_model,
                     system_prompt=system_prompt,
                     max_tokens=512,
                     temperature=0.0,

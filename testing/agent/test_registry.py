@@ -167,6 +167,65 @@ class TestToolRegistry(unittest.TestCase):
         self.registry.register(self.tool)
         self.assertEqual(len(self.registry), 1)
 
+    def test_get_standard_tools_empty(self) -> None:
+        """Test get_standard_tools returns empty when no standard tools."""
+        self.registry.register(self.tool)  # Not tagged as standard
+
+        standard = self.registry.get_standard_tools()
+
+        self.assertEqual(len(standard), 0)
+
+    def test_get_standard_tools(self) -> None:
+        """Test get_standard_tools returns tools tagged with 'standard'."""
+        standard_tool = ToolDef(
+            name="standard_tool",
+            description="A standard tool",
+            tags=frozenset({"standard", "utility"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(self.tool)  # Not standard
+        self.registry.register(standard_tool)
+
+        standard = self.registry.get_standard_tools()
+
+        self.assertEqual(len(standard), 1)
+        self.assertEqual(standard[0].name, "standard_tool")
+
+    def test_get_selectable_tools(self) -> None:
+        """Test get_selectable_tools excludes standard tools."""
+        standard_tool = ToolDef(
+            name="standard_tool",
+            description="A standard tool",
+            tags=frozenset({"standard"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(self.tool)  # Selectable
+        self.registry.register(standard_tool)  # Not selectable
+
+        selectable = self.registry.get_selectable_tools()
+
+        self.assertEqual(len(selectable), 1)
+        self.assertEqual(selectable[0].name, "test_tool")
+
+    def test_list_selectable_metadata(self) -> None:
+        """Test list_selectable_metadata excludes standard tools."""
+        standard_tool = ToolDef(
+            name="standard_tool",
+            description="A standard tool",
+            tags=frozenset({"standard"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(self.tool)
+        self.registry.register(standard_tool)
+
+        metadata = self.registry.list_selectable_metadata()
+
+        self.assertEqual(len(metadata), 1)
+        self.assertEqual(metadata[0].name, "test_tool")
+
 
 class TestCreateDefaultRegistry(unittest.TestCase):
     """Tests for create_default_registry function."""

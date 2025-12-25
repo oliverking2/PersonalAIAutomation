@@ -120,6 +120,43 @@ class ToolRegistry:
         """
         return [tool for tool in self._tools.values() if tool.risk_level == risk_level]
 
+    def get_standard_tools(self) -> list[ToolDef]:
+        """Get tools tagged as 'standard'.
+
+        Standard tools are always included in agent runs and are intended
+        to be cached in the system prompt for cost efficiency.
+
+        :returns: List of standard tool definitions.
+        """
+        return self.filter_by_tags({"standard"})
+
+    def get_selectable_tools(self) -> list[ToolDef]:
+        """Get tools that are NOT tagged as 'standard'.
+
+        These are domain-specific tools that should be selected per-request
+        by the ToolSelector based on user intent.
+
+        :returns: List of selectable (non-standard) tool definitions.
+        """
+        return [tool for tool in self._tools.values() if "standard" not in tool.tags]
+
+    def list_selectable_metadata(self) -> list[ToolMetadata]:
+        """List metadata for selectable (non-standard) tools.
+
+        Used by ToolSelector to present only domain tools for selection.
+
+        :returns: List of selectable tool metadata.
+        """
+        return [
+            ToolMetadata(
+                name=tool.name,
+                description=tool.description,
+                tags=tool.tags,
+                risk_level=tool.risk_level,
+            )
+            for tool in self.get_selectable_tools()
+        ]
+
     def to_bedrock_tool_config(self, tool_names: list[str]) -> dict[str, Any]:
         """Generate Bedrock toolConfig for specified tools.
 

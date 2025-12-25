@@ -24,30 +24,47 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 60
 
+# Model ID aliases - use these instead of full Bedrock model IDs
+MODEL_ALIASES: dict[str, str] = {
+    "haiku": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "sonnet": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "opus": "global.anthropic.claude-opus-4-5-20251101-v1:0",
+}
+
+# Valid model alias options
+VALID_MODEL_OPTIONS = frozenset(MODEL_ALIASES.keys())
+
+
+def resolve_model_id(model_id: str) -> str:
+    """Resolve a model alias to a full model ID.
+
+    :param model_id: Model alias (haiku, sonnet, opus).
+    :returns: Full Bedrock model ID.
+    :raises ValueError: If model_id is not a valid alias.
+    """
+    model_lower = model_id.lower()
+    if model_lower not in MODEL_ALIASES:
+        valid_options = ", ".join(sorted(VALID_MODEL_OPTIONS))
+        raise ValueError(f"Invalid model '{model_id}'. Must be one of: {valid_options}")
+    return MODEL_ALIASES[model_lower]
+
 
 class BedrockClient:
     """Client for AWS Bedrock Converse API.
 
     Provides a typed interface for invoking Claude models with tool use
-    via the Bedrock Converse API.
+    via the Bedrock Converse API. This is a low-level client that does not
+    manage model selection - callers must specify the model for each request.
     """
 
     def __init__(
         self,
-        model_id: str | None = None,
         region_name: str | None = None,
     ) -> None:
         """Initialise the Bedrock client.
 
-        :param model_id: Bedrock model ID to use. Defaults to BEDROCK_MODEL_ID env var.
         :param region_name: AWS region. Defaults to AWS_REGION env var or eu-west-2.
-        :raises ValueError: If model ID is not configured.
         """
-        self.model_id = model_id or os.environ.get("BEDROCK_MODEL_ID")
-        if not self.model_id:
-            raise ValueError(
-                "Bedrock model ID not configured. Set BEDROCK_MODEL_ID environment variable."
-            )
         self.region_name = region_name or os.environ.get("AWS_REGION", "eu-west-2")
 
         self._client: BedrockRuntimeClient = boto3.client(
@@ -55,13 +72,12 @@ class BedrockClient:
             region_name=self.region_name,
         )
 
-        logger.debug(
-            f"Initialised BedrockClient: model_id={self.model_id}, region={self.region_name}"
-        )
+        logger.debug(f"Initialised BedrockClient: region={self.region_name}")
 
-    def converse(
+    def converse(  # noqa: PLR0913 - Bedrock API has multiple config options
         self,
         messages: list[MessageTypeDef],
+        model_id: str,
         system_prompt: str | None = None,
         tool_config: ToolConfigurationTypeDef | None = None,
         max_tokens: int = 1024,
@@ -70,15 +86,18 @@ class BedrockClient:
         """Invoke the Bedrock Converse API.
 
         :param messages: Conversation messages.
+        :param model_id: Model alias (haiku, sonnet, opus) to use for this request.
         :param system_prompt: Optional system prompt.
         :param tool_config: Optional tool configuration for tool use.
         :param max_tokens: Maximum tokens in response.
         :param temperature: Sampling temperature (0.0 for deterministic).
         :returns: Converse API response.
         :raises BedrockClientError: If the API call fails.
+        :raises ValueError: If model_id is not a valid alias.
         """
+        effective_model = resolve_model_id(model_id)
         request_params: dict[str, Any] = {
-            "modelId": self.model_id,
+            "modelId": effective_model,
             "messages": messages,
             "inferenceConfig": {
                 "maxTokens": max_tokens,
@@ -94,7 +113,7 @@ class BedrockClient:
 
         try:
             logger.debug(
-                f"Calling Bedrock Converse: model={self.model_id}, messages_count={len(messages)}"
+                f"Calling Bedrock Converse: model={effective_model}, messages_count={len(messages)}"
             )
             response = self._client.converse(**request_params)
             logger.debug(

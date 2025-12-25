@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
@@ -17,6 +18,7 @@ from src.agent.exceptions import (
 )
 from src.agent.models import AgentRunResult, ConfirmationRequest, ToolCall, ToolDef
 from src.agent.registry import ToolRegistry
+from src.agent.selector import ToolSelector
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime.type_defs import (
@@ -28,6 +30,14 @@ logger = logging.getLogger(__name__)
 
 # Default maximum number of tool execution steps
 DEFAULT_MAX_STEPS = 5
+
+# Default model aliases
+DEFAULT_SELECTOR_MODEL = "haiku"
+DEFAULT_CHAT_MODEL = "sonnet"
+
+# Environment variable names for model configuration
+ENV_SELECTOR_MODEL = "AGENT_SELECTOR_MODEL"
+ENV_CHAT_MODEL = "AGENT_CHAT_MODEL"
 
 # Default system prompt for the agent
 DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, and reading lists.
@@ -70,13 +80,15 @@ class AgentRunner:
     HITL (Human-in-the-Loop) confirmation for sensitive tools.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - Agent has multiple configuration options
         self,
         registry: ToolRegistry,
         client: BedrockClient | None = None,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         max_steps: int = DEFAULT_MAX_STEPS,
         require_confirmation: bool = True,
+        selector_model: str | None = None,
+        chat_model: str | None = None,
     ) -> None:
         """Initialise the agent runner.
 
@@ -85,6 +97,10 @@ class AgentRunner:
         :param system_prompt: System prompt for the agent.
         :param max_steps: Maximum number of tool execution steps.
         :param require_confirmation: Whether to require confirmation for sensitive tools.
+        :param selector_model: Model for tool selection. Defaults to AGENT_SELECTOR_MODEL
+            env var or 'haiku'.
+        :param chat_model: Model for chat/tool execution. Defaults to AGENT_CHAT_MODEL
+            env var or 'sonnet'.
         """
         self.registry = registry
         self.client = client or BedrockClient()
@@ -92,35 +108,68 @@ class AgentRunner:
         self.max_steps = max_steps
         self.require_confirmation = require_confirmation
 
+        # Resolve model aliases from env vars or defaults
+        self.selector_model = (
+            selector_model or os.environ.get(ENV_SELECTOR_MODEL) or DEFAULT_SELECTOR_MODEL
+        )
+        self.chat_model = chat_model or os.environ.get(ENV_CHAT_MODEL) or DEFAULT_CHAT_MODEL
+
+        logger.debug(
+            f"Agent models configured: selector={self.selector_model}, chat={self.chat_model}"
+        )
+
+        # Create internal tool selector
+        self._selector = ToolSelector(registry=registry, client=self.client)
+
+        # Cache standard tool names (always included)
+        self._standard_tool_names = [t.name for t in registry.get_standard_tools()]
+        if self._standard_tool_names:
+            logger.debug(f"Standard tools cached: {self._standard_tool_names}")
+
     def run(
         self,
         user_message: str,
-        tool_names: list[str],
+        tool_names: list[str] | None = None,
         confirmed_tool_use_ids: set[str] | None = None,
     ) -> AgentRunResult:
         """Execute the agent with the given user message and tools.
 
+        If tool_names is not provided, the agent will automatically select
+        relevant tools using the ToolSelector (with the configured selector_model).
+        Standard tools are always included regardless of selection.
+
         :param user_message: The user's input message.
-        :param tool_names: Names of tools to make available to the agent.
+        :param tool_names: Optional list of tool names. If None, auto-selects.
         :param confirmed_tool_use_ids: Set of tool use IDs that have been confirmed.
         :returns: Result of the agent run.
         :raises MaxStepsExceededError: If the agent exceeds max_steps.
         :raises BedrockClientError: If the Bedrock API call fails.
         :raises ToolNotFoundError: If a requested tool is not found.
         """
+        # Auto-select tools if not provided
+        if tool_names is None:
+            selection = self._selector.select(user_message, model=self.selector_model)
+            selected_tools = selection.tool_names
+            logger.info(f"Auto-selected tools: {selected_tools}, reasoning={selection.reasoning}")
+        else:
+            selected_tools = tool_names
+
+        # Merge standard tools with selected tools (deduplicated)
+        all_tool_names = list(dict.fromkeys(self._standard_tool_names + selected_tools))
+
         tool_config = cast(
             "ToolConfigurationTypeDef",
-            self.registry.to_bedrock_tool_config(tool_names),
+            self.registry.to_bedrock_tool_config(all_tool_names),
         )
         state = _RunState(
             messages=[self.client.create_user_message(user_message)],
             tool_calls=[],
             steps_taken=0,
-            tools={t.name: t for t in self.registry.get_many(tool_names)},
+            tools={t.name: t for t in self.registry.get_many(all_tool_names)},
             confirmed_tool_use_ids=confirmed_tool_use_ids or set(),
         )
 
-        logger.info(f"Starting agent run: tools={tool_names}, max_steps={self.max_steps}")
+        logger.info(f"Starting agent run: tools={all_tool_names}, max_steps={self.max_steps}")
 
         while True:
             if state.steps_taken >= self.max_steps:
@@ -151,6 +200,7 @@ class AgentRunner:
         try:
             return self.client.converse(
                 messages=messages,
+                model_id=self.chat_model,
                 system_prompt=self.system_prompt,
                 tool_config=tool_config,
             )
@@ -308,16 +358,16 @@ class AgentRunner:
     def run_with_confirmation(
         self,
         user_message: str,
-        tool_names: list[str],
         pending_result: AgentRunResult,
         confirmed: bool,
+        tool_names: list[str] | None = None,
     ) -> AgentRunResult:
         """Continue a run after user confirmation for a sensitive tool.
 
         :param user_message: Original user message.
-        :param tool_names: Names of tools available to the agent.
         :param pending_result: Previous result that required confirmation.
         :param confirmed: Whether the user confirmed the action.
+        :param tool_names: Optional list of tool names. If None, auto-selects.
         :returns: Updated result after processing confirmation.
         :raises ValueError: If pending_result does not require confirmation.
         """

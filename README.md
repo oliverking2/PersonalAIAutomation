@@ -316,7 +316,8 @@ Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely
 
 #### Configuration
 - `AWS_REGION`: AWS region for Bedrock (default: eu-west-2)
-- `BEDROCK_MODEL_ID`: Model ID for Bedrock Converse (default: Claude Sonnet 4)
+- `AGENT_SELECTOR_MODEL`: Model for tool selection - haiku, sonnet, or opus (default: haiku)
+- `AGENT_CHAT_MODEL`: Model for chat/tool execution - haiku, sonnet, or opus (default: sonnet)
 - `AGENT_API_BASE_URL`: Base URL for internal API (default: http://localhost:8000)
 - `API_AUTH_TOKEN`: Bearer token for API authentication (shared with REST API)
 
@@ -409,35 +410,33 @@ flowchart TD
 #### Usage
 ```python
 from src.agent import (
-    create_default_registry,
     AgentRunner,
-    ToolSelector,
     BedrockClient,
+    create_default_registry,
 )
 
-# Create registry and select tools for a user request
+# Create registry with all tools
 registry = create_default_registry()
 bedrock = BedrockClient()
-selector = ToolSelector(registry=registry, client=bedrock)
-selection = selector.select("Show me my high priority tasks")
 
-# Run the agent with selected tools
+# Run the agent - tool selection happens automatically
 runner = AgentRunner(registry=registry, client=bedrock)
-result = runner.run("Show me my high priority tasks", selection.tool_names)
+result = runner.run("Show me my high priority tasks")
 
 # Check if confirmation is required for sensitive operations
 if result.stop_reason == "confirmation_required":
     print(f"Confirm: {result.confirmation_request.action_summary}")
     # Get user confirmation, then continue
     result = runner.run_with_confirmation(
-        "Update task status",
-        selection.tool_names,
-        result,
+        user_message="Update task status",
+        pending_result=result,
         confirmed=True,
     )
 
 print(result.response)
 ```
+
+The agent automatically selects relevant tools using a cheap model (Haiku) and executes with the main model (Sonnet). Standard tools tagged with `standard` are always included.
 
 ### Notion Integration
 API wrapper for Notion to query and manage tasks, goals, and reading items. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.
