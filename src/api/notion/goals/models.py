@@ -1,7 +1,6 @@
 """Pydantic models for Goals API endpoints."""
 
 from datetime import date
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -24,8 +23,11 @@ class GoalCreateRequest(BaseModel):
     """Request model for goal creation with validated enum fields."""
 
     goal_name: str = Field(..., min_length=1, description="Goal title")
-    status: GoalStatus | None = Field(default=GoalStatus.NOT_STARTED, description="Goal status")
-    priority: Priority | None = Field(None, description="Goal priority")
+    status: GoalStatus | None = Field(
+        default=GoalStatus.NOT_STARTED,
+        description=f"Goal status (default: {GoalStatus.NOT_STARTED}) ({', '.join(GoalStatus)})",
+    )
+    priority: Priority | None = Field(None, description=f"Goal priority ({', '.join(Priority)})")
     progress: float | None = Field(None, ge=0, le=100, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
 
@@ -34,23 +36,22 @@ class GoalUpdateRequest(BaseModel):
     """Request model for goal update with validated enum fields."""
 
     goal_name: str | None = Field(None, min_length=1, description="Goal title")
-    status: GoalStatus | None = Field(None, description="Goal status")
-    priority: Priority | None = Field(None, description="Goal priority")
+    status: GoalStatus | None = Field(None, description=f"Goal status ({', '.join(GoalStatus)})")
+    priority: Priority | None = Field(None, description=f"Goal priority ({', '.join(Priority)})")
     progress: float | None = Field(None, ge=0, le=100, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
 
 
 class GoalQueryRequest(BaseModel):
-    """Request model for goal query endpoint."""
+    """Request model for goal query endpoint with structured filters."""
 
-    filter: dict[str, Any] | None = Field(
-        None,
-        description="Notion filter object",
+    status: GoalStatus | None = Field(
+        None, description=f"Filter by goal status ({', '.join(GoalStatus)})"
     )
-    sorts: list[dict[str, Any]] | None = Field(
-        None,
-        description="List of sort objects",
+    priority: Priority | None = Field(
+        None, description=f"Filter by priority ({', '.join(Priority)})"
     )
+    limit: int = Field(50, ge=1, le=100, description="Maximum number of goals to return")
 
 
 class GoalQueryResponse(BaseModel):

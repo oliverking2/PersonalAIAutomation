@@ -6,8 +6,33 @@ from typing import Any
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import DuplicateToolError, ToolNotFoundError
 from src.agent.models import ToolDef, ToolMetadata
+from src.agent.tools import get_goals_tools, get_reading_list_tools, get_tasks_tools
 
 logger = logging.getLogger(__name__)
+
+
+def create_default_registry() -> "ToolRegistry":
+    """Create a tool registry with all default tools registered.
+
+    This is the recommended way to get a fully configured registry
+    with all available tools.
+
+    :returns: ToolRegistry instance with all tools registered.
+    """
+    registry = ToolRegistry()
+
+    # Register all tool groups
+    for tool in get_reading_list_tools():
+        registry.register(tool)
+
+    for tool in get_goals_tools():
+        registry.register(tool)
+
+    for tool in get_tasks_tools():
+        registry.register(tool)
+
+    logger.info(f"Created default registry with {len(registry)} tools")
+    return registry
 
 
 class ToolRegistry:

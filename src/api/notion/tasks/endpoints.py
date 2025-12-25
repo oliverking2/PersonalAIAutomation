@@ -36,12 +36,13 @@ def query_tasks(
     """Query all tasks from the configured task tracker."""
     logger.debug("Querying tasks")
     try:
-        pages_data = client.query_all_data_source(
-            data_source_id,
-            filter_=request.filter,
-            sorts=request.sorts,
-        )
-        tasks = [_task_to_response(parse_page_to_task(page)) for page in pages_data]
+        filter_ = _build_task_filter(request)
+        # Default sort by last edited time descending (latest first)
+        sorts = [{"timestamp": "last_edited_time", "direction": "descending"}]
+        pages_data = client.query_all_data_source(data_source_id, filter_=filter_, sorts=sorts)
+        tasks = [
+            _task_to_response(parse_page_to_task(page)) for page in pages_data[: request.limit]
+        ]
         return TaskQueryResponse(results=tasks)
     except NotionClientError as e:
         logger.exception(f"Failed to query tasks: {e}")
@@ -156,6 +157,37 @@ def update_task(
     except NotionClientError as e:
         logger.exception(f"Failed to update task: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+
+
+def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
+    """Build Notion filter from structured query request.
+
+    :param request: Query request with filter fields.
+    :returns: Notion filter dictionary or None if no filters.
+    """
+    conditions: list[dict[str, object]] = []
+
+    if request.status:
+        conditions.append({"property": "Status", "status": {"equals": request.status.value}})
+
+    if request.priority:
+        conditions.append({"property": "Priority", "select": {"equals": request.priority.value}})
+
+    if request.effort_level:
+        conditions.append(
+            {"property": "Effort Level", "select": {"equals": request.effort_level.value}}
+        )
+
+    if request.task_group:
+        conditions.append(
+            {"property": "Task group", "select": {"equals": request.task_group.value}}
+        )
+
+    if not conditions:
+        return None
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"and": conditions}
 
 
 def _task_to_response(task: NotionTask) -> TaskResponse:

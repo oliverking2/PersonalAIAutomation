@@ -62,21 +62,44 @@ class TestQueryReadingEndpoint(unittest.TestCase):
         self.assertEqual(item["item_url"], "https://example.com/book")
 
     @patch("src.api.notion.dependencies.NotionClient")
-    def test_query_reading_with_filter(self, mock_client_class: MagicMock) -> None:
-        """Test reading list query with filter."""
+    def test_query_reading_with_status_filter(self, mock_client_class: MagicMock) -> None:
+        """Test reading list query with status filter."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = []
         mock_client_class.return_value = mock_client
 
-        filter_obj = {"property": "Status", "status": {"equals": "To Read"}}
         response = self.client.post(
             "/notion/reading-list/query",
             headers=self.auth_headers,
-            json={"filter": filter_obj},
+            json={"status": "To Read"},
         )
 
         self.assertEqual(response.status_code, 200)
-        mock_client.query_all_data_source.assert_called_once()
+        # Verify the filter was built correctly
+        call_args = mock_client.query_all_data_source.call_args
+        filter_arg = call_args[1]["filter_"]
+        self.assertEqual(filter_arg["property"], "Status")
+        self.assertEqual(filter_arg["status"]["equals"], "To Read")
+
+    @patch("src.api.notion.dependencies.NotionClient")
+    def test_query_reading_with_multiple_filters(self, mock_client_class: MagicMock) -> None:
+        """Test reading list query with multiple filters."""
+        mock_client = MagicMock()
+        mock_client.query_all_data_source.return_value = []
+        mock_client_class.return_value = mock_client
+
+        response = self.client.post(
+            "/notion/reading-list/query",
+            headers=self.auth_headers,
+            json={"status": "Reading Now", "category": "AI", "priority": "High"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # Verify the combined filter was built correctly
+        call_args = mock_client.query_all_data_source.call_args
+        filter_arg = call_args[1]["filter_"]
+        self.assertIn("and", filter_arg)
+        self.assertEqual(len(filter_arg["and"]), 3)
 
 
 class TestGetReadingItemEndpoint(unittest.TestCase):

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import DuplicateToolError, ToolNotFoundError
 from src.agent.models import ToolDef
-from src.agent.registry import ToolRegistry
+from src.agent.registry import ToolRegistry, create_default_registry
 
 
 class DummyArgs(BaseModel):
@@ -166,6 +166,65 @@ class TestToolRegistry(unittest.TestCase):
 
         self.registry.register(self.tool)
         self.assertEqual(len(self.registry), 1)
+
+
+class TestCreateDefaultRegistry(unittest.TestCase):
+    """Tests for create_default_registry function."""
+
+    def test_creates_registry_with_all_tools(self) -> None:
+        """Test that create_default_registry creates a populated registry."""
+        registry = create_default_registry()
+
+        # Should have 12 tools: 4 reading + 4 goals + 4 tasks
+        self.assertEqual(len(registry), 12)
+
+    def test_contains_reading_list_tools(self) -> None:
+        """Test that registry contains reading list tools."""
+        registry = create_default_registry()
+
+        self.assertIn("query_reading_list", registry)
+        self.assertIn("get_reading_item", registry)
+        self.assertIn("create_reading_item", registry)
+        self.assertIn("update_reading_item", registry)
+
+    def test_contains_goals_tools(self) -> None:
+        """Test that registry contains goals tools."""
+        registry = create_default_registry()
+
+        self.assertIn("query_goals", registry)
+        self.assertIn("get_goal", registry)
+        self.assertIn("create_goal", registry)
+        self.assertIn("update_goal", registry)
+
+    def test_contains_tasks_tools(self) -> None:
+        """Test that registry contains tasks tools."""
+        registry = create_default_registry()
+
+        self.assertIn("query_tasks", registry)
+        self.assertIn("get_task", registry)
+        self.assertIn("create_task", registry)
+        self.assertIn("update_task", registry)
+
+    def test_tools_can_be_retrieved(self) -> None:
+        """Test that tools can be retrieved from the registry."""
+        registry = create_default_registry()
+
+        tool = registry.get("query_reading_list")
+
+        self.assertEqual(tool.name, "query_reading_list")
+        self.assertEqual(tool.risk_level, RiskLevel.SAFE)
+
+    def test_can_filter_by_tags(self) -> None:
+        """Test filtering tools by domain-specific tags."""
+        registry = create_default_registry()
+
+        reading_tools = registry.filter_by_tags({"reading"})
+        goals_tools = registry.filter_by_tags({"goals"})
+        tasks_tools = registry.filter_by_tags({"tasks"})
+
+        self.assertEqual(len(reading_tools), 4)
+        self.assertEqual(len(goals_tools), 4)
+        self.assertEqual(len(tasks_tools), 4)
 
 
 if __name__ == "__main__":

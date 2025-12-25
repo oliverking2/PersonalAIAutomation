@@ -1,7 +1,6 @@
 """Pydantic models for Notion API endpoints."""
 
 from datetime import date
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -26,37 +25,55 @@ class TaskCreateRequest(BaseModel):
     """Request model for task creation with validated enum fields."""
 
     task_name: str = Field(..., min_length=1, description="Task title")
-    status: TaskStatus | None = Field(default=TaskStatus.NOT_STARTED, description="Task status")
-    due_date: date | None = Field(None, description="Task due date")
-    priority: Priority | None = Field(default=Priority.LOW, description="Task priority")
-    effort_level: EffortLevel | None = Field(
-        default=EffortLevel.SMALL, description="Task effort level"
+    status: TaskStatus | None = Field(
+        default=TaskStatus.NOT_STARTED,
+        description=f"Task status (default: {TaskStatus.NOT_STARTED}) ({', '.join(TaskStatus)})",
     )
-    task_group: TaskGroup | None = Field(None, description="Task group category")
+    due_date: date | None = Field(None, description="Task due date")
+    priority: Priority | None = Field(
+        default=Priority.LOW,
+        description=f"Task priority (default: {Priority.LOW}) ({', '.join(Priority)})",
+    )
+    effort_level: EffortLevel | None = Field(
+        default=EffortLevel.SMALL,
+        description=f"Task effort level (default: {EffortLevel.SMALL}) ({', '.join(EffortLevel)})",
+    )
+    task_group: TaskGroup | None = Field(
+        None, description=f"Task group category ({', '.join(TaskGroup)})"
+    )
 
 
 class TaskUpdateRequest(BaseModel):
     """Request model for task update with validated enum fields."""
 
     task_name: str | None = Field(None, min_length=1, description="Task title")
-    status: TaskStatus | None = Field(None, description="Task status")
+    status: TaskStatus | None = Field(None, description=f"Task status ({', '.join(TaskStatus)})")
     due_date: date | None = Field(None, description="Task due date")
-    priority: Priority | None = Field(None, description="Task priority")
-    effort_level: EffortLevel | None = Field(None, description="Task effort level")
-    task_group: TaskGroup | None = Field(None, description="Task group category")
+    priority: Priority | None = Field(None, description=f"Task priority ({', '.join(Priority)})")
+    effort_level: EffortLevel | None = Field(
+        None, description=f"Task effort level ({', '.join(EffortLevel)})"
+    )
+    task_group: TaskGroup | None = Field(
+        None, description=f"Task group category ({', '.join(TaskGroup)})"
+    )
 
 
 class TaskQueryRequest(BaseModel):
-    """Request model for task query endpoint."""
+    """Request model for task query endpoint with structured filters."""
 
-    filter: dict[str, Any] | None = Field(
-        None,
-        description="Notion filter object",
+    status: TaskStatus | None = Field(
+        None, description=f"Filter by task status ({', '.join(TaskStatus)})"
     )
-    sorts: list[dict[str, Any]] | None = Field(
-        None,
-        description="List of sort objects",
+    priority: Priority | None = Field(
+        None, description=f"Filter by priority ({', '.join(Priority)})"
     )
+    effort_level: EffortLevel | None = Field(
+        None, description=f"Filter by effort level ({', '.join(EffortLevel)})"
+    )
+    task_group: TaskGroup | None = Field(
+        None, description=f"Filter by task group ({', '.join(TaskGroup)})"
+    )
+    limit: int = Field(50, ge=1, le=100, description="Maximum number of tasks to return")
 
 
 class TaskQueryResponse(BaseModel):

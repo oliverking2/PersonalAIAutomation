@@ -36,12 +36,13 @@ def query_goals(
     """Query all goals from the configured goals tracker."""
     logger.debug("Querying goals")
     try:
-        pages_data = client.query_all_data_source(
-            data_source_id,
-            filter_=request.filter,
-            sorts=request.sorts,
-        )
-        goals = [_goal_to_response(parse_page_to_goal(page)) for page in pages_data]
+        filter_ = _build_goal_filter(request)
+        # Default sort by last edited time descending (latest first)
+        sorts = [{"timestamp": "last_edited_time", "direction": "descending"}]
+        pages_data = client.query_all_data_source(data_source_id, filter_=filter_, sorts=sorts)
+        goals = [
+            _goal_to_response(parse_page_to_goal(page)) for page in pages_data[: request.limit]
+        ]
         return GoalQueryResponse(results=goals)
     except NotionClientError as e:
         logger.exception(f"Failed to query goals: {e}")
@@ -154,6 +155,27 @@ def update_goal(
     except NotionClientError as e:
         logger.exception(f"Failed to update goal: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+
+
+def _build_goal_filter(request: GoalQueryRequest) -> dict[str, object] | None:
+    """Build Notion filter from structured query request.
+
+    :param request: Query request with filter fields.
+    :returns: Notion filter dictionary or None if no filters.
+    """
+    conditions: list[dict[str, object]] = []
+
+    if request.status:
+        conditions.append({"property": "Status", "status": {"equals": request.status.value}})
+
+    if request.priority:
+        conditions.append({"property": "Priority", "select": {"equals": request.priority.value}})
+
+    if not conditions:
+        return None
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"and": conditions}
 
 
 def _goal_to_response(goal: NotionGoal) -> GoalResponse:

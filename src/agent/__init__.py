@@ -15,7 +15,7 @@ from src.agent.exceptions import (
     ToolSelectionError,
 )
 from src.agent.models import ToolDef, ToolMetadata, ToolSelectionResult
-from src.agent.registry import ToolRegistry
+from src.agent.registry import ToolRegistry, create_default_registry
 from src.agent.selector import ToolSelector
 
 __all__ = [
@@ -32,4 +32,5 @@ __all__ = [
     "ToolSelectionError",
     "ToolSelectionResult",
     "ToolSelector",
+    "create_default_registry",
 ]

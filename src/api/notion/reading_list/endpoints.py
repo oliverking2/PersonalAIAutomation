@@ -36,12 +36,14 @@ def query_reading(
     """Query all items from the configured reading list."""
     logger.debug("Querying reading list")
     try:
-        pages_data = client.query_all_data_source(
-            data_source_id,
-            filter_=request.filter,
-            sorts=request.sorts,
-        )
-        items = [_reading_to_response(parse_page_to_reading_item(page)) for page in pages_data]
+        filter_ = _build_reading_filter(request)
+        # Default sort by last edited time descending (latest first)
+        sorts = [{"timestamp": "last_edited_time", "direction": "descending"}]
+        pages_data = client.query_all_data_source(data_source_id, filter_=filter_, sorts=sorts)
+        items = [
+            _reading_to_response(parse_page_to_reading_item(page))
+            for page in pages_data[: request.limit]
+        ]
         return ReadingQueryResponse(results=items)
     except NotionClientError as e:
         logger.exception(f"Failed to query reading list: {e}")
@@ -156,6 +158,30 @@ def update_reading_item(
     except NotionClientError as e:
         logger.exception(f"Failed to update reading item: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+
+
+def _build_reading_filter(request: ReadingQueryRequest) -> dict[str, object] | None:
+    """Build Notion filter from structured query request.
+
+    :param request: Query request with filter fields.
+    :returns: Notion filter dictionary or None if no filters.
+    """
+    conditions: list[dict[str, object]] = []
+
+    if request.status:
+        conditions.append({"property": "Status", "status": {"equals": request.status.value}})
+
+    if request.category:
+        conditions.append({"property": "Category", "select": {"equals": request.category.value}})
+
+    if request.priority:
+        conditions.append({"property": "Priority", "select": {"equals": request.priority.value}})
+
+    if not conditions:
+        return None
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"and": conditions}
 
 
 def _reading_to_response(item: NotionReadingItem) -> ReadingItemResponse:

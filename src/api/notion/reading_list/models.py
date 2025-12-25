@@ -1,7 +1,6 @@
 """Pydantic models for Reading List API endpoints."""
 
 from datetime import date
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -26,10 +25,13 @@ class ReadingItemCreateRequest(BaseModel):
 
     title: str = Field(..., min_length=1, description="Reading item title")
     status: ReadingStatus | None = Field(
-        default=ReadingStatus.TO_READ, description="Reading status"
+        default=ReadingStatus.TO_READ,
+        description=f"Reading status (default: {ReadingStatus.TO_READ}) ({', '.join(ReadingStatus)})",
     )
-    priority: Priority | None = Field(None, description="Reading priority")
-    category: ReadingCategory | None = Field(None, description="Reading category")
+    priority: Priority | None = Field(None, description=f"Reading priority ({', '.join(Priority)})")
+    category: ReadingCategory | None = Field(
+        None, description=f"Reading category ({', '.join(ReadingCategory)})"
+    )
     item_url: str | None = Field(None, description="URL of the article/book")
     read_date: date | None = Field(None, description="Date read")
 
@@ -38,24 +40,31 @@ class ReadingItemUpdateRequest(BaseModel):
     """Request model for reading item update with validated enum fields."""
 
     title: str | None = Field(None, min_length=1, description="Reading item title")
-    status: ReadingStatus | None = Field(None, description="Reading status")
-    priority: Priority | None = Field(None, description="Reading priority")
-    category: ReadingCategory | None = Field(None, description="Reading category")
+    status: ReadingStatus | None = Field(
+        None, description=f"Reading status ({', '.join(ReadingStatus)})"
+    )
+    priority: Priority | None = Field(None, description=f"Reading priority ({', '.join(Priority)})")
+    category: ReadingCategory | None = Field(
+        None, description=f"Reading category ({', '.join(ReadingCategory)})"
+    )
     item_url: str | None = Field(None, description="URL of the article/book")
     read_date: date | None = Field(None, description="Date read")
 
 
 class ReadingQueryRequest(BaseModel):
-    """Request model for reading query endpoint."""
+    """Request model for reading query endpoint with structured filters."""
 
-    filter: dict[str, Any] | None = Field(
-        None,
-        description="Notion filter object",
+    status: ReadingStatus | None = Field(
+        None, description=f"Filter by reading status ({', '.join(ReadingStatus)})"
     )
-    sorts: list[dict[str, Any]] | None = Field(
+    category: ReadingCategory | None = Field(
         None,
-        description="List of sort objects",
+        description=f"Filter by category ({', '.join(ReadingCategory)})",
     )
+    priority: Priority | None = Field(
+        None, description=f"Filter by priority ({', '.join(Priority)})"
+    )
+    limit: int = Field(50, ge=1, le=100, description="Maximum number of items to return")
 
 
 class ReadingQueryResponse(BaseModel):

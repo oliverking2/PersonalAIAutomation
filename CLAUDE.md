@@ -105,29 +105,41 @@ src/agent/tools/      <- Thin tool wrapper
 
 #### Agent Tools Pattern
 
-Agent tools in `src/agent/tools/` should:
-- Import and reuse models from domain modules (e.g., `src/notion/models.py`)
-- Call domain clients directly (e.g., `NotionClient`)
+Agent tools in `src/agent/tools/` are thin HTTP wrappers that call the API:
+
+```
+User Request → Agent → Tool Handler → HTTP → API Endpoint → Domain Logic
+```
+
+Agent tools should:
+- Call API endpoints via HTTP (localhost in development)
+- Use a shared API client for authentication and base URL
 - Only define tool-specific metadata (name, description, risk level)
-- Convert between tool arguments and domain models
+- Return API responses directly (already serialised)
 
 ```python
-# Good: Thin wrapper reusing domain logic
-from src.notion.client import NotionClient
-from src.notion.models import NotionReadingItem
-from src.notion.parser import build_reading_properties
+# Good: Thin wrapper calling the API
+from src.agent.api_client import AgentAPIClient
+
 
 def create_reading_item(args: CreateReadingItemArgs) -> dict[str, Any]:
+    client = AgentAPIClient()
+    response = client.post("/notion/reading-list", json=args.model_dump())
+    return response
+
+
+# Bad: Calling domain clients directly (duplicates API logic)
+def create_reading_item(args: CreateReadingItemArgs) -> dict[str, Any]:
+    # DON'T: Call NotionClient directly - use the API instead
     client = NotionClient()
-    properties = build_reading_properties(...)  # Reuse existing parser
-    data = client.create_page(...)
-    return {"item": data, "created": True}
-
-# Bad: Duplicating logic that exists elsewhere
-def create_reading_item(args: CreateReadingItemArgs) -> dict[str, Any]:
-    # DON'T: Build properties manually here
-    properties = {"Title": {"title": [{"text": {"content": args.title}}]}}  # Duplicated!
+    properties = build_reading_properties(...)
 ```
+
+This pattern ensures:
+- **Single source of truth**: All validation and business logic lives in the API
+- **No duplication**: Models, validation, and error handling defined once
+- **Consistent behaviour**: Agent and external clients use the same code path
+- **Easy testing**: Mock HTTP calls, not domain internals
 
 ## Project Rules
 
