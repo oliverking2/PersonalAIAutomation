@@ -179,14 +179,44 @@ Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely
 - **ToolRegistry**: Central registry for available tools with JSON schema generation
 - **ToolSelector**: AI-first tool selection using Bedrock Converse with fallback to keyword matching
 - **BedrockClient**: Typed client for AWS Bedrock Converse API
+- **AgentAPIClient**: HTTP client for tools to call internal API endpoints
 
 #### Configuration
 - `AWS_REGION`: AWS region for Bedrock (default: eu-west-2)
 - `BEDROCK_MODEL_ID`: Model ID for Bedrock Converse (default: Claude Sonnet 4)
+- `AGENT_API_BASE_URL`: Base URL for internal API (default: http://localhost:8000)
+- `API_AUTH_TOKEN`: Bearer token for API authentication (shared with REST API)
 
 #### Tool Risk Levels
 - **Safe**: Read-only or additive operations (e.g., query, get)
 - **Sensitive**: Destructive or irreversible operations (e.g., create, update, delete)
+
+#### Available Tools
+The agent has 12 built-in tools organised by domain:
+
+| Domain       | Tools                                                    |
+|--------------|----------------------------------------------------------|
+| Reading List | query_reading_list, get_reading_item, create_reading_item, update_reading_item |
+| Goals        | query_goals, get_goal, create_goal, update_goal          |
+| Tasks        | query_tasks, get_task, create_task, update_task          |
+
+#### Usage
+```python
+from src.agent import create_default_registry, ToolSelector, BedrockClient
+
+# Create registry with all tools
+registry = create_default_registry()
+
+# Use with ToolSelector for AI-based tool selection
+bedrock = BedrockClient()
+selector = ToolSelector(registry=registry, client=bedrock)
+result = selector.select("Show me my high priority tasks")
+
+# Filter tools by domain
+reading_tools = registry.filter_by_tags({"reading"})
+goals_tools = registry.filter_by_tags({"goals"})
+tasks_tools = registry.filter_by_tags({"tasks"})
+```
 
 ### Notion Integration
 API wrapper for Notion to query and manage tasks, goals, and reading items. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.
