@@ -12,6 +12,138 @@ The primary use cases include:
 
 The system maintains conversational context across sessions using persisted history and summaries, allowing it to build continuity over time.
 
+## Architecture Overview
+
+This section provides a high-level overview of how the system works, intended as context for designing new features and PRDs.
+
+### System Components
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              INGRESS LAYER                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Telegram Bot          │  FastAPI REST API       │  Dagster Schedules       │
+│  (future: 2-way chat)  │  (HTTP endpoints)       │  (cron-based triggers)   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              AI AGENT LAYER                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ToolSelector          │  AgentRunner            │  ToolRegistry            │
+│  (AI-first tool        │  (Bedrock Converse      │  (12 tools across        │
+│   selection)           │   reasoning loop)       │   3 domains)             │
+│                        │                         │                          │
+│  • Analyses intent     │  • Multi-step execution │  • Tasks: CRUD           │
+│  • Picks relevant      │  • HITL confirmation    │  • Goals: CRUD           │
+│    tools (≤5)          │  • Max 5 steps/run      │  • Reading List: CRUD    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            DOMAIN SERVICES                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  NotionClient          │  TelegramService        │  NewsletterService       │
+│  (Notion API wrapper)  │  (message sending)      │  (email processing)      │
+│                        │                         │                          │
+│  • Query databases     │  • Format messages      │  • Fetch from Graph API  │
+│  • Create/update pages │  • Send alerts          │  • Parse HTML content    │
+│  • Validate enums      │  • Track sent status    │  • Extract articles      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            EXTERNAL SERVICES                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Notion API            │  Telegram Bot API       │  Microsoft Graph API     │
+│  (task/goal storage)   │  (messaging)            │  (email access)          │
+│                        │                         │                          │
+│  AWS Bedrock           │  PostgreSQL             │  GlitchTip               │
+│  (LLM inference)       │  (local persistence)    │  (error tracking)        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow Patterns
+
+**1. Newsletter Pipeline (Scheduled)**
+```
+Dagster Schedule → Graph API (fetch emails) → Parser (extract articles)
+    → PostgreSQL (store) → TelegramService (alert) → Telegram Bot API
+```
+
+**2. API Request (HTTP)**
+```
+HTTP Request → FastAPI → Domain Client (Notion/etc) → External API
+    → Response transformation → HTTP Response
+```
+
+**3. Agent Request (Future: Telegram Chat)**
+```
+User Message → ToolSelector (pick tools) → AgentRunner (reasoning loop)
+    → Tool Execution → Domain Client → External API
+    → AgentRunner (continue/finish) → Response to User
+```
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Thin API layer** | Endpoints only handle HTTP concerns; business logic lives in domain modules |
+| **Agent tools call API** | Tools are HTTP wrappers to the internal API, ensuring single source of truth for validation |
+| **Watermark extraction** | Incremental processing prevents reprocessing old data |
+| **HITL for sensitive ops** | Create/update/delete require explicit user confirmation |
+| **Single Telegram chat** | Private 1:1 assistant, not a multi-user bot |
+| **Dagster over Celery** | Better observability, native scheduling, no Redis dependency |
+
+### Module Boundaries
+
+```
+src/
+├── agent/           # AI agent runtime (Bedrock, tools, registry)
+├── api/             # FastAPI endpoints (thin HTTP layer)
+├── dagster/         # Orchestration jobs and schedules
+├── database/        # SQLAlchemy models and operations
+├── graph/           # Microsoft Graph API client
+├── newsletters/     # Email parsing (TLDR, future: Substack/Medium)
+├── notion/          # Notion API client and models
+├── observability/   # Error tracking (Sentry/GlitchTip)
+├── telegram/        # Telegram Bot client and service
+└── utils/           # Logging configuration
+```
+
+### Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| Language | Python 3.12+ |
+| API Framework | FastAPI |
+| Database | PostgreSQL + SQLAlchemy |
+| Orchestration | Dagster |
+| AI/LLM | AWS Bedrock (Claude) |
+| Messaging | Telegram Bot API |
+| Email Access | Microsoft Graph API |
+| Error Tracking | GlitchTip (Sentry-compatible) |
+| Containerisation | Docker Compose |
+
+### PRD Context
+
+When writing PRDs for this project, consider:
+
+1. **Where does ingress come from?** (Telegram, API, Schedule)
+2. **Does it need AI reasoning?** (Use agent layer) or **Direct execution?** (Call domain service)
+3. **What external APIs are involved?** (Notion, Telegram, Graph, Bedrock)
+4. **Is persistence needed?** (PostgreSQL tables, watermarks)
+5. **Are there safety concerns?** (HITL confirmation for destructive ops)
+6. **How will it be tested?** (Unit tests with mocking, follow existing patterns)
+
+Existing PRDs are in `.claude/prds/` and follow a consistent structure with overview, features, implementation notes, and checklist.
+
+## Areas for Improvement
+1. Integration tests - currently all tests use mocking
+2. Structured logging - JSON format for production observability
+3. Agent tool resilience - needs retry logic and explicit timeouts
+4. Centralised config validation - consider Pydantic Settings
+
 ## Setup
 
 ### Prerequisites

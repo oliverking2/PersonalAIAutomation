@@ -298,11 +298,19 @@ src/agent/
 
 ## Project-Specific Prohibitions
 
+### Avoid These Anti-Patterns
+1. **Broad exception catches**: Never use bare `except:` or `except Exception:` without re-raising or specific handling. Catch specific exceptions to enable proper error recovery.
+2. **Duplicating domain logic**: If logic exists in a domain module (`src/notion/`, `src/telegram/`, etc.), import and use it. Never duplicate validation, parsing, or business rules in API endpoints or agent tools.
+3. **Missing timeouts**: All HTTP calls to external services (Notion, Telegram, Bedrock) must include explicit timeouts.
+4. **Configuration in code**: Never hard-code configuration values. Use environment variables via `os.environ` with sensible defaults where appropriate.
+5. **Inline type ignores without reason**: If `# type: ignore` is necessary, include a reason comment explaining why.
+
 ## Change Discipline
 - Before writing new code, look for an existing pattern and match it.
 - If a change could be breaking, propose a non-breaking alternative first.
 - When uncertain about an existing convention, ask a targeted question instead of guessing.
 - Consider the roadmap which is saved in `ROADMAP.md`
+- Review existing PRDs in `.claude/prds/` before implementing new features
 
 ## Validation Requirements
 - All changes must pass `ruff check` and `ruff format --check`.
