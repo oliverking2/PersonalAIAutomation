@@ -29,11 +29,16 @@ Rules:
 4. Select at most {max_tools} tools
 5. If no tools are relevant, return an empty list
 
+Available tools:
+{tool_descriptions}
+
 Respond with valid JSON only, no other text:
 {{
   "tool_names": ["tool1", "tool2"],
   "reasoning": "Brief explanation of why these tools were selected"
-}}"""
+}}
+
+"""
 
 
 class ToolSelector:
@@ -144,8 +149,12 @@ class ToolSelector:
         available_tools = {m.name for m in metadata}
         tool_descriptions = self._format_tool_metadata(metadata)
 
-        system_prompt = TOOL_SELECTION_SYSTEM_PROMPT.format(max_tools=self.max_tools)
-        user_message = f"User request: {user_intent}\n\nAvailable tools:\n{tool_descriptions}"
+        # Include tool descriptions in system prompt for caching
+        system_prompt = TOOL_SELECTION_SYSTEM_PROMPT.format(
+            max_tools=self.max_tools,
+            tool_descriptions=tool_descriptions,
+        )
+        user_message = f"User request: {user_intent}"
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
@@ -159,6 +168,7 @@ class ToolSelector:
                     max_tokens=512,
                     temperature=0.0,
                     call_type=CallType.SELECTOR,
+                    cache_system_prompt=True,
                 )
 
                 response_text = self.client.parse_text_response(response)

@@ -115,6 +115,48 @@ class TestBedrockClient(unittest.TestCase):
         self.assertEqual(call_args.kwargs["system"][0]["text"], "Be helpful")
 
     @patch("src.agent.bedrock_client.boto3.client")
+    def test_converse_with_cache_system_prompt(self, mock_boto_client: MagicMock) -> None:
+        """Test converse with prompt caching enabled."""
+        mock_bedrock = MagicMock()
+        mock_boto_client.return_value = mock_bedrock
+        mock_bedrock.converse.return_value = {
+            "output": {"message": {}},
+            "usage": {"cacheReadInputTokens": 100, "cacheWriteInputTokens": 0},
+        }
+
+        client = BedrockClient()
+        messages = [{"role": "user", "content": [{"text": "Hi"}]}]
+
+        client.converse(
+            messages, model_id="haiku", system_prompt="Be helpful", cache_system_prompt=True
+        )
+
+        call_args = mock_bedrock.converse.call_args
+        system_blocks = call_args.kwargs["system"]
+        self.assertEqual(len(system_blocks), 2)
+        self.assertEqual(system_blocks[0]["text"], "Be helpful")
+        self.assertEqual(system_blocks[1], {"cachePoint": {"type": "default"}})
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_converse_without_cache_system_prompt(self, mock_boto_client: MagicMock) -> None:
+        """Test converse without prompt caching (default)."""
+        mock_bedrock = MagicMock()
+        mock_boto_client.return_value = mock_bedrock
+        mock_bedrock.converse.return_value = {"output": {"message": {}}}
+
+        client = BedrockClient()
+        messages = [{"role": "user", "content": [{"text": "Hi"}]}]
+
+        client.converse(
+            messages, model_id="haiku", system_prompt="Be helpful", cache_system_prompt=False
+        )
+
+        call_args = mock_bedrock.converse.call_args
+        system_blocks = call_args.kwargs["system"]
+        self.assertEqual(len(system_blocks), 1)
+        self.assertEqual(system_blocks[0], {"text": "Be helpful"})
+
+    @patch("src.agent.bedrock_client.boto3.client")
     def test_converse_with_tool_config(self, mock_boto_client: MagicMock) -> None:
         """Test converse with tool configuration."""
         mock_bedrock = MagicMock()

@@ -276,6 +276,7 @@ class AgentRunner:
                 model_id=self.chat_model,
                 system_prompt=self.system_prompt,
                 tool_config=tool_config,
+                cache_system_prompt=True,
             )
         except BedrockClientError:
             logger.exception("Bedrock API call failed during agent run")

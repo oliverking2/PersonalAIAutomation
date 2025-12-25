@@ -86,6 +86,7 @@ class BedrockClient:
         max_tokens: int = 1024,
         temperature: float = 0.0,
         call_type: CallType = CallType.CHAT,
+        cache_system_prompt: bool = True,
     ) -> dict[str, Any]:
         """Invoke the Bedrock Converse API.
 
@@ -96,6 +97,7 @@ class BedrockClient:
         :param max_tokens: Maximum tokens in response.
         :param temperature: Sampling temperature (0.0 for deterministic).
         :param call_type: Type of call for tracking (chat or selector).
+        :param cache_system_prompt: Enable prompt caching for system prompt.
         :returns: Converse API response.
         :raises BedrockClientError: If the API call fails.
         :raises ValueError: If model_id is not a valid alias.
@@ -111,23 +113,35 @@ class BedrockClient:
         }
 
         if system_prompt:
-            request_params["system"] = [{"text": system_prompt}]
+            system_blocks: list[dict[str, Any]] = [{"text": system_prompt}]
+            if cache_system_prompt:
+                system_blocks.append({"cachePoint": {"type": "default"}})
+            request_params["system"] = system_blocks
 
         if tool_config:
             request_params["toolConfig"] = tool_config
 
         try:
             logger.debug(
-                f"Calling Bedrock Converse: model={effective_model}, messages_count={len(messages)}"
+                f"Calling Bedrock Converse: model={effective_model}, "
+                f"messages_count={len(messages)}, cache_enabled={cache_system_prompt}"
             )
             start_time = time.perf_counter()
             response = self._client.converse(**request_params)
             latency_ms = int((time.perf_counter() - start_time) * 1000)
 
+            usage = response.get("usage", {})
+            cache_read = usage.get("cacheReadInputTokens", 0)
+            cache_write = usage.get("cacheWriteInputTokens", 0)
+
             logger.debug(
                 f"Bedrock response: stop_reason={response.get('stopReason')}, "
-                f"usage={response.get('usage')}, latency_ms={latency_ms}"
+                f"usage={usage}, latency_ms={latency_ms}"
             )
+
+            # Log cache effectiveness
+            if cache_system_prompt and (cache_read > 0 or cache_write > 0):
+                logger.info(f"Prompt cache: read={cache_read} tokens, write={cache_write} tokens")
 
             # Record call if tracking context is active
             response_dict = dict(response)
