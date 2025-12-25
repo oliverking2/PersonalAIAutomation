@@ -175,12 +175,12 @@ def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
 
     if request.effort_level:
         conditions.append(
-            {"property": "Effort Level", "select": {"equals": request.effort_level.value}}
+            {"property": "Effort level", "select": {"equals": request.effort_level.value}}
         )
 
     if request.task_group:
         conditions.append(
-            {"property": "Task group", "select": {"equals": request.task_group.value}}
+            {"property": "Task Group", "select": {"equals": request.task_group.value}}
         )
 
     if not conditions:

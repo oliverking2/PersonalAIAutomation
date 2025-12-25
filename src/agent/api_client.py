@@ -111,7 +111,7 @@ class AgentAPIClient:
         url = f"{self.base_url}{path}"
 
         try:
-            logger.debug(f"API request: {method} {path}")
+            logger.debug(f"API request: {method} {path} params={params} json={json}")
             response = self._session.request(
                 method, url, params=params, json=json, timeout=self.timeout
             )
