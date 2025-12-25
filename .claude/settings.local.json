@@ -11,9 +11,10 @@
       "Bash(poetry remove:*)",
       "Bash(poetry install:*)",
       "Bash(poetry run alembic revision:*)",
+      "Bash(poetry run python:*)",
       "Bash(make check:*)",
-      "WebFetch(domain:developers.notion.com)",
-      "Bash(poetry run python:*)"
+      "WebFetch",
+      "WebSearch"
     ]
   }
 }
