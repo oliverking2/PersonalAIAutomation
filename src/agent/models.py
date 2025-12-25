@@ -75,3 +75,54 @@ class ToolSelectionResult(BaseModel):
 
     tool_names: list[str] = Field(default_factory=list)
     reasoning: str = Field(default="")
+
+
+class ToolCall(BaseModel):
+    """Record of a single tool call during agent execution.
+
+    :param tool_use_id: Unique identifier for the tool use.
+    :param tool_name: Name of the tool called.
+    :param input_args: Input arguments passed to the tool.
+    :param output: Output from the tool execution.
+    :param is_error: Whether the tool execution resulted in an error.
+    """
+
+    tool_use_id: str
+    tool_name: str
+    input_args: dict[str, Any]
+    output: dict[str, Any]
+    is_error: bool = False
+
+
+class ConfirmationRequest(BaseModel):
+    """Request for user confirmation before executing a sensitive tool.
+
+    :param tool_name: Name of the sensitive tool requiring confirmation.
+    :param tool_description: Description of the tool.
+    :param input_args: Arguments that would be passed to the tool.
+    :param action_summary: Human-readable summary of what the tool would do.
+    :param tool_use_id: ID of the tool use block from the LLM.
+    """
+
+    tool_name: str
+    tool_description: str
+    input_args: dict[str, Any]
+    action_summary: str
+    tool_use_id: str
+
+
+class AgentRunResult(BaseModel):
+    """Result of an agent run.
+
+    :param response: Final text response from the agent.
+    :param tool_calls: List of tool calls made during the run.
+    :param steps_taken: Number of tool execution steps taken.
+    :param stop_reason: Reason the agent stopped (end_turn, max_steps, confirmation_required).
+    :param confirmation_request: If stop_reason is confirmation_required, contains details.
+    """
+
+    response: str = ""
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    steps_taken: int = 0
+    stop_reason: str = "end_turn"
+    confirmation_request: ConfirmationRequest | None = None

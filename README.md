@@ -176,6 +176,7 @@ poetry run uvicorn src.api.app:app --reload
 Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely execute internal tools. The agent provides structured tool calling via LLMs with validation and safety guardrails.
 
 #### Components
+- **AgentRunner**: Main execution loop for tool-based LLM workflows
 - **ToolRegistry**: Central registry for available tools with JSON schema generation
 - **ToolSelector**: AI-first tool selection using Bedrock Converse with fallback to keyword matching
 - **BedrockClient**: Typed client for AWS Bedrock Converse API
@@ -194,28 +195,116 @@ Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely
 #### Available Tools
 The agent has 12 built-in tools organised by domain:
 
-| Domain       | Tools                                                    |
-|--------------|----------------------------------------------------------|
+| Domain       | Tools                                                                          |
+|--------------|--------------------------------------------------------------------------------|
 | Reading List | query_reading_list, get_reading_item, create_reading_item, update_reading_item |
-| Goals        | query_goals, get_goal, create_goal, update_goal          |
-| Tasks        | query_tasks, get_task, create_task, update_task          |
+| Goals        | query_goals, get_goal, create_goal, update_goal                                |
+| Tasks        | query_tasks, get_task, create_task, update_task                                |
+
+#### Agent Runner
+The AgentRunner executes the reasoning and tool-calling loop with safety guardrails:
+
+- **Max-step enforcement**: Limits tool calls per run (default: 5)
+- **HITL confirmation**: Sensitive tools require user confirmation before execution
+- **Sequential execution**: One tool per step, no parallel execution
+- **Graceful error handling**: Tool failures are captured and fed back to the model
+
+##### How the AgentRunner Works - Main Execution Loop
+
+1. User Message Arrives: The user sends a request like "Show me my high priority tasks"
+2. Tool Selection (ToolSelector):
+   - Uses AI to analyse the intent and select relevant tools from the registry
+   - Falls back to keyword matching if AI fails
+   - Returns a list of tool names (e.g., ["query_tasks"])
+3. Agent Run Starts (AgentRunner.run):
+   - Builds Bedrock tool config from selected tools
+   - Initialises conversation with user message
+   - Enters the reasoning loop
+4. The Reasoning Loop (runs until completion):
+   - Step limit check: If steps ≥ 5, raises MaxStepsExceededError
+   - Call Bedrock Converse API: Sends messages + tool schemas
+   - Check stop_reason:
+     - end_turn → LLM is done, return final response
+     - tool_use → LLM wants to call a tool
+     - other → Unexpected, return what we have
+5. Tool Use Handling:
+   - Parse which tool the LLM wants to call
+   - **If sensitive tool** (create/update/delete):
+     - Check if already confirmed
+     - If not confirmed → pause and return confirmation_required
+   - **If safe tool** (query/get):
+       - Execute immediately
+   - Add tool result to message history
+   - Loop back for next LLM call
+6. HITL Confirmation Flow:
+   - When a sensitive tool is requested, the agent pauses
+   - Returns AgentRunResult with stop_reason="confirmation_required"
+   - Contains ConfirmationRequest with action summary
+   - Client shows this to user and gets approval
+   - Call run_with_confirmation(confirmed=True) to continue
+   - Or confirmed=False to cancel
+
+#### Execution Flow
+
+```mermaid
+flowchart TD
+    A[User Message] --> B[ToolSelector<br/>AI-first]
+    B -->|selected tool names| C[AgentRunner.run]
+    C --> D{steps < max?}
+    D -->|No| E[MaxStepsExceededError]
+    D -->|Yes| F[Call Bedrock<br/>Converse API]
+    F --> G{stop_reason}
+    G -->|end_turn| H[Return final response<br/>AgentRunResult]
+    G -->|tool_use| I{Sensitive tool?}
+    G -->|other| J[Return response]
+    I -->|Yes & not confirmed| K[Return confirmation_required<br/>with ConfirmationRequest]
+    I -->|No or confirmed| L[Execute Tool]
+    L --> M[Add result to<br/>message history]
+    M --> D
+```
+
+##### HITL Confirmation Flow
+
+```mermaid
+flowchart TD
+    A[AgentRunResult<br/>stop_reason=confirmation_required] --> B[Show user<br/>action_summary]
+    B --> C{User confirms?}
+    C -->|Yes| D[run_with_confirmation<br/>confirmed=True]
+    C -->|No| E[Return cancelled response]
+    D --> F[Continue execution<br/>with confirmed tool]
+```
 
 #### Usage
 ```python
-from src.agent import create_default_registry, ToolSelector, BedrockClient
+from src.agent import (
+    create_default_registry,
+    AgentRunner,
+    ToolSelector,
+    BedrockClient,
+)
 
-# Create registry with all tools
+# Create registry and select tools for a user request
 registry = create_default_registry()
-
-# Use with ToolSelector for AI-based tool selection
 bedrock = BedrockClient()
 selector = ToolSelector(registry=registry, client=bedrock)
-result = selector.select("Show me my high priority tasks")
+selection = selector.select("Show me my high priority tasks")
 
-# Filter tools by domain
-reading_tools = registry.filter_by_tags({"reading"})
-goals_tools = registry.filter_by_tags({"goals"})
-tasks_tools = registry.filter_by_tags({"tasks"})
+# Run the agent with selected tools
+runner = AgentRunner(registry=registry, client=bedrock)
+result = runner.run("Show me my high priority tasks", selection.tool_names)
+
+# Check if confirmation is required for sensitive operations
+if result.stop_reason == "confirmation_required":
+    print(f"Confirm: {result.confirmation_request.action_summary}")
+    # Get user confirmation, then continue
+    result = runner.run_with_confirmation(
+        "Update task status",
+        selection.tool_names,
+        result,
+        confirmed=True,
+    )
+
+print(result.response)
 ```
 
 ### Notion Integration

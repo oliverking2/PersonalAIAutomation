@@ -10,21 +10,37 @@ from src.agent.exceptions import (
     AgentError,
     BedrockClientError,
     DuplicateToolError,
+    MaxStepsExceededError,
+    ToolExecutionError,
     ToolNotFoundError,
     ToolRegistryError,
     ToolSelectionError,
 )
-from src.agent.models import ToolDef, ToolMetadata, ToolSelectionResult
+from src.agent.models import (
+    AgentRunResult,
+    ConfirmationRequest,
+    ToolCall,
+    ToolDef,
+    ToolMetadata,
+    ToolSelectionResult,
+)
 from src.agent.registry import ToolRegistry, create_default_registry
+from src.agent.runner import AgentRunner
 from src.agent.selector import ToolSelector
 
 __all__ = [
     "AgentError",
+    "AgentRunResult",
+    "AgentRunner",
     "BedrockClient",
     "BedrockClientError",
+    "ConfirmationRequest",
     "DuplicateToolError",
+    "MaxStepsExceededError",
     "RiskLevel",
+    "ToolCall",
     "ToolDef",
+    "ToolExecutionError",
     "ToolMetadata",
     "ToolNotFoundError",
     "ToolRegistry",

@@ -202,10 +202,10 @@ The agent layer supports confirmation but does not own UI concerns.
 * [x] ToolDef and ToolRegistry
 * [x] Tool registration for reading list domain
 * [x] ToolSelector (AI-first)
-* [ ] AgentRunner with Bedrock Converse
+* [x] AgentRunner with Bedrock Converse
 * [x] Tool schema generation
-* [ ] Max-step enforcement
-* [ ] HITL confirmation contract
+* [x] Max-step enforcement
+* [x] HITL confirmation contract
 
 ---
 
