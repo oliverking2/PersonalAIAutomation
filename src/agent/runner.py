@@ -12,19 +12,37 @@ from pydantic import ValidationError
 
 from src.agent.bedrock_client import BedrockClient
 from src.agent.call_tracking import TrackingContext, set_tracking_context
-from src.agent.enums import RiskLevel
+from src.agent.confirmation_classifier import classify_confirmation_response
+from src.agent.context_manager import (
+    append_messages,
+    apply_sliding_window,
+    build_context_messages,
+    clear_pending_confirmation,
+    load_conversation_state,
+    save_conversation_state,
+    set_pending_confirmation,
+)
+from src.agent.enums import ConfirmationType, RiskLevel
 from src.agent.exceptions import (
     BedrockClientError,
     MaxStepsExceededError,
     ToolExecutionError,
 )
-from src.agent.models import AgentRunResult, ConfirmationRequest, ToolCall, ToolDef
+from src.agent.models import (
+    AgentRunResult,
+    ConfirmationRequest,
+    ConversationState,
+    PendingConfirmation,
+    ToolCall,
+    ToolDef,
+)
 from src.agent.tool_registry import ToolRegistry
 from src.agent.tool_selector import ToolSelector
 from src.database.agent_tracking import (
     complete_agent_run,
     create_agent_conversation,
     create_agent_run,
+    get_agent_conversation_by_id,
 )
 
 if TYPE_CHECKING:
@@ -33,6 +51,7 @@ if TYPE_CHECKING:
         ToolConfigurationTypeDef,
     )
     from sqlalchemy.orm import Session
+
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +88,7 @@ class _RunState:
     steps_taken: int
     tools: dict[str, ToolDef]
     confirmed_tool_use_ids: set[str]
+    all_tool_names: list[str]
 
 
 @dataclass
@@ -86,6 +106,12 @@ class AgentRunner:
     The AgentRunner manages the conversation with the LLM and executes
     tool calls sequentially. It enforces max-step limits and handles
     HITL (Human-in-the-Loop) confirmation for sensitive tools.
+
+    When used with a database session and conversation_id, the runner
+    maintains stateful conversations with:
+    - Message history preservation across runs
+    - Natural language confirmation handling
+    - Sliding window context management
     """
 
     def __init__(  # noqa: PLR0913 - Agent has multiple configuration options
@@ -134,14 +160,13 @@ class AgentRunner:
         if self._standard_tool_names:
             logger.debug(f"Standard tools cached: {self._standard_tool_names}")
 
-    def run(  # noqa: PLR0913 - Agent run has multiple configuration options
+    def run(
         self,
         user_message: str,
-        tool_names: list[str] | None = None,
-        confirmed_tool_use_ids: set[str] | None = None,
-        tracking_context: TrackingContext | None = None,
-        session: Session | None = None,
+        session: Session,
         conversation_id: uuid.UUID | None = None,
+        tool_names: list[str] | None = None,
+        tracking_context: TrackingContext | None = None,
     ) -> AgentRunResult:
         """Execute the agent with the given user message and tools.
 
@@ -149,97 +174,216 @@ class AgentRunner:
         relevant tools using the ToolSelector (with the configured selector_model).
         Standard tools are always included regardless of selection.
 
+        The runner maintains stateful conversations with:
+        - Message history preservation across runs
+        - Natural language confirmation handling
+        - Sliding window context management
+
         :param user_message: The user's input message.
+        :param session: Database session for persisting state and tracking data.
+        :param conversation_id: Existing conversation ID to continue. If not
+            provided, a new conversation is created.
         :param tool_names: Optional list of tool names. If None, auto-selects.
-        :param confirmed_tool_use_ids: Set of tool use IDs that have been confirmed.
         :param tracking_context: Tracking context for recording LLM calls. If not
             provided, a new context is created automatically.
-        :param session: Database session for persisting tracking data. If provided,
-            conversation and agent run records are created and updated automatically.
-        :param conversation_id: Existing conversation ID to add this run to. Only used
-            when session is provided. If not provided, a new conversation is created.
         :returns: Result of the agent run.
         :raises MaxStepsExceededError: If the agent exceeds max_steps.
         :raises BedrockClientError: If the Bedrock API call fails.
         :raises ToolNotFoundError: If a requested tool is not found.
         """
-        # Create database records if session provided
-        db_conversation_id: uuid.UUID | None = None
-        db_agent_run_id: uuid.UUID | None = None
+        # Load or create conversation state
+        if conversation_id is not None:
+            conversation = get_agent_conversation_by_id(session, conversation_id)
+            conv_state = load_conversation_state(conversation)
+            db_conversation_id = conversation_id
+        else:
+            conversation = create_agent_conversation(session)
+            db_conversation_id = conversation.id
+            conv_state = ConversationState(conversation_id=db_conversation_id)
 
-        if session is not None:
-            if conversation_id is not None:
-                db_conversation_id = conversation_id
-            else:
-                conversation = create_agent_conversation(session)
-                db_conversation_id = conversation.id
-
-            agent_run = create_agent_run(
-                session, conversation_id=db_conversation_id, user_message=user_message
-            )
-            db_agent_run_id = agent_run.id
+        agent_run = create_agent_run(
+            session, conversation_id=db_conversation_id, user_message=user_message
+        )
+        db_agent_run_id = agent_run.id
 
         # Always track - create context if not provided
         if tracking_context is None:
             tracking_context = TrackingContext(
-                run_id=db_agent_run_id or uuid.uuid4(),
-                conversation_id=db_conversation_id or uuid.uuid4(),
+                run_id=db_agent_run_id,
+                conversation_id=db_conversation_id,
             )
 
         set_tracking_context(tracking_context)
 
         try:
-            result = self._execute_run(user_message, tool_names, confirmed_tool_use_ids)
-
-            # Persist tracking data if session provided
-            if session is not None and db_agent_run_id is not None:
-                complete_agent_run(
-                    session,
-                    agent_run_id=db_agent_run_id,
-                    tracking_context=tracking_context,
-                    final_response=result.response,
-                    stop_reason=result.stop_reason,
-                    steps_taken=result.steps_taken,
+            # Check for pending confirmation
+            if conv_state.pending_confirmation is not None:
+                result = self._handle_confirmation_response(
+                    user_message=user_message,
+                    conv_state=conv_state,
+                    tool_names=tool_names,
                 )
+            else:
+                # Normal execution flow
+                result = self._execute_run(
+                    user_message=user_message,
+                    tool_names=tool_names,
+                    conv_state=conv_state,
+                )
+
+            # Apply sliding window if needed
+            apply_sliding_window(conv_state, self.client)
+
+            # Save updated state
+            save_conversation_state(session, conversation, conv_state)
+
+            # Persist tracking data
+            complete_agent_run(
+                session,
+                agent_run_id=db_agent_run_id,
+                tracking_context=tracking_context,
+                final_response=result.response,
+                stop_reason=result.stop_reason,
+                steps_taken=result.steps_taken,
+            )
 
             return result
         finally:
             set_tracking_context(None)
 
+    def _handle_confirmation_response(
+        self,
+        user_message: str,
+        conv_state: ConversationState,
+        tool_names: list[str] | None,
+    ) -> AgentRunResult:
+        """Handle a user response when there's a pending confirmation.
+
+        Classifies the user's message as CONFIRM, DENY, or NEW_INTENT and
+        processes accordingly.
+
+        :param user_message: The user's response message.
+        :param conv_state: Conversation state with pending confirmation.
+        :param tool_names: Optional tool names override.
+        :returns: Result of handling the confirmation.
+        """
+        pending = conv_state.pending_confirmation
+        if pending is None:
+            # Should not happen, but handle gracefully
+            return self._execute_run(user_message, tool_names, conv_state)
+
+        # Classify the user's response
+        confirmation_type = classify_confirmation_response(
+            client=self.client,
+            user_message=user_message,
+            pending=pending,
+        )
+
+        logger.info(f"Confirmation response classified as: {confirmation_type}")
+
+        if confirmation_type == ConfirmationType.CONFIRM:
+            # Clear pending and execute with confirmed tool
+            confirmed_tool_use_id = pending.tool_use_id
+            selected_tools = pending.selected_tools
+            clear_pending_confirmation(conv_state)
+
+            logger.info(f"User confirmed action, executing tool: {pending.tool_name}")
+
+            return self._execute_run(
+                user_message=user_message,
+                tool_names=selected_tools if selected_tools else tool_names,
+                conv_state=conv_state,
+                confirmed_tool_use_ids={confirmed_tool_use_id},
+            )
+
+        if confirmation_type == ConfirmationType.DENY:
+            # Clear pending and return cancellation
+            clear_pending_confirmation(conv_state)
+
+            # Add user message to context
+            user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
+            append_messages(conv_state, [user_msg])
+
+            logger.info("User declined confirmation")
+
+            return AgentRunResult(
+                response="Action cancelled.",
+                tool_calls=[],
+                steps_taken=0,
+                stop_reason="user_cancelled",
+            )
+
+        # NEW_INTENT
+        # Clear pending and process as new request with fresh tool selection
+        clear_pending_confirmation(conv_state)
+
+        # Clear selected tools to force re-evaluation for the new intent
+        conv_state.selected_tools = []
+
+        logger.info("User provided new intent, processing as new request with tool re-selection")
+
+        return self._execute_run(
+            user_message=user_message,
+            tool_names=None,  # Force tool re-selection for new intent
+            conv_state=conv_state,
+        )
+
     def _execute_run(
         self,
         user_message: str,
         tool_names: list[str] | None,
-        confirmed_tool_use_ids: set[str] | None,
+        conv_state: ConversationState | None = None,
+        confirmed_tool_use_ids: set[str] | None = None,
     ) -> AgentRunResult:
         """Execute the agent run logic.
 
         :param user_message: The user's input message.
         :param tool_names: Optional list of tool names. If None, auto-selects.
+        :param conv_state: Optional conversation state for context.
         :param confirmed_tool_use_ids: Set of tool use IDs that have been confirmed.
         :returns: Result of the agent run.
         """
-        # Auto-select tools if not provided
-        if tool_names is None:
+        # Determine tools to use
+        if tool_names is not None:
+            selected_tools = tool_names
+        elif conv_state is not None and conv_state.selected_tools:
+            # Reuse previously selected tools
+            selected_tools = conv_state.selected_tools
+            logger.debug(f"Reusing previously selected tools: {selected_tools}")
+        else:
+            # Auto-select tools
             selection = self._selector.select(user_message, model=self.selector_model)
             selected_tools = selection.tool_names
             logger.info(f"Auto-selected tools: {selected_tools}, reasoning={selection.reasoning}")
-        else:
-            selected_tools = tool_names
 
         # Merge standard tools with selected tools (deduplicated)
         all_tool_names = list(dict.fromkeys(self._standard_tool_names + selected_tools))
+
+        # Update conversation state with selected tools
+        if conv_state is not None:
+            conv_state.selected_tools = selected_tools
 
         tool_config = cast(
             "ToolConfigurationTypeDef",
             self.registry.to_bedrock_tool_config(all_tool_names),
         )
+
+        # Build initial messages - include context if available
+        if conv_state is not None:
+            context_messages = build_context_messages(conv_state)
+            # Add new user message
+            new_user_message = self.client.create_user_message(user_message)
+            initial_messages = [*context_messages, new_user_message]
+        else:
+            initial_messages = [self.client.create_user_message(user_message)]
+
         state = _RunState(
-            messages=[self.client.create_user_message(user_message)],
+            messages=initial_messages,
             tool_calls=[],
             steps_taken=0,
             tools={t.name: t for t in self.registry.get_many(all_tool_names)},
             confirmed_tool_use_ids=confirmed_tool_use_ids or set(),
+            all_tool_names=all_tool_names,
         )
 
         logger.info(f"Starting agent run: tools={all_tool_names}, max_steps={self.max_steps}")
@@ -254,15 +398,15 @@ class AgentRunner:
             logger.debug(f"Agent step {state.steps_taken}: stop_reason={stop_reason}")
 
             if stop_reason == "tool_use":
-                result = self._handle_tool_use(response, state)
+                result = self._handle_tool_use(response, state, conv_state)
                 if result is not None:
                     return result
                 state.steps_taken += 1
             elif stop_reason == "end_turn":
-                return self._build_final_result(response, state, "end_turn")
+                return self._build_final_result(response, state, "end_turn", conv_state)
             else:
                 logger.warning(f"Unexpected stop reason: {stop_reason}")
-                return self._build_final_result(response, state, stop_reason)
+                return self._build_final_result(response, state, stop_reason, conv_state)
 
     def _call_llm(
         self,
@@ -286,6 +430,7 @@ class AgentRunner:
         self,
         response: dict[str, Any],
         state: _RunState,
+        conv_state: ConversationState | None,
     ) -> AgentRunResult | None:
         """Handle a tool use response from the LLM.
 
@@ -316,7 +461,7 @@ class AgentRunner:
 
         tool = state.tools[ctx.tool_name]
 
-        confirmation_result = self._check_confirmation_required(ctx, tool, state)
+        confirmation_result = self._check_confirmation_required(ctx, tool, state, conv_state)
         if confirmation_result is not None:
             return confirmation_result
 
@@ -351,6 +496,7 @@ class AgentRunner:
         ctx: _ToolUseContext,
         tool: ToolDef,
         state: _RunState,
+        conv_state: ConversationState | None,
     ) -> AgentRunResult | None:
         """Check if a sensitive tool requires confirmation.
 
@@ -365,6 +511,22 @@ class AgentRunner:
 
         logger.info(f"Sensitive tool requires confirmation: tool={ctx.tool_name}")
         action_summary = self._generate_action_summary(tool.description, ctx.input_args)
+
+        # Store pending confirmation in conversation state if available
+        if conv_state is not None:
+            pending = PendingConfirmation(
+                tool_use_id=ctx.tool_use_id,
+                tool_name=ctx.tool_name,
+                tool_description=tool.description,
+                input_args=ctx.input_args,
+                action_summary=action_summary,
+                selected_tools=state.all_tool_names,
+            )
+            set_pending_confirmation(conv_state, pending)
+
+            # Save current messages to state for resumption
+            append_messages(conv_state, state.messages)
+
         return AgentRunResult(
             response="",
             tool_calls=state.tool_calls,
@@ -414,9 +576,17 @@ class AgentRunner:
         response: dict[str, Any],
         state: _RunState,
         stop_reason: str,
+        conv_state: ConversationState | None,
     ) -> AgentRunResult:
         """Build the final result when the agent is done."""
         final_response = self.client.parse_text_response(response)
+
+        # Update conversation state with messages from this run
+        if conv_state is not None:
+            # Add the final assistant message
+            state.messages.append(response["output"]["message"])
+            append_messages(conv_state, state.messages)
+
         if stop_reason == "end_turn":
             logger.info(
                 f"Agent run completed: steps={state.steps_taken}, "
@@ -427,55 +597,6 @@ class AgentRunner:
             tool_calls=state.tool_calls,
             steps_taken=state.steps_taken,
             stop_reason=stop_reason,
-        )
-
-    def run_with_confirmation(  # noqa: PLR0913 - Mirrors run() parameters
-        self,
-        user_message: str,
-        pending_result: AgentRunResult,
-        confirmed: bool,
-        tool_names: list[str] | None = None,
-        tracking_context: TrackingContext | None = None,
-        session: Session | None = None,
-        conversation_id: uuid.UUID | None = None,
-    ) -> AgentRunResult:
-        """Continue a run after user confirmation for a sensitive tool.
-
-        :param user_message: Original user message.
-        :param pending_result: Previous result that required confirmation.
-        :param confirmed: Whether the user confirmed the action.
-        :param tool_names: Optional list of tool names. If None, auto-selects.
-        :param tracking_context: Tracking context for recording LLM calls.
-        :param session: Database session for persisting tracking data.
-        :param conversation_id: Existing conversation ID to add this run to.
-        :returns: Updated result after processing confirmation.
-        :raises ValueError: If pending_result does not require confirmation.
-        """
-        if (
-            pending_result.stop_reason != "confirmation_required"
-            or pending_result.confirmation_request is None
-        ):
-            raise ValueError("pending_result does not require confirmation")
-
-        if not confirmed:
-            logger.info("User declined confirmation, returning denial response")
-            return AgentRunResult(
-                response="Action cancelled by user.",
-                tool_calls=pending_result.tool_calls,
-                steps_taken=pending_result.steps_taken,
-                stop_reason="user_cancelled",
-            )
-
-        confirmed_ids = {pending_result.confirmation_request.tool_use_id}
-        logger.info(f"User confirmed action, continuing run: confirmed_ids={confirmed_ids}")
-
-        return self.run(
-            user_message=user_message,
-            tool_names=tool_names,
-            confirmed_tool_use_ids=confirmed_ids,
-            tracking_context=tracking_context,
-            session=session,
-            conversation_id=conversation_id,
         )
 
     def _execute_tool(self, tool: ToolDef, input_args: dict[str, Any]) -> dict[str, Any]:

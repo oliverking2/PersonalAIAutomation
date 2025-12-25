@@ -19,3 +19,18 @@ class CallType(StrEnum):
 
     CHAT = "chat"
     SELECTOR = "selector"
+    CLASSIFIER = "classifier"
+    SUMMARISER = "summariser"
+
+
+class ConfirmationType(StrEnum):
+    """Classification of user response to a confirmation request.
+
+    CONFIRM: User agreed to proceed with the action.
+    DENY: User declined the action.
+    NEW_INTENT: User's message is a new request, not a confirmation response.
+    """
+
+    CONFIRM = "confirm"
+    DENY = "deny"
+    NEW_INTENT = "new_intent"

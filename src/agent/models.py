@@ -1,6 +1,11 @@
 """Pydantic models for the AI agent module."""
 
+from __future__ import annotations
+
+import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -126,3 +131,42 @@ class AgentRunResult(BaseModel):
     steps_taken: int = 0
     stop_reason: str = "end_turn"
     confirmation_request: ConfirmationRequest | None = None
+
+
+class PendingConfirmation(BaseModel):
+    """Serialisable pending confirmation state for persistence.
+
+    This model is stored in the database as JSONB to preserve confirmation
+    context between agent runs.
+
+    :param tool_use_id: ID of the tool use block from the LLM.
+    :param tool_name: Name of the sensitive tool requiring confirmation.
+    :param tool_description: Description of the tool.
+    :param input_args: Arguments that would be passed to the tool.
+    :param action_summary: Human-readable summary of what the tool would do.
+    :param selected_tools: Tool names that were selected for this flow.
+    """
+
+    tool_use_id: str
+    tool_name: str
+    tool_description: str
+    input_args: dict[str, Any]
+    action_summary: str
+    selected_tools: list[str] = Field(default_factory=list)
+
+
+@dataclass
+class ConversationState:
+    """Mutable state for a multi-run conversation.
+
+    This dataclass holds the context that persists between agent runs,
+    enabling stateful conversation handling including confirmation flows.
+    """
+
+    conversation_id: uuid.UUID
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    selected_tools: list[str] = field(default_factory=list)
+    pending_confirmation: PendingConfirmation | None = None
+    summary: str | None = None
+    message_count: int = 0
+    last_summarised_at: datetime | None = None

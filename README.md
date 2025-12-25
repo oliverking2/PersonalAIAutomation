@@ -141,8 +141,8 @@ Existing PRDs are in `.claude/prds/` and follow a consistent structure with over
 ### Areas for Improvement
 1. Integration tests - currently all tests use mocking
 2. Structured logging - JSON format for production observability
-3. Agent tool resilience - needs retry logic and explicit timeouts
-4. Centralised config validation - consider Pydantic Settings
+3. Centralised config validation - consider Pydantic Settings
+4. Two-way Telegram integration - currently one-way alerts only
 
 ## Setup
 
@@ -350,8 +350,9 @@ The AgentRunner executes the reasoning and tool-calling loop with safety guardra
    - Falls back to keyword matching if AI fails
    - Returns a list of tool names (e.g., ["query_tasks"])
 3. Agent Run Starts (AgentRunner.run):
+   - Loads or creates conversation state from database
+   - Checks for pending confirmations from previous runs
    - Builds Bedrock tool config from selected tools
-   - Initialises conversation with user message
    - Enters the reasoning loop
 4. The Reasoning Loop (runs until completion):
    - Step limit check: If steps ≥ 5, raises MaxStepsExceededError
@@ -364,47 +365,60 @@ The AgentRunner executes the reasoning and tool-calling loop with safety guardra
    - Parse which tool the LLM wants to call
    - **If sensitive tool** (create/update/delete):
      - Check if already confirmed
-     - If not confirmed → pause and return confirmation_required
+     - If not confirmed → save pending confirmation to conversation state, return confirmation_required
    - **If safe tool** (query/get):
        - Execute immediately
    - Add tool result to message history
    - Loop back for next LLM call
-6. HITL Confirmation Flow:
-   - When a sensitive tool is requested, the agent pauses
+6. HITL Confirmation Flow (Stateful):
+   - When a sensitive tool is requested, the agent pauses and saves state
    - Returns AgentRunResult with stop_reason="confirmation_required"
-   - Contains ConfirmationRequest with action summary
-   - Client shows this to user and gets approval
-   - Call run_with_confirmation(confirmed=True) to continue
-   - Or confirmed=False to cancel
+   - Next call with same conversation_id classifies user's response:
+     - "yes", "sure", "go ahead" → CONFIRM → execute the pending tool
+     - "no", "cancel", "stop" → DENY → cancel and return
+     - New request → NEW_INTENT → re-select tools and process new request
+7. Context Management:
+   - Message history preserved across runs in conversation state
+   - Sliding window (default 20 messages) triggers summarisation
+   - Older messages summarised to maintain context without token overflow
 
 #### Execution Flow
 
 ```mermaid
 flowchart TD
-    A[User Message] --> B[ToolSelector<br/>AI-first]
-    B -->|selected tool names| C[AgentRunner.run]
-    C --> D{steps < max?}
-    D -->|No| E[MaxStepsExceededError]
-    D -->|Yes| F[Call Bedrock<br/>Converse API]
-    F --> G{stop_reason}
-    G -->|end_turn| H[Return final response<br/>AgentRunResult]
-    G -->|tool_use| I{Sensitive tool?}
-    G -->|other| J[Return response]
-    I -->|Yes & not confirmed| K[Return confirmation_required<br/>with ConfirmationRequest]
-    I -->|No or confirmed| L[Execute Tool]
-    L --> M[Add result to<br/>message history]
-    M --> D
+    A[User Message] --> B{Pending<br/>confirmation?}
+    B -->|Yes| C[Confirmation Classifier]
+    C -->|CONFIRM| D[Execute pending tool]
+    C -->|DENY| E[Return cancelled]
+    C -->|NEW_INTENT| F[Clear pending<br/>Re-select tools]
+    B -->|No| G[ToolSelector<br/>AI-first]
+    F --> G
+    G -->|selected tool names| H[Reasoning Loop]
+    H --> I{steps < max?}
+    I -->|No| J[MaxStepsExceededError]
+    I -->|Yes| K[Call Bedrock<br/>Converse API]
+    K --> L{stop_reason}
+    L -->|end_turn| M[Save state<br/>Return response]
+    L -->|tool_use| N{Sensitive tool?}
+    L -->|other| O[Return response]
+    N -->|Yes & not confirmed| P[Save pending state<br/>Return confirmation_required]
+    N -->|No or confirmed| Q[Execute Tool]
+    Q --> R[Add result to<br/>message history]
+    R --> I
+    D --> R
 ```
 
-##### HITL Confirmation Flow
+##### HITL Confirmation Flow (Stateful)
 
 ```mermaid
 flowchart TD
     A[AgentRunResult<br/>stop_reason=confirmation_required] --> B[Show user<br/>action_summary]
-    B --> C{User confirms?}
-    C -->|Yes| D[run_with_confirmation<br/>confirmed=True]
-    C -->|No| E[Return cancelled response]
-    D --> F[Continue execution<br/>with confirmed tool]
+    B --> C[User responds naturally]
+    C --> D[runner.run with<br/>same conversation_id]
+    D --> E[Confirmation Classifier<br/>AI classification]
+    E -->|CONFIRM| F[Execute pending tool]
+    E -->|DENY| G[Return cancelled response]
+    E -->|NEW_INTENT| H[Re-select tools<br/>Process new request]
 ```
 
 #### Usage
@@ -414,29 +428,48 @@ from src.agent import (
     BedrockClient,
     create_default_registry,
 )
+from src.database.agent_tracking import create_agent_conversation
+from src.database.connection import get_session
 
 # Create registry with all tools
 registry = create_default_registry()
 bedrock = BedrockClient()
-
-# Run the agent - tool selection happens automatically
 runner = AgentRunner(registry=registry, client=bedrock)
-result = runner.run("Show me my high priority tasks")
 
-# Check if confirmation is required for sensitive operations
-if result.stop_reason == "confirmation_required":
-    print(f"Confirm: {result.confirmation_request.action_summary}")
-    # Get user confirmation, then continue
-    result = runner.run_with_confirmation(
-        user_message="Update task status",
-        pending_result=result,
-        confirmed=True,
+# Run the agent with database session (required for state management)
+with get_session() as session:
+    # Create a conversation to track state across runs
+    conversation = create_agent_conversation(session)
+    conversation_id = conversation.id
+
+    # First run - tool selection happens automatically
+    result = runner.run(
+        "Create a task to review the Q4 report",
+        session,
+        conversation_id,
     )
+
+    # If confirmation is required, the user responds naturally
+    if result.stop_reason == "confirmation_required":
+        print(f"Confirm: {result.confirmation_request.action_summary}")
+
+        # Continue with same conversation_id - response is classified automatically
+        result = runner.run(
+            "yes, go ahead",  # or "no", or a completely new request
+            session,
+            conversation_id,
+        )
+
+    session.commit()
 
 print(result.response)
 ```
 
-The agent automatically selects relevant tools using a cheap model (Haiku) and executes with the main model (Sonnet). Standard tools tagged with `standard` are always included.
+The agent:
+- Automatically selects relevant tools using Haiku and executes with Sonnet
+- Maintains conversation context across multiple runs
+- Classifies natural language confirmations ("yep", "sure", "no thanks")
+- Applies sliding window summarisation to manage context length
 
 #### Cost and Token Tracking
 The agent automatically tracks all LLM calls, tokens, and costs. Each Bedrock API call is recorded with:
@@ -444,53 +477,31 @@ The agent automatically tracks all LLM calls, tokens, and costs. Each Bedrock AP
 - Input, output, and cache-read token counts
 - Estimated cost based on model pricing
 - Call latency in milliseconds
-- Call type (chat vs selector)
+- Call type (chat, selector, classifier, or summariser)
 
 Tracking data is organised in three tables:
-- **conversations**: Multi-run conversation containers with aggregated totals
+- **agent_conversations**: Multi-run conversation containers with context state and aggregated totals
 - **agent_runs**: Individual executions with user message, response, and step count
 - **llm_calls**: Individual Bedrock API calls with full request/response data
 
-##### Persisting Tracking Data
-Pass a database session to automatically persist tracking data:
+##### Tracking Data
+Since the session is required, tracking data is always persisted:
 
 ```python
 from src.agent import AgentRunner, create_default_registry
-from src.database.core import SessionLocal
+from src.database.agent_tracking import create_agent_conversation
+from src.database.connection import get_session
 
 runner = AgentRunner(registry=create_default_registry())
 
-# With database persistence - creates conversation and agent_run records
-with SessionLocal() as session:
-    result = runner.run("Show my tasks", session=session)
+with get_session() as session:
+    # Creates conversation and agent_run records automatically
+    conversation = create_agent_conversation(session)
+    result = runner.run("Show my tasks", session, conversation.id)
     session.commit()
 
-# For multi-turn conversations, pass the conversation_id
-with SessionLocal() as session:
-    result1 = runner.run("Show my tasks", session=session)
-    conversation_id = ...  # Get from first run's tracking context
-    result2 = runner.run("Mark first task done", session=session, conversation_id=conversation_id)
-    session.commit()
-```
-
-##### Accessing Tracking Data (without persistence)
-Pass a `TrackingContext` to access recorded data after a run without database persistence:
-
-```python
-import uuid
-from src.agent import AgentRunner, create_default_registry
-from src.agent.call_tracking import TrackingContext
-
-tracking = TrackingContext(
-    run_id=uuid.uuid4(),
-    conversation_id=uuid.uuid4(),
-)
-
-runner = AgentRunner(registry=create_default_registry())
-result = runner.run("Show my tasks", tracking_context=tracking)
-
-print(f"Total tokens: {tracking.total_input_tokens}/{tracking.total_output_tokens}")
-print(f"Estimated cost: ${tracking.total_estimated_cost}")
+    # Access totals from the conversation record
+    print(f"Total cost: ${conversation.total_cost_usd}")
 ```
 
 ##### Model Pricing

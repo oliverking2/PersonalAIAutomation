@@ -50,6 +50,33 @@ class AgentConversation(Base):
         default=lambda: datetime.now(UTC),
     )
 
+    # Context management columns
+    messages_json: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+    selected_tools: Mapped[list[str] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+    pending_confirmation: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+    summary: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    message_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    last_summarised_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     agent_runs: Mapped[list["AgentRun"]] = relationship(
         "AgentRun",
         back_populates="conversation",

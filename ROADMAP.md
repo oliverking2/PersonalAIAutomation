@@ -27,6 +27,7 @@
 ## AI
 - Integrate with AWS Bedrock for models
 - Add in AI for summarising news articles
+- Standardise JSON validation when getting data from AI
 
 ## Telegram
 - Add in AI for 2-way chat
@@ -51,7 +52,6 @@
 | Idea              | Description                                                                 | Complexity |
 |-------------------|-----------------------------------------------------------------------------|------------|
 | Recurring Tasks   | Template-based recurring task creation (weekly reviews, monthly goals)      | Low        |
-| Focus Mode        | "What should I work on now?" based on priority, time available, and context | Low        |
 | Quick Capture     | Telegram command to quickly add thoughts/ideas to a dedicated Notion inbox  | Low        |
 
 🟣 AI Enhancements
@@ -67,6 +67,5 @@
 | Idea              | Description                                                           | Complexity |
 |-------------------|-----------------------------------------------------------------------|------------|
 | Metrics Dashboard | Grafana/similar dashboard for system health, API latency, agent usage | Medium     |
-| Cost Tracking     | Track Bedrock API costs per request, daily/monthly reports            | Low        |
 | Backup & Export   | Regular export of all data to S3/local for disaster recovery          | Low        |
 | Rate Limiting     | Protect against runaway agent loops or API abuse                      | Low        |

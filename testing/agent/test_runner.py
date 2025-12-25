@@ -1,6 +1,7 @@
 """Tests for AgentRunner."""
 
 import unittest
+import uuid
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -8,7 +9,7 @@ from pydantic import BaseModel
 
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError
-from src.agent.models import AgentRunResult, ConfirmationRequest, ToolDef
+from src.agent.models import ToolDef
 from src.agent.runner import DEFAULT_MAX_STEPS, DEFAULT_SYSTEM_PROMPT, AgentRunner
 from src.agent.tool_registry import ToolRegistry
 
@@ -29,12 +30,36 @@ def error_handler(args: DummyArgs) -> dict[str, Any]:
     raise RuntimeError("Handler error")
 
 
+def _create_mock_db_objects() -> tuple[MagicMock, MagicMock, MagicMock]:
+    """Create mock database objects for testing.
+
+    :returns: Tuple of (mock_session, mock_conversation, mock_run).
+    """
+    mock_session = MagicMock()
+    mock_conversation = MagicMock()
+    mock_conversation.id = uuid.uuid4()
+    mock_conversation.messages_json = None
+    mock_conversation.selected_tools = None
+    mock_conversation.pending_confirmation = None
+    mock_conversation.summary = None
+    mock_conversation.message_count = 0
+    mock_conversation.last_summarised_at = None
+
+    mock_run = MagicMock()
+    mock_run.id = uuid.uuid4()
+
+    return mock_session, mock_conversation, mock_run
+
+
 class TestAgentRunner(unittest.TestCase):
     """Tests for AgentRunner."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
         self.registry = ToolRegistry()
+
+        # Create mock database objects
+        self.mock_session, self.mock_conversation, self.mock_run = _create_mock_db_objects()
 
         # Register a safe tool
         self.safe_tool = ToolDef(
@@ -94,8 +119,19 @@ class TestAgentRunner(unittest.TestCase):
         self.assertEqual(runner.max_steps, 10)
         self.assertFalse(runner.require_confirmation)
 
-    def test_run_simple_query_no_tools(self) -> None:
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_simple_query_no_tools(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
         """Test run when model responds without using tools."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "Hello"}],
@@ -112,15 +148,26 @@ class TestAgentRunner(unittest.TestCase):
             client=self.mock_client,
         )
 
-        result = runner.run("Hello", ["safe_tool"])
+        result = runner.run("Hello", self.mock_session, tool_names=["safe_tool"])
 
         self.assertEqual(result.response, "Hi there!")
         self.assertEqual(result.tool_calls, [])
         self.assertEqual(result.steps_taken, 0)
         self.assertEqual(result.stop_reason, "end_turn")
 
-    def test_run_with_safe_tool(self) -> None:
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_with_safe_tool(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
         """Test run where model uses a safe tool."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "Query something"}],
@@ -166,7 +213,7 @@ class TestAgentRunner(unittest.TestCase):
             client=self.mock_client,
         )
 
-        result = runner.run("Query something", ["safe_tool"])
+        result = runner.run("Query something", self.mock_session, tool_names=["safe_tool"])
 
         self.assertEqual(result.response, "Done!")
         self.assertEqual(len(result.tool_calls), 1)
@@ -177,8 +224,21 @@ class TestAgentRunner(unittest.TestCase):
         self.assertEqual(result.steps_taken, 1)
         self.assertEqual(result.stop_reason, "end_turn")
 
-    def test_run_sensitive_tool_requires_confirmation(self) -> None:
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_sensitive_tool_requires_confirmation(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
         """Test that sensitive tools require confirmation."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "Update something"}],
@@ -213,7 +273,7 @@ class TestAgentRunner(unittest.TestCase):
             require_confirmation=True,
         )
 
-        result = runner.run("Update something", ["sensitive_tool"])
+        result = runner.run("Update something", self.mock_session, tool_names=["sensitive_tool"])
 
         self.assertEqual(result.stop_reason, "confirmation_required")
         self.assertIsNotNone(result.confirmation_request)
@@ -222,8 +282,19 @@ class TestAgentRunner(unittest.TestCase):
         self.assertEqual(result.confirmation_request.tool_use_id, "tool-456")
         self.assertEqual(result.steps_taken, 0)
 
-    def test_run_sensitive_tool_with_confirmation_disabled(self) -> None:
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_sensitive_tool_with_confirmation_disabled(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
         """Test that sensitive tools run without confirmation when disabled."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "Update something"}],
@@ -268,69 +339,25 @@ class TestAgentRunner(unittest.TestCase):
             require_confirmation=False,
         )
 
-        result = runner.run("Update something", ["sensitive_tool"])
+        result = runner.run("Update something", self.mock_session, tool_names=["sensitive_tool"])
 
         self.assertEqual(result.stop_reason, "end_turn")
         self.assertEqual(len(result.tool_calls), 1)
         self.assertEqual(result.tool_calls[0].tool_name, "sensitive_tool")
 
-    def test_run_sensitive_tool_with_confirmed_id(self) -> None:
-        """Test that sensitive tools run when ID is in confirmed set."""
-        self.mock_client.create_user_message.return_value = {
-            "role": "user",
-            "content": [{"text": "Update something"}],
-        }
-
-        tool_response = {
-            "output": {
-                "message": {
-                    "content": [
-                        {
-                            "toolUse": {
-                                "toolUseId": "tool-456",
-                                "name": "sensitive_tool",
-                                "input": {"value": "update"},
-                            }
-                        }
-                    ]
-                }
-            },
-            "stopReason": "tool_use",
-        }
-
-        final_response = {
-            "output": {"message": {"content": [{"text": "Updated!"}]}},
-            "stopReason": "end_turn",
-        }
-
-        self.mock_client.converse.side_effect = [tool_response, final_response]
-        self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
-        self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-456", "name": "sensitive_tool", "input": {"value": "update"}}
-        ]
-        self.mock_client.create_tool_result_message.return_value = {
-            "role": "user",
-            "content": [{"toolResult": {"toolUseId": "tool-456"}}],
-        }
-        self.mock_client.parse_text_response.return_value = "Updated!"
-
-        runner = AgentRunner(
-            registry=self.registry,
-            client=self.mock_client,
-            require_confirmation=True,
-        )
-
-        result = runner.run(
-            "Update something",
-            ["sensitive_tool"],
-            confirmed_tool_use_ids={"tool-456"},
-        )
-
-        self.assertEqual(result.stop_reason, "end_turn")
-        self.assertEqual(len(result.tool_calls), 1)
-
-    def test_run_max_steps_exceeded(self) -> None:
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_max_steps_exceeded(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
         """Test that max steps limit is enforced."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "Query"}],
@@ -371,13 +398,24 @@ class TestAgentRunner(unittest.TestCase):
         )
 
         with self.assertRaises(MaxStepsExceededError) as ctx:
-            runner.run("Query", ["safe_tool"])
+            runner.run("Query", self.mock_session, tool_names=["safe_tool"])
 
         self.assertEqual(ctx.exception.max_steps, 3)
         self.assertEqual(ctx.exception.steps_taken, 3)
 
-    def test_run_handles_tool_execution_error(self) -> None:
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_handles_tool_execution_error(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
         """Test that tool execution errors are handled gracefully."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "Query"}],
@@ -421,14 +459,25 @@ class TestAgentRunner(unittest.TestCase):
             client=self.mock_client,
         )
 
-        result = runner.run("Query", ["error_tool"])
+        result = runner.run("Query", self.mock_session, tool_names=["error_tool"])
 
         self.assertEqual(len(result.tool_calls), 1)
         self.assertTrue(result.tool_calls[0].is_error)
         self.assertIn("error", result.tool_calls[0].output)
 
-    def test_run_handles_unknown_tool(self) -> None:
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_handles_unknown_tool(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
         """Test that unknown tool requests are handled gracefully."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "Query"}],
@@ -473,157 +522,11 @@ class TestAgentRunner(unittest.TestCase):
             client=self.mock_client,
         )
 
-        result = runner.run("Query", ["safe_tool"])
+        result = runner.run("Query", self.mock_session, tool_names=["safe_tool"])
 
         self.assertEqual(len(result.tool_calls), 1)
         self.assertTrue(result.tool_calls[0].is_error)
         self.assertIn("Unknown tool", result.tool_calls[0].output["error"])
-
-
-class TestAgentRunnerConfirmation(unittest.TestCase):
-    """Tests for AgentRunner confirmation flow."""
-
-    def setUp(self) -> None:
-        """Set up test fixtures."""
-        self.registry = ToolRegistry()
-
-        self.sensitive_tool = ToolDef(
-            name="sensitive_tool",
-            description="A sensitive test tool",
-            tags=frozenset({"test"}),
-            risk_level=RiskLevel.SENSITIVE,
-            args_model=DummyArgs,
-            handler=dummy_handler,
-        )
-        self.registry.register(self.sensitive_tool)
-
-        self.mock_client = MagicMock()
-
-    def test_run_with_confirmation_user_confirms(self) -> None:
-        """Test confirmation flow when user confirms."""
-        # Create a pending result
-        pending_result = AgentRunResult(
-            response="",
-            tool_calls=[],
-            steps_taken=0,
-            stop_reason="confirmation_required",
-            confirmation_request=ConfirmationRequest(
-                tool_name="sensitive_tool",
-                tool_description="A sensitive test tool",
-                input_args={"value": "test"},
-                action_summary="A sensitive test tool\nArguments: value='test'",
-                tool_use_id="tool-456",
-            ),
-        )
-
-        # Set up mock for re-run
-        self.mock_client.create_user_message.return_value = {
-            "role": "user",
-            "content": [{"text": "Update something"}],
-        }
-
-        tool_response = {
-            "output": {
-                "message": {
-                    "content": [
-                        {
-                            "toolUse": {
-                                "toolUseId": "tool-456",
-                                "name": "sensitive_tool",
-                                "input": {"value": "test"},
-                            }
-                        }
-                    ]
-                }
-            },
-            "stopReason": "tool_use",
-        }
-
-        final_response = {
-            "output": {"message": {"content": [{"text": "Updated!"}]}},
-            "stopReason": "end_turn",
-        }
-
-        self.mock_client.converse.side_effect = [tool_response, final_response]
-        self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
-        self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-456", "name": "sensitive_tool", "input": {"value": "test"}}
-        ]
-        self.mock_client.create_tool_result_message.return_value = {
-            "role": "user",
-            "content": [{"toolResult": {"toolUseId": "tool-456"}}],
-        }
-        self.mock_client.parse_text_response.return_value = "Updated!"
-
-        runner = AgentRunner(
-            registry=self.registry,
-            client=self.mock_client,
-        )
-
-        result = runner.run_with_confirmation(
-            user_message="Update something",
-            pending_result=pending_result,
-            confirmed=True,
-            tool_names=["sensitive_tool"],
-        )
-
-        self.assertEqual(result.stop_reason, "end_turn")
-        self.assertEqual(result.response, "Updated!")
-
-    def test_run_with_confirmation_user_declines(self) -> None:
-        """Test confirmation flow when user declines."""
-        pending_result = AgentRunResult(
-            response="",
-            tool_calls=[],
-            steps_taken=0,
-            stop_reason="confirmation_required",
-            confirmation_request=ConfirmationRequest(
-                tool_name="sensitive_tool",
-                tool_description="A sensitive test tool",
-                input_args={"value": "test"},
-                action_summary="A sensitive test tool\nArguments: value='test'",
-                tool_use_id="tool-456",
-            ),
-        )
-
-        runner = AgentRunner(
-            registry=self.registry,
-            client=self.mock_client,
-        )
-
-        result = runner.run_with_confirmation(
-            user_message="Update something",
-            pending_result=pending_result,
-            confirmed=False,
-            tool_names=["sensitive_tool"],
-        )
-
-        self.assertEqual(result.stop_reason, "user_cancelled")
-        self.assertEqual(result.response, "Action cancelled by user.")
-
-    def test_run_with_confirmation_invalid_pending_result(self) -> None:
-        """Test that invalid pending result raises ValueError."""
-        pending_result = AgentRunResult(
-            response="Done",
-            tool_calls=[],
-            steps_taken=0,
-            stop_reason="end_turn",
-        )
-
-        runner = AgentRunner(
-            registry=self.registry,
-            client=self.mock_client,
-        )
-
-        with self.assertRaises(ValueError) as ctx:
-            runner.run_with_confirmation(
-                user_message="Update something",
-                pending_result=pending_result,
-                confirmed=True,
-                tool_names=["sensitive_tool"],
-            )
-
-        self.assertIn("does not require confirmation", str(ctx.exception))
 
 
 class TestAgentRunnerExecuteTool(unittest.TestCase):
