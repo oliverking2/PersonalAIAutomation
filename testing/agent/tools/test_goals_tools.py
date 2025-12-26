@@ -40,20 +40,20 @@ class TestGoalsToolDefinitions(unittest.TestCase):
             },
         )
 
-    def test_query_and_get_are_safe(self) -> None:
+    def test_safe_tools(self) -> None:
         """Test that query and get tools are marked as safe."""
         tools = get_goals_tools()
         tool_dict = {t.name: t for t in tools}
 
         self.assertEqual(tool_dict["query_goals"].risk_level, RiskLevel.SAFE)
         self.assertEqual(tool_dict["get_goal"].risk_level, RiskLevel.SAFE)
+        self.assertEqual(tool_dict["create_goal"].risk_level, RiskLevel.SAFE)
 
-    def test_create_and_update_are_sensitive(self) -> None:
+    def test_sensitive_tools(self) -> None:
         """Test that create and update tools are marked as sensitive."""
         tools = get_goals_tools()
         tool_dict = {t.name: t for t in tools}
 
-        self.assertEqual(tool_dict["create_goal"].risk_level, RiskLevel.SENSITIVE)
         self.assertEqual(tool_dict["update_goal"].risk_level, RiskLevel.SENSITIVE)
 
     def test_tools_have_goals_tag(self) -> None:

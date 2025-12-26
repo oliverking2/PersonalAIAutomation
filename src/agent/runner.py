@@ -309,6 +309,7 @@ class AgentRunner:
             return self._execute_confirmed_tool(
                 pending=pending,
                 conv_state=conv_state,
+                user_message=user_message,
             )
 
         if confirmation_type == ConfirmationType.DENY:
@@ -344,14 +345,18 @@ class AgentRunner:
         self,
         pending: PendingConfirmation,
         conv_state: ConversationState,
+        user_message: str,
     ) -> AgentRunResult:
         """Execute a tool that was previously confirmed by the user.
 
         Directly executes the tool with saved arguments, then hands off to
-        the agent loop to generate a response.
+        the agent loop to generate a response. The user's confirmation message
+        is included so the LLM can see any additional requests (e.g., "yes,
+        and also add X").
 
         :param pending: The confirmed pending action with tool details.
         :param conv_state: Conversation state for context.
+        :param user_message: The user's confirmation message (may contain followup).
         :returns: Result of the agent run.
         """
         tool = self.registry.get(pending.tool_name)
@@ -367,8 +372,10 @@ class AgentRunner:
             f"Confirmed tool executed: tool={pending.tool_name}, error={tool_call.is_error}"
         )
 
-        # Build messages: previous context + assistant tool request + tool result
+        # Build messages: context + user confirmation + assistant tool request + tool result
+        # Include user message so LLM can see any additional requests in the confirmation
         context_messages = build_context_messages(conv_state)
+        user_confirmation_msg = self.client.create_user_message(user_message)
         assistant_tool_request = self.client.create_assistant_tool_use_message(
             tool_use_id=pending.tool_use_id,
             name=pending.tool_name,
@@ -380,6 +387,7 @@ class AgentRunner:
 
         messages: list[Any] = [
             *context_messages,
+            user_confirmation_msg,
             assistant_tool_request,
             tool_result_msg,
         ]
@@ -402,22 +410,51 @@ class AgentRunner:
         self,
         user_message: str,
         tool_names: list[str] | None,
+        conv_state: ConversationState | None,
     ) -> list[str]:
         """Resolve the tools to use for this run.
 
-        Always selects tools based on the current user message to handle
-        mid-conversation intent changes.
+        Uses context-aware tool selection:
+        - First turn: Full selection based on user message
+        - Subsequent turns: Additive mode - only adds tools if needed
+
+        This prevents losing relevant tools when the user provides clarifying
+        details (e.g., "both work and due 1st jan" after asking to create tasks).
 
         :param user_message: User message for auto-selection.
         :param tool_names: Explicit tool names override.
+        :param conv_state: Conversation state with previous tool selection.
         :returns: List of selected tool names.
         """
         if tool_names is not None:
             return tool_names
 
-        # Auto-select tools based on current message
-        selection = self._selector.select(user_message, model=self.selector_model)
-        logger.info(f"Auto-selected tools: {selection.tool_names}, reasoning={selection.reasoning}")
+        # Get current tools from conversation state (if any)
+        current_tools = (
+            conv_state.selected_tools
+            if conv_state is not None and conv_state.selected_tools
+            else None
+        )
+
+        # Select tools - additive mode if we have current tools
+        selection = self._selector.select(
+            user_message,
+            model=self.selector_model,
+            current_tools=current_tools,
+        )
+
+        if current_tools:
+            # Additive mode: merge new tools with existing
+            if selection.tool_names:
+                merged = list(dict.fromkeys(current_tools + selection.tool_names))
+                logger.info(f"Added tools {selection.tool_names}, now have: {merged}")
+                return merged
+            logger.debug(f"No new tools needed, keeping: {current_tools}")
+            return current_tools
+        # First turn: use full selection
+        logger.info(
+            f"Initial tool selection: {selection.tool_names}, reasoning={selection.reasoning}"
+        )
         return selection.tool_names
 
     def _build_initial_messages(
@@ -508,7 +545,7 @@ class AgentRunner:
         :param conv_state: Optional conversation state for context.
         :returns: Result of the agent run.
         """
-        selected_tools = self._resolve_tools(user_message, tool_names)
+        selected_tools = self._resolve_tools(user_message, tool_names, conv_state)
 
         # Merge standard tools with selected tools (deduplicated)
         all_tool_names = list(dict.fromkeys(self._standard_tool_names + selected_tools))
@@ -619,7 +656,7 @@ class AgentRunner:
         logger.info(f"Tool use requested: tool={ctx.tool_name}, id={ctx.tool_use_id}")
 
         if ctx.tool_name not in state.tools:
-            self._handle_unknown_tool(ctx, state, response)
+            self._handle_unknown_tool(tool_uses, state, response)
             return None
 
         tool = state.tools[ctx.tool_name]
@@ -633,26 +670,48 @@ class AgentRunner:
 
     def _handle_unknown_tool(
         self,
-        ctx: _ToolUseContext,
+        tool_uses: list[dict[str, Any]],
         state: _RunState,
         response: dict[str, Any],
     ) -> None:
-        """Handle a request for an unknown tool."""
-        logger.error(f"LLM requested unknown tool: {ctx.tool_name}")
-        error_result = {"error": f"Unknown tool: {ctx.tool_name}"}
-        state.tool_calls.append(
-            ToolCall(
-                tool_use_id=ctx.tool_use_id,
-                tool_name=ctx.tool_name,
-                input_args=ctx.input_args,
-                output=error_result,
-                is_error=True,
-            )
-        )
+        """Handle unknown tool(s) in the response.
+
+        When the LLM returns multiple tool uses in one response and any is
+        unknown, we must provide error results for ALL of them due to Bedrock
+        API requirements (every tool_use must have a corresponding tool_result).
+
+        :param tool_uses: All tool uses from the response.
+        :param state: Current run state.
+        :param response: Full LLM response.
+        """
         state.messages.append(response["output"]["message"])
-        state.messages.append(
-            self.client.create_tool_result_message(ctx.tool_use_id, error_result, is_error=True)
-        )
+
+        for tool_use in tool_uses:
+            tool_use_id = tool_use["toolUseId"]
+            tool_name = tool_use["name"]
+            input_args = tool_use["input"]
+
+            if tool_name not in state.tools:
+                logger.error(f"LLM requested unknown tool: {tool_name}")
+                error_result = {"error": f"Unknown tool: {tool_name}"}
+            else:
+                # Tool exists but we can't execute it because another tool
+                # in this batch is unknown - we need to bail out entirely
+                logger.warning(f"Skipping tool {tool_name} due to unknown tool in same request")
+                error_result = {"error": "Execution skipped due to unknown tool in batch"}
+
+            state.tool_calls.append(
+                ToolCall(
+                    tool_use_id=tool_use_id,
+                    tool_name=tool_name,
+                    input_args=input_args,
+                    output=error_result,
+                    is_error=True,
+                )
+            )
+            state.messages.append(
+                self.client.create_tool_result_message(tool_use_id, error_result, is_error=True)
+            )
 
     def _check_confirmation_required(
         self,

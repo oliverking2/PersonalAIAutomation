@@ -163,7 +163,7 @@ def get_reading_list_tools() -> list[ToolDef]:
                 f"category ({category_options}), and item URL."
             ),
             tags=frozenset({"reading", "create", "item"}),
-            risk_level=RiskLevel.SENSITIVE,
+            risk_level=RiskLevel.SAFE,
             args_model=ReadingItemCreateRequest,
             handler=create_reading_item,
         ),

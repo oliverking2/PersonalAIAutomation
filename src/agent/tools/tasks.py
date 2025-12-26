@@ -164,7 +164,7 @@ def get_tasks_tools() -> list[ToolDef]:
                 f"effort level ({effort_options})."
             ),
             tags=frozenset({"tasks", "create", "item"}),
-            risk_level=RiskLevel.SENSITIVE,
+            risk_level=RiskLevel.SAFE,
             args_model=TaskCreateRequest,
             handler=create_task,
         ),

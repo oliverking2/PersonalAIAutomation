@@ -161,7 +161,7 @@ def get_goals_tools() -> list[ToolDef]:
                 f"progress (0-100), and due date."
             ),
             tags=frozenset({"goals", "create", "item"}),
-            risk_level=RiskLevel.SENSITIVE,
+            risk_level=RiskLevel.SAFE,
             args_model=GoalCreateRequest,
             handler=create_goal,
         ),

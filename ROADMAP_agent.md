@@ -215,6 +215,9 @@ This document tracks improvements and technical debt for the `src/agent/` module
 | AGENT-024 | Remove unused parameters (confirmed_tool_use_ids, tool_names from _handle_confirmation_response)            | 2024-12-25 |
 | AGENT-025 | Fix HITL confirmation flow - execute confirmed tool directly instead of re-calling LLM                      | 2024-12-25 |
 | AGENT-026 | Add today's date to system prompt for relative date handling (e.g., "end of week", "next Friday")           | 2024-12-25 |
+| AGENT-027 | Include user confirmation message in conversation so LLM sees followup requests (e.g., "yes, and also X")   | 2024-12-25 |
+| AGENT-028 | Handle multiple tool uses in response - provide error results for ALL when any is unknown                   | 2024-12-25 |
+| AGENT-029 | Context-aware additive tool selection - selector considers current tools, only adds when needed             | 2024-12-25 |
 
 ## Priority Legend
 

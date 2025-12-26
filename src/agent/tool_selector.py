@@ -40,6 +40,33 @@ Respond with valid JSON only, no other text:
 
 """
 
+ADDITIVE_SELECTION_SYSTEM_PROMPT = """You are a tool selector. The user is continuing a conversation where these tools are already selected: {current_tools}
+
+Determine if the user's message requires ADDITIONAL tools not already selected.
+
+Rules:
+1. If the current tools are sufficient for this message, return an empty list
+2. Only add tools if the user is asking for something the current tools cannot handle
+3. Clarification messages (providing details, dates, confirmations) usually don't need new tools
+4. Select at most {max_tools} additional tools
+
+Available tools (excluding already selected):
+{tool_descriptions}
+
+Respond with valid JSON only, no other text:
+{{
+  "tool_names": [],
+  "reasoning": "Current tools are sufficient for this clarification"
+}}
+
+or if new tools are needed:
+{{
+  "tool_names": ["new_tool"],
+  "reasoning": "User is now asking to do X which requires new_tool"
+}}
+
+"""
+
 
 class ToolSelector:
     """AI-first tool selector using Bedrock Converse.
@@ -118,14 +145,21 @@ class ToolSelector:
         self,
         user_intent: str,
         model: str | None = None,
+        current_tools: list[str] | None = None,
     ) -> ToolSelectionResult:
         """Select tools for a user request using AI.
 
         Standard tools (tagged with 'standard') are excluded from selection
         as they are always included in agent runs.
 
+        When current_tools is provided, uses additive mode: only returns tools
+        that should be ADDED to the existing set. This is more efficient for
+        follow-up messages where the user is providing clarifications.
+
         :param user_intent: The user's request or intent text.
         :param model: Optional model ID/alias override for selection (e.g., 'haiku').
+        :param current_tools: Tools already selected in this conversation. When
+            provided, selector returns only additional tools needed.
         :returns: Tool selection result with ordered tool names.
         :raises ToolSelectionError: If selection fails.
         """
@@ -139,15 +173,34 @@ class ToolSelector:
                 reasoning="No tools available in registry",
             )
 
+        # In additive mode, exclude already-selected tools from candidates
+        current_tools_set = set(current_tools) if current_tools else set()
+        if current_tools:
+            metadata = [m for m in metadata if m.name not in current_tools_set]
+            if not metadata:
+                logger.debug("All tools already selected, no additional tools needed")
+                return ToolSelectionResult(
+                    tool_names=[],
+                    reasoning="All relevant tools already selected",
+                )
+
         available_tools = {m.name for m in metadata}
         tool_descriptions = self._format_tool_metadata(metadata)
 
-        # Include tool descriptions in system prompt for caching
-        system_prompt = TOOL_SELECTION_SYSTEM_PROMPT.format(
-            max_tools=self.max_tools,
-            tool_descriptions=tool_descriptions,
-        )
-        user_message = f"User request: {user_intent}"
+        # Use appropriate prompt based on mode
+        if current_tools:
+            system_prompt = ADDITIVE_SELECTION_SYSTEM_PROMPT.format(
+                current_tools=current_tools,
+                max_tools=self.max_tools,
+                tool_descriptions=tool_descriptions,
+            )
+        else:
+            system_prompt = TOOL_SELECTION_SYSTEM_PROMPT.format(
+                max_tools=self.max_tools,
+                tool_descriptions=tool_descriptions,
+            )
+
+        user_message = f"User message: {user_intent}"
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
@@ -167,10 +220,20 @@ class ToolSelector:
                 response_text = self.client.parse_text_response(response)
                 result = self._parse_selection_response(response_text, available_tools)
 
-                logger.info(
-                    f"Tool selection completed: intent='{user_intent[:50]}...', "
-                    f"selected={result.tool_names}"
-                )
+                if current_tools:
+                    if result.tool_names:
+                        logger.info(
+                            f"Additive selection: adding {result.tool_names} to {current_tools}"
+                        )
+                    else:
+                        logger.info(
+                            f"Additive selection: no new tools needed, keeping {current_tools}"
+                        )
+                else:
+                    logger.info(
+                        f"Tool selection completed: intent='{user_intent[:50]}...', "
+                        f"selected={result.tool_names}"
+                    )
 
                 return result
 
