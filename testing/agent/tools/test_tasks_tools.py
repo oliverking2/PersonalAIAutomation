@@ -5,8 +5,9 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 from src.agent.enums import RiskLevel
+from src.agent.tools.models import AgentTaskCreateArgs
 from src.agent.tools.tasks import TASK_TOOL_CONFIG, get_tasks_tools
-from src.api.notion.tasks.models import TaskCreateRequest, TaskQueryRequest
+from src.api.notion.tasks.models import TaskQueryRequest
 from src.notion.enums import EffortLevel, Priority, TaskGroup, TaskStatus
 
 
@@ -127,12 +128,12 @@ class TestTaskQueryRequest(unittest.TestCase):
         self.assertEqual(args.limit, 10)
 
 
-class TestTaskCreateRequest(unittest.TestCase):
-    """Tests for TaskCreateRequest model (from API)."""
+class TestAgentTaskCreateArgs(unittest.TestCase):
+    """Tests for AgentTaskCreateArgs model."""
 
     def test_minimal_args(self) -> None:
         """Test creating with only required fields."""
-        args = TaskCreateRequest(
+        args = AgentTaskCreateArgs(
             task_name="Test Task",
             due_date=date(2025, 6, 1),
             task_group=TaskGroup.PERSONAL,
@@ -144,11 +145,14 @@ class TestTaskCreateRequest(unittest.TestCase):
         self.assertEqual(args.effort_level, EffortLevel.SMALL)
         self.assertEqual(args.task_group, TaskGroup.PERSONAL)
         self.assertEqual(args.due_date, date(2025, 6, 1))
+        self.assertIsNone(args.description)
 
     def test_full_args(self) -> None:
         """Test creating with all fields."""
-        args = TaskCreateRequest(
+        args = AgentTaskCreateArgs(
             task_name="Important Task",
+            description="What needs to be done",
+            notes="Extra context",
             status=TaskStatus.IN_PROGRESS,
             priority=Priority.HIGH,
             effort_level=EffortLevel.LARGE,
@@ -157,6 +161,8 @@ class TestTaskCreateRequest(unittest.TestCase):
         )
 
         self.assertEqual(args.task_name, "Important Task")
+        self.assertEqual(args.description, "What needs to be done")
+        self.assertEqual(args.notes, "Extra context")
         self.assertEqual(args.status, TaskStatus.IN_PROGRESS)
         self.assertEqual(args.priority, Priority.HIGH)
         self.assertEqual(args.effort_level, EffortLevel.LARGE)
@@ -210,11 +216,12 @@ class TestTaskToolHandlers(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-task", "task_name": "New Task"}
+        task_name = "Fix login bug"
+        mock_client.post.return_value = {"id": "new-task", "task_name": task_name}
 
         tool = self.tool_dict["create_task"]
-        args = TaskCreateRequest(
-            task_name="New Task",
+        args = AgentTaskCreateArgs(
+            task_name=task_name,
             due_date=date(2025, 6, 1),
             task_group=TaskGroup.PERSONAL,
         )

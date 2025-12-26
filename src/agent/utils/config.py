@@ -52,6 +52,8 @@ class AgentConfig:
     :param window_size: Number of recent messages to keep in full (sliding window).
     :param batch_threshold: Messages above window before summarisation triggers.
     :param max_classification_retries: Maximum retries for confirmation classification.
+    :param min_name_length: Minimum characters required for task/goal names.
+    :param min_specific_words: Minimum non-vague words required in names.
     """
 
     # Runner settings
@@ -65,6 +67,10 @@ class AgentConfig:
 
     # Classification
     max_classification_retries: int = 2
+
+    # Name validation
+    min_name_length: int = 15
+    min_specific_words: int = 2
 
 
 # Default configuration singleton

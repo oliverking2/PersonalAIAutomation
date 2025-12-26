@@ -8,9 +8,10 @@ reading list items, etc.).
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, Field, create_model
 
@@ -18,8 +19,8 @@ from src.agent.api_client import AgentAPIClient
 from src.agent.enums import RiskLevel
 from src.agent.models import ToolDef
 
-if TYPE_CHECKING:
-    pass
+# Type alias for content builder functions
+ContentBuilder = Callable[[BaseModel], str]
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class CRUDToolConfig:
     :param get_description: Custom get tool description (optional).
     :param create_description: Custom create tool description (optional).
     :param update_description: Custom update tool description (optional).
+    :param content_builder: Function to build content from agent args (optional).
     """
 
     domain: str
@@ -49,13 +51,14 @@ class CRUDToolConfig:
     id_field: str
     query_model: type[BaseModel]
     create_model: type[BaseModel]
-    update_model: type[BaseModel]
+    update_model: type[BaseModel] | None = None
     enum_fields: dict[str, type[StrEnum]] = field(default_factory=dict)
     tags: frozenset[str] = field(default_factory=frozenset)
     query_description: str | None = None
     get_description: str | None = None
     create_description: str | None = None
     update_description: str | None = None
+    content_builder: ContentBuilder | None = None
 
 
 def _get_client() -> AgentAPIClient:
@@ -194,16 +197,23 @@ def _create_create_tool(config: CRUDToolConfig) -> ToolDef:
     def create_handler(args: BaseModel) -> dict[str, Any]:
         logger.debug(f"Creating {config.domain}")
 
+        # Build API payload
+        payload = args.model_dump(mode="json", exclude_none=True)
+
+        # If content builder is configured, build content from structured inputs
+        if config.content_builder:
+            payload["content"] = config.content_builder(args)
+            # Remove structured input fields that aren't in the API model
+            payload.pop("description", None)
+            payload.pop("notes", None)
+
         with _get_client() as client:
-            response = client.post(
-                config.endpoint_prefix,
-                json=args.model_dump(mode="json", exclude_none=True),
-            )
+            response = client.post(config.endpoint_prefix, json=payload)
 
         return {"item": response, "created": True}
 
     enum_hints = _format_enum_hints(config.enum_fields)
-    description = config.create_description or (f"Create a new {config.domain}. {enum_hints}")
+    description = config.create_description or f"Create a new {config.domain}. {enum_hints}"
 
     return ToolDef(
         name=f"create_{config.domain}",
@@ -229,6 +239,16 @@ def _create_update_tool(config: CRUDToolConfig) -> ToolDef:
 
         # Exclude ID field from payload (it's in the URL)
         payload = args.model_dump(mode="json", exclude_none=True, exclude={config.id_field})
+
+        # If content builder is configured and description/notes provided, build content
+        if config.content_builder:
+            description = getattr(args, "description", None)
+            notes = getattr(args, "notes", None)
+            if description is not None or notes is not None:
+                payload["content"] = config.content_builder(args)
+            # Remove structured input fields that aren't in the API model
+            payload.pop("description", None)
+            payload.pop("notes", None)
 
         if not payload:
             return {"error": "No properties to update", "updated": False}

@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from src.agent.enums import RiskLevel
 from src.agent.tools.goals import GOAL_TOOL_CONFIG, get_goals_tools
-from src.api.notion.goals.models import GoalCreateRequest, GoalQueryRequest
+from src.agent.tools.models import AgentGoalCreateArgs
+from src.api.notion.goals.models import GoalQueryRequest
 from src.notion.enums import GoalStatus, Priority
 
 
@@ -114,33 +115,38 @@ class TestGoalQueryRequest(unittest.TestCase):
         self.assertEqual(args.limit, 10)
 
 
-class TestGoalCreateRequest(unittest.TestCase):
-    """Tests for GoalCreateRequest model (from API)."""
+class TestAgentGoalCreateArgs(unittest.TestCase):
+    """Tests for AgentGoalCreateArgs model."""
 
     def test_minimal_args(self) -> None:
         """Test creating with only required fields."""
-        args = GoalCreateRequest(goal_name="Test Goal")
+        args = AgentGoalCreateArgs(goal_name="Test Goal")
 
         self.assertEqual(args.goal_name, "Test Goal")
         self.assertEqual(args.status, GoalStatus.NOT_STARTED)
-        self.assertIsNone(args.priority)
-        self.assertIsNone(args.progress)
+        self.assertEqual(args.priority, Priority.LOW)
+        self.assertEqual(args.progress, 0)
         self.assertIsNone(args.due_date)
+        self.assertIsNone(args.description)
 
     def test_full_args(self) -> None:
         """Test creating with all fields."""
-        args = GoalCreateRequest(
+        args = AgentGoalCreateArgs(
             goal_name="Important Goal",
+            description="What this goal aims to achieve",
+            notes="Milestones and references",
             status=GoalStatus.IN_PROGRESS,
             priority=Priority.HIGH,
-            progress=50.0,
+            progress=50,
             due_date=date(2025, 6, 1),
         )
 
         self.assertEqual(args.goal_name, "Important Goal")
+        self.assertEqual(args.description, "What this goal aims to achieve")
+        self.assertEqual(args.notes, "Milestones and references")
         self.assertEqual(args.status, GoalStatus.IN_PROGRESS)
         self.assertEqual(args.priority, Priority.HIGH)
-        self.assertEqual(args.progress, 50.0)
+        self.assertEqual(args.progress, 50)
         self.assertEqual(args.due_date, date(2025, 6, 1))
 
 
@@ -190,10 +196,11 @@ class TestGoalToolHandlers(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-goal", "goal_name": "New Goal"}
+        goal_name = "Run a half marathon by June"
+        mock_client.post.return_value = {"id": "new-goal", "goal_name": goal_name}
 
         tool = self.tool_dict["create_goal"]
-        args = GoalCreateRequest(goal_name="New Goal")
+        args = AgentGoalCreateArgs(goal_name=goal_name)
         result = tool.handler(args)
 
         mock_client.post.assert_called_once()

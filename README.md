@@ -336,6 +336,28 @@ Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely
 - **Safe**: Read-only or additive operations (e.g., query, get)
 - **Sensitive**: Destructive or irreversible operations (e.g., create, update, delete)
 
+#### Name Validation
+When creating items, the agent validates names to ensure they are descriptive and findable later:
+
+| Domain       | Min Length | Min Specific Words | Example Rejections                    |
+|--------------|------------|--------------------|-----------------------------------------|
+| Tasks        | 15 chars   | 2 words            | "email task", "fix bug", "meeting"      |
+| Goals        | 15 chars   | 2 words            | "fitness goal", "work stuff"            |
+| Reading List | 8 chars    | 1 word             | "article", "link", "book"               |
+
+If validation fails, the tool returns `needs_clarification: true` with the validation rules. The LLM knows these rules and will prompt for a more specific name. Users can override by insisting on the original name.
+
+#### Structured Content
+When creating items, the agent provides structured inputs that are automatically formatted into page content:
+
+| Domain       | Required Inputs | Optional Inputs | Output Format                          |
+|--------------|-----------------|-----------------|----------------------------------------|
+| Tasks        | `description`   | `notes`         | Description section + notes + footer   |
+| Goals        | `description`   | `notes`         | Description section + notes + footer   |
+| Reading List | -               | `notes`         | Notes section + footer                 |
+
+The agent cannot create arbitrary content - it must use these structured fields, which are then formatted via templates with an "AI Agent" attribution footer. This ensures consistent, well-structured page content.
+
 #### Available Tools
 The agent has 12 built-in tools organised by domain:
 

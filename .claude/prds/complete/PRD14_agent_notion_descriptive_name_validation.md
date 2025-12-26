@@ -1,6 +1,6 @@
 # PRD14: Agent Quality Prompts for Tasks and Goals
 
-**Status: PROPOSED**
+**Status: COMPLETE**
 
 **Depends on**: PRD13 (Page Content Support) - for content field on create requests
 
@@ -9,7 +9,6 @@
 When users create tasks or goals via the agent, they often:
 1. Use vague or ambiguous names ("email task", "meeting", "fix the bug")
 2. Provide no additional context or description
-3. Skip acceptance criteria or success metrics
 
 These items become meaningless when revisited weeks later. The agent should act as a helpful assistant that prompts for better details before creating items.
 
@@ -18,7 +17,7 @@ These items become meaningless when revisited weeks later. The agent should act 
 This PRD covers **agent-side improvements**:
 - Name validation logic
 - Prompting for descriptive names
-- Prompting for page content (descriptions, acceptance criteria)
+- Prompting for page content (descriptions)
 - Tool description updates
 - Template helper functions
 
@@ -28,7 +27,7 @@ Infrastructure (API content support) is covered in **PRD13**.
 
 1. **Name validation**: Detect vague or ambiguous names before creation
 2. **Clarification prompts**: Ask for better names when needed
-3. **Content prompts**: Ask for description/acceptance criteria
+3. **Content prompts**: Ask for description
 4. **Template builders**: Generate structured page content
 5. **Override capability**: Allow users to proceed if they insist
 
@@ -109,24 +108,15 @@ from datetime import date
 
 def build_task_content(
     description: str,
-    acceptance_criteria: list[str] | None = None,
     notes: str | None = None,
 ) -> str:
     """Build markdown content for a task page.
 
     :param description: What needs to be done and why.
-    :param acceptance_criteria: List of completion criteria.
     :param notes: Additional context or references.
     :returns: Formatted markdown string.
     """
     lines = ["## Description", description, ""]
-
-    if acceptance_criteria:
-        lines.append("## Acceptance Criteria")
-        for criterion in acceptance_criteria:
-            lines.append(f"- [ ] {criterion}")
-        lines.append("")
-
     if notes:
         lines.extend(["## Notes", notes, ""])
 
@@ -136,17 +126,10 @@ def build_task_content(
 
 def build_goal_content(
     description: str,
-    success_criteria: list[str] | None = None,
     notes: str | None = None,
 ) -> str:
     """Build markdown content for a goal page."""
     lines = ["## Description", description, ""]
-
-    if success_criteria:
-        lines.append("## Success Criteria")
-        for criterion in success_criteria:
-            lines.append(f"- [ ] {criterion}")
-        lines.append("")
 
     if notes:
         lines.extend(["## Notes", notes, ""])
@@ -204,8 +187,7 @@ ToolDef(
         "Create a new task. Requires a DESCRIPTIVE name (15+ chars), task group, and due date. "
         "BEFORE creating: "
         "1) Ensure name is specific (not 'email task' or 'meeting') "
-        "2) Ask what needs to be done (for description) "
-        "3) Ask how they'll know it's complete (for acceptance criteria) "
+        "2) Ask what needs to be done (for description) if needed"
         "Use build_task_content() to create the content parameter. "
         "If validation fails, needs_clarification=True is returned - ask for more detail."
     ),
@@ -218,8 +200,7 @@ ToolDef(
         "Create a new goal. Requires a DESCRIPTIVE name (15+ chars). "
         "BEFORE creating: "
         "1) Ensure name is specific (not 'fitness goal' or 'work stuff') "
-        "2) Ask what this goal aims to achieve (for description) "
-        "3) Ask how they'll measure success (for success criteria) "
+        "2) Ask what this goal aims to achieve (for description)"
         "Use build_goal_content() to create the content parameter."
     ),
 )
@@ -229,7 +210,6 @@ ToolDef(
     name="create_reading_item",
     description=(
         "Add an item to the reading list. Requires a title. "
-        "Optionally ask why they want to read it (for notes). "
         "Use build_reading_item_content() to create the content parameter."
     ),
 )
@@ -273,19 +253,12 @@ Which bug are you referring to? For example:
 
 User: "The null pointer in payment service"
 
-Agent: "Got it. And how will you know when it's fixed?"
-
-User: "When the tests pass and there are no NPEs in the logs"
-
 Agent: Creates task:
 - Name: "Fix null pointer exception in payment service"
 - Content:
   ## Description
   Fix the null pointer exception occurring in the payment service.
 
-  ## Acceptance Criteria
-  - [ ] All tests pass
-  - [ ] No NPEs in production logs
 ```
 
 ### Task with Good Name
@@ -301,10 +274,7 @@ Agent: Creates task:
 - Due: Friday
 - Content:
   ## Description
-  Review the Q4 budget proposal from Sarah.
-
-  ## Acceptance Criteria
-  - [ ] Verify numbers add up correctly
+  Review the Q4 budget proposal from Sarah and verify numbers add up correctly
 ```
 
 ### User Override

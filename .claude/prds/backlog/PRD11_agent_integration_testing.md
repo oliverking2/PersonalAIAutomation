@@ -211,9 +211,85 @@ class TestConversationFlows(unittest.TestCase):
         self.assertIn("christmas cards", result.response)
 ```
 
+### 11. Name Validation Flow
+**Scenario**: User provides a vague name, agent prompts for clarification.
+
+```
+User: "Create a task called 'email'"
+Agent: "'email' is quite short. Can you add more detail?"
+User: "Review and respond to client emails from last week"
+→ Task is created with descriptive name
+```
+
+**Assertions**:
+- `needs_clarification: true` is returned on first attempt
+- Validation rules are included in response
+- After clarification, task is created successfully
+- Content is built from description/notes fields
+
+### 12. Name Validation Override
+**Scenario**: User insists on short name after validation failure.
+
+```
+User: "Create a task called 'emails'"
+Agent: "That name is a bit vague..."
+User: "Just create it as 'emails', I'll know what it means"
+→ Agent creates task with short name (user override)
+```
+
+**Assertions**:
+- First attempt returns `needs_clarification`
+- User can override by insisting
+- Agent respects user preference
+
+### 13. Content Template Flow
+**Scenario**: Agent uses structured inputs for content creation.
+
+```
+User: "Create a task to review the Q4 budget proposal"
+Agent: [provides description and notes]
+→ Content is built: "## Description\n{description}\n\n## Notes\n{notes}\n\n---\nCreated via AI Agent..."
+```
+
+**Assertions**:
+- Agent provides `description` field (required for tasks/goals)
+- Content is NOT passed directly
+- Template formats content correctly
+- Attribution footer is included
+
+### 14. Reading List Looser Validation
+**Scenario**: Reading items have looser validation than tasks.
+
+```
+User: "Add 'Clean Code' to my reading list"
+→ Passes validation (8+ chars, 1+ specific word)
+
+User: "Add 'article' to my reading list"
+→ Fails validation (all vague words)
+```
+
+**Assertions**:
+- Short but specific titles pass (e.g., "Clean Code")
+- Generic titles fail (e.g., "article", "link")
+- Different vague word list used for reading items
+
 ## Implementation Notes
 
 - Consider using pytest fixtures for common setups
 - May need deterministic mock responses (not real LLM)
 - Could use recorded conversations for regression testing
 - Integration with CI/CD for automated testing
+
+## Manual Testing Checklist
+
+These scenarios can be tested manually against a running agent:
+
+### Quick Validation Tests
+1. **Too short**: "Create a task called 'fix bug'" → Should prompt for more detail
+2. **Vague words only**: "Create a task: meeting preparation" → Should reject
+3. **Good name**: "Review authentication module security" → Should proceed
+
+### Quick Content Tests
+1. Create a task and check the Notion page has formatted content
+2. Verify the "Created via AI Agent" footer appears
+3. Check that description and notes are in separate sections
