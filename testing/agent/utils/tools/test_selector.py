@@ -11,8 +11,8 @@ from src.agent.bedrock_client import BedrockClient
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import BedrockClientError, ToolSelectionError
 from src.agent.models import ToolDef
-from src.agent.tool_registry import ToolRegistry
-from src.agent.tool_selector import ToolSelector
+from src.agent.utils.tools.registry import ToolRegistry
+from src.agent.utils.tools.selector import ToolSelector
 
 
 class DummyArgs(BaseModel):

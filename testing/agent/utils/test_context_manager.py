@@ -5,7 +5,9 @@ import uuid
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
-from src.agent.context_manager import (
+from src.agent.exceptions import BedrockClientError
+from src.agent.models import ConversationState, PendingConfirmation
+from src.agent.utils.context_manager import (
     _format_messages_for_summary,
     append_messages,
     apply_sliding_window,
@@ -16,8 +18,6 @@ from src.agent.context_manager import (
     set_pending_confirmation,
     should_summarise,
 )
-from src.agent.exceptions import BedrockClientError
-from src.agent.models import ConversationState, PendingConfirmation
 
 
 class TestLoadConversationState(unittest.TestCase):

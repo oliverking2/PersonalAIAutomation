@@ -25,11 +25,15 @@ from src.agent.models import (
     ToolSelectionResult,
 )
 from src.agent.runner import AgentRunner
-from src.agent.tool_registry import ToolRegistry, create_default_registry
-from src.agent.tool_selector import ToolSelector
+from src.agent.utils.config import DEFAULT_AGENT_CONFIG, MODEL_PRICING, AgentConfig, ModelPricing
+from src.agent.utils.tools.registry import ToolRegistry, create_default_registry
+from src.agent.utils.tools.selector import ToolSelector
 
 __all__ = [
+    "DEFAULT_AGENT_CONFIG",
     "MODEL_ALIASES",
+    "MODEL_PRICING",
+    "AgentConfig",
     "AgentError",
     "AgentRunResult",
     "AgentRunner",
@@ -38,6 +42,7 @@ __all__ = [
     "ConfirmationRequest",
     "DuplicateToolError",
     "MaxStepsExceededError",
+    "ModelPricing",
     "RiskLevel",
     "ToolCall",
     "ToolDef",

@@ -1,35 +1,8 @@
-"""Pricing configuration for LLM models."""
+"""Pricing calculations for LLM models."""
 
 from decimal import Decimal
-from typing import NamedTuple
 
-
-class ModelPricing(NamedTuple):
-    """Pricing per 1,000 tokens for a model."""
-
-    input_per_1k: Decimal
-    output_per_1k: Decimal
-    cache_read_per_1k: Decimal
-
-
-# Pricing per 1,000 tokens (as of December 2025)
-MODEL_PRICING: dict[str, ModelPricing] = {
-    "haiku": ModelPricing(
-        input_per_1k=Decimal("0.001"),
-        output_per_1k=Decimal("0.005"),
-        cache_read_per_1k=Decimal("0.0001"),
-    ),
-    "sonnet": ModelPricing(
-        input_per_1k=Decimal("0.003"),
-        output_per_1k=Decimal("0.015"),
-        cache_read_per_1k=Decimal("0.0003"),
-    ),
-    "opus": ModelPricing(
-        input_per_1k=Decimal("0.005"),
-        output_per_1k=Decimal("0.025"),
-        cache_read_per_1k=Decimal("0.0005"),
-    ),
-}
+from src.agent.utils.config import MODEL_PRICING
 
 
 def calculate_cost(

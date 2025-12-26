@@ -35,7 +35,8 @@ Wrap tool execution with `concurrent.futures.ThreadPoolExecutor` and configurabl
 # src/agent/runner.py
 
 import concurrent.futures
-from src.agent.config import AgentConfig
+from src.agent.utils.config import AgentConfig
+
 
 class AgentRunner:
     def __init__(self, config: AgentConfig = DEFAULT_CONFIG):
@@ -43,9 +44,9 @@ class AgentRunner:
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
     def _execute_tool(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
+            self,
+            tool_name: str,
+            tool_input: dict[str, Any],
     ) -> dict[str, Any]:
         """Execute a tool handler with timeout protection.
 

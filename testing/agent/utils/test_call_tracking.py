@@ -6,13 +6,13 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
-from src.agent.call_tracking import (
+from src.agent.enums import CallType
+from src.agent.utils.call_tracking import (
     LLMCallRecord,
     TrackingContext,
     get_tracking_context,
     set_tracking_context,
 )
-from src.agent.enums import CallType
 
 
 class TestLLMCallRecord(unittest.TestCase):
@@ -257,7 +257,7 @@ class TestTrackingContextVar(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch("src.agent.call_tracking._tracking_context")
+    @patch("src.agent.utils.call_tracking._tracking_context")
     def test_context_isolation(self, mock_context_var: unittest.mock.MagicMock) -> None:
         """Should use ContextVar for thread-safe isolation."""
         context = TrackingContext(

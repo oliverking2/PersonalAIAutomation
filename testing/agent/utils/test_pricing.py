@@ -3,7 +3,7 @@
 import unittest
 from decimal import Decimal
 
-from src.agent.pricing import MODEL_PRICING, calculate_cost
+from src.agent.utils.pricing import MODEL_PRICING, calculate_cost
 
 
 class TestModelPricing(unittest.TestCase):

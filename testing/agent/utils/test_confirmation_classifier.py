@@ -3,14 +3,14 @@
 import unittest
 from unittest.mock import MagicMock
 
-from src.agent.confirmation_classifier import (
+from src.agent.enums import ConfirmationType
+from src.agent.exceptions import BedrockClientError
+from src.agent.models import PendingConfirmation
+from src.agent.utils.confirmation_classifier import (
     ClassificationParseError,
     _parse_classification_response,
     classify_confirmation_response,
 )
-from src.agent.enums import ConfirmationType
-from src.agent.exceptions import BedrockClientError
-from src.agent.models import PendingConfirmation
 
 
 class TestParseClassificationResponse(unittest.TestCase):

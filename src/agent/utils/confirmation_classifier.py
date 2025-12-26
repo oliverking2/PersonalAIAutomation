@@ -9,14 +9,12 @@ from typing import TYPE_CHECKING
 from src.agent.bedrock_client import BedrockClient
 from src.agent.enums import CallType, ConfirmationType
 from src.agent.exceptions import BedrockClientError
+from src.agent.utils.config import DEFAULT_AGENT_CONFIG
 
 if TYPE_CHECKING:
     from src.agent.models import PendingConfirmation
 
 logger = logging.getLogger(__name__)
-
-# Maximum number of retries for classification
-MAX_CLASSIFICATION_RETRIES = 2
 
 CLASSIFIER_SYSTEM_PROMPT = """You are a confirmation classifier. Given a pending action and a user's response, determine if the user is:
 1. CONFIRM - agreeing to proceed (e.g., "yes", "yep", "sure", "go ahead", "do it", "ok", "sounds good")
@@ -58,13 +56,14 @@ def classify_confirmation_response(
     Uses Haiku to determine if the user's message is a confirmation,
     denial, or a new intent unrelated to the pending action.
 
-    Retries on parse failures up to MAX_CLASSIFICATION_RETRIES times.
+    Retries on parse failures up to max_classification_retries times.
 
     :param client: Bedrock client for LLM calls.
     :param user_message: The user's response message.
     :param pending: The pending confirmation details.
     :returns: Classification of the user's response.
     """
+    max_retries = DEFAULT_AGENT_CONFIG.max_classification_retries
     user_prompt = f"""Pending action: {pending.action_summary}
 Tool: {pending.tool_name}
 Arguments: {pending.input_args}
@@ -75,7 +74,7 @@ Classify this response."""
 
     last_error: Exception | None = None
 
-    for attempt in range(MAX_CLASSIFICATION_RETRIES + 1):
+    for attempt in range(max_retries + 1):
         try:
             response = client.converse(
                 messages=[client.create_user_message(user_prompt)],
@@ -99,10 +98,10 @@ Classify this response."""
 
         except ClassificationParseError as e:
             last_error = e
-            if attempt < MAX_CLASSIFICATION_RETRIES:
+            if attempt < max_retries:
                 logger.warning(
                     f"Classification parse failed (attempt {attempt + 1}/"
-                    f"{MAX_CLASSIFICATION_RETRIES + 1}), retrying: {e}"
+                    f"{max_retries + 1}), retrying: {e}"
                 )
             continue
 
@@ -111,11 +110,9 @@ Classify this response."""
             raise ClassificationParseError(f"Classification API call failed: {e}") from e
 
     # All retries exhausted - raise error instead of silently defaulting
-    logger.error(
-        f"Classification failed after {MAX_CLASSIFICATION_RETRIES + 1} attempts: {last_error}"
-    )
+    logger.error(f"Classification failed after {max_retries + 1} attempts: {last_error}")
     raise ClassificationParseError(
-        f"Failed to classify response after {MAX_CLASSIFICATION_RETRIES + 1} attempts: {last_error}"
+        f"Failed to classify response after {max_retries + 1} attempts: {last_error}"
     )
 
 

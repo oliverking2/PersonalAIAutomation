@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent.enums import CallType
 from src.agent.exceptions import BedrockClientError
 from src.agent.models import ConversationState, PendingConfirmation
+from src.agent.utils.config import DEFAULT_AGENT_CONFIG
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -18,13 +19,6 @@ if TYPE_CHECKING:
     from src.database.agent_tracking import AgentConversation
 
 logger = logging.getLogger(__name__)
-
-# Default sliding window size (number of messages to keep in full)
-DEFAULT_WINDOW_SIZE = 15
-
-# Batch threshold: number of messages above window before summarisation triggers
-# This prevents summarising 1 message at a time and batches the summarisation work
-DEFAULT_BATCH_THRESHOLD = 5
 
 SUMMARY_SYSTEM_PROMPT = """You are a conversation summariser. Generate a concise summary that captures:
 - Key facts mentioned by the user
@@ -117,8 +111,8 @@ def append_messages(
 
 def should_summarise(
     state: ConversationState,
-    window_size: int = DEFAULT_WINDOW_SIZE,
-    batch_threshold: int = DEFAULT_BATCH_THRESHOLD,
+    window_size: int | None = None,
+    batch_threshold: int | None = None,
 ) -> bool:
     """Check if the conversation needs summarisation.
 
@@ -127,17 +121,23 @@ def should_summarise(
 
     :param state: Conversation state to check.
     :param window_size: Size of the message window to retain.
+        Defaults to DEFAULT_AGENT_CONFIG.window_size.
     :param batch_threshold: Number of messages above window before summarising.
+        Defaults to DEFAULT_AGENT_CONFIG.batch_threshold.
     :returns: True if summarisation is needed.
     """
+    if window_size is None:
+        window_size = DEFAULT_AGENT_CONFIG.window_size
+    if batch_threshold is None:
+        batch_threshold = DEFAULT_AGENT_CONFIG.batch_threshold
     return len(state.messages) > (window_size + batch_threshold)
 
 
 def apply_sliding_window(
     state: ConversationState,
     client: BedrockClient,
-    window_size: int = DEFAULT_WINDOW_SIZE,
-    batch_threshold: int = DEFAULT_BATCH_THRESHOLD,
+    window_size: int | None = None,
+    batch_threshold: int | None = None,
 ) -> None:
     """Apply sliding window to messages, summarising older content.
 
@@ -152,8 +152,14 @@ def apply_sliding_window(
     :param state: Conversation state to update.
     :param client: Bedrock client for summarisation.
     :param window_size: Number of recent messages to keep in full.
+        Defaults to DEFAULT_AGENT_CONFIG.window_size.
     :param batch_threshold: Number of messages above window before summarising.
+        Defaults to DEFAULT_AGENT_CONFIG.batch_threshold.
     """
+    if window_size is None:
+        window_size = DEFAULT_AGENT_CONFIG.window_size
+    if batch_threshold is None:
+        batch_threshold = DEFAULT_AGENT_CONFIG.batch_threshold
     if not should_summarise(state, window_size, batch_threshold):
         return
 

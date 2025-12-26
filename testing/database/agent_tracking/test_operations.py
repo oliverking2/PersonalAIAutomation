@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 from sqlalchemy.exc import NoResultFound
 
-from src.agent.call_tracking import TrackingContext
 from src.agent.enums import CallType
+from src.agent.utils.call_tracking import TrackingContext
 from src.database.agent_tracking import (
     AgentConversation,
     AgentRun,

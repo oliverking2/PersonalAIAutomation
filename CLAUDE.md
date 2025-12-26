@@ -207,6 +207,7 @@ The agent module provides AI-powered tool calling via AWS Bedrock:
 src/agent/
 ├── __init__.py           # Exports public API
 ├── client.py             # BedrockClient for Converse API
+├── config.py             # AgentConfig, MODEL_PRICING (centralised constants)
 ├── models.py             # ToolDef, ToolMetadata, ToolSelectionResult
 ├── registry.py           # ToolRegistry for tool management
 ├── selector.py           # ToolSelector (AI-first with fallback)
@@ -221,6 +222,19 @@ src/agent/
 - Reuse argument models from domain modules where possible
 - Call domain clients/parsers, never duplicate their logic
 - Only add tool-specific concerns (ToolDef metadata, serialisation)
+
+### Agent Configuration
+
+All agent configuration is centralised in `src/agent/config.py`:
+
+- `AgentConfig`: Frozen dataclass with all tuneable parameters
+- `DEFAULT_AGENT_CONFIG`: Default configuration singleton
+- `MODEL_PRICING`: Per-model token pricing
+
+When adding new configuration:
+1. Add the field to `AgentConfig` with a sensible default
+2. Update consuming code to use `config.field_name`
+3. Document the field in the class docstring
 
 ## Coding Style
 - Ruff compatible formatting. Follow settings in `pyproject.toml`.

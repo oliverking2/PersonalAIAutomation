@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any
 
 from src.agent.enums import CallType
-from src.agent.pricing import calculate_cost
+from src.agent.utils.pricing import calculate_cost
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,7 @@ from src.agent.bedrock_client import BedrockClient
 from src.agent.enums import CallType, RiskLevel
 from src.agent.exceptions import BedrockClientError, ToolSelectionError
 from src.agent.models import ToolMetadata, ToolSelectionResult
-from src.agent.tool_registry import ToolRegistry
+from src.agent.utils.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 

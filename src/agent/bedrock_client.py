@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING, Any
 import boto3
 from botocore.exceptions import ClientError
 
-from src.agent.call_tracking import get_tracking_context
 from src.agent.enums import CallType
 from src.agent.exceptions import BedrockClientError
+from src.agent.utils.call_tracking import get_tracking_context
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime import BedrockRuntimeClient

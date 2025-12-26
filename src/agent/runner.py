@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -12,20 +11,6 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from src.agent.bedrock_client import BedrockClient
-from src.agent.call_tracking import TrackingContext, set_tracking_context
-from src.agent.confirmation_classifier import (
-    ClassificationParseError,
-    classify_confirmation_response,
-)
-from src.agent.context_manager import (
-    append_messages,
-    apply_sliding_window,
-    build_context_messages,
-    clear_pending_confirmation,
-    load_conversation_state,
-    save_conversation_state,
-    set_pending_confirmation,
-)
 from src.agent.enums import ConfirmationType, RiskLevel
 from src.agent.exceptions import (
     BedrockClientError,
@@ -40,8 +25,23 @@ from src.agent.models import (
     ToolCall,
     ToolDef,
 )
-from src.agent.tool_registry import ToolRegistry
-from src.agent.tool_selector import ToolSelector
+from src.agent.utils.call_tracking import TrackingContext, set_tracking_context
+from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
+from src.agent.utils.confirmation_classifier import (
+    ClassificationParseError,
+    classify_confirmation_response,
+)
+from src.agent.utils.context_manager import (
+    append_messages,
+    apply_sliding_window,
+    build_context_messages,
+    clear_pending_confirmation,
+    load_conversation_state,
+    save_conversation_state,
+    set_pending_confirmation,
+)
+from src.agent.utils.tools.registry import ToolRegistry
+from src.agent.utils.tools.selector import ToolSelector
 from src.database.agent_tracking import (
     complete_agent_run,
     create_agent_conversation,
@@ -58,17 +58,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-# Default maximum number of tool execution steps
-DEFAULT_MAX_STEPS = 5
-
-# Default model aliases
-DEFAULT_SELECTOR_MODEL = "haiku"
-DEFAULT_CHAT_MODEL = "sonnet"
-
-# Environment variable names for model configuration
-ENV_SELECTOR_MODEL = "AGENT_SELECTOR_MODEL"
-ENV_CHAT_MODEL = "AGENT_CHAT_MODEL"
 
 # Default system prompt for the agent (use {current_date} placeholder)
 DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, and reading lists.
@@ -121,42 +110,31 @@ class AgentRunner:
     - Sliding window context management
     """
 
-    def __init__(  # noqa: PLR0913 - Agent has multiple configuration options
+    def __init__(
         self,
         registry: ToolRegistry,
         client: BedrockClient | None = None,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
-        max_steps: int = DEFAULT_MAX_STEPS,
         require_confirmation: bool = True,
-        selector_model: str | None = None,
-        chat_model: str | None = None,
+        config: AgentConfig = DEFAULT_AGENT_CONFIG,
     ) -> None:
         """Initialise the agent runner.
 
         :param registry: Tool registry containing available tools.
         :param client: Bedrock client for LLM calls. Creates one if not provided.
         :param system_prompt: System prompt for the agent.
-        :param max_steps: Maximum number of tool execution steps.
         :param require_confirmation: Whether to require confirmation for sensitive tools.
-        :param selector_model: Model for tool selection. Defaults to AGENT_SELECTOR_MODEL
-            env var or 'haiku'.
-        :param chat_model: Model for chat/tool execution. Defaults to AGENT_CHAT_MODEL
-            env var or 'sonnet'.
+        :param config: Agent configuration. Defaults to DEFAULT_AGENT_CONFIG.
         """
         self.registry = registry
         self.client = client or BedrockClient()
         self.system_prompt = system_prompt
-        self.max_steps = max_steps
         self.require_confirmation = require_confirmation
-
-        # Resolve model aliases from env vars or defaults
-        self.selector_model = (
-            selector_model or os.environ.get(ENV_SELECTOR_MODEL) or DEFAULT_SELECTOR_MODEL
-        )
-        self.chat_model = chat_model or os.environ.get(ENV_CHAT_MODEL) or DEFAULT_CHAT_MODEL
+        self._config = config
 
         logger.debug(
-            f"Agent models configured: selector={self.selector_model}, chat={self.chat_model}"
+            f"Agent configured: selector={self._config.selector_model}, "
+            f"chat={self._config.chat_model}, max_steps={self._config.max_steps}"
         )
 
         # Create internal tool selector
@@ -439,7 +417,7 @@ class AgentRunner:
         # Select tools - additive mode if we have current tools
         selection = self._selector.select(
             user_message,
-            model=self.selector_model,
+            model=self._config.selector_model,
             current_tools=current_tools,
         )
 
@@ -567,7 +545,8 @@ class AgentRunner:
         )
 
         logger.info(
-            f"Starting agent run: tools={all_tool_names or '(none)'}, max_steps={self.max_steps}"
+            f"Starting agent run: tools={all_tool_names or '(none)'}, "
+            f"max_steps={self._config.max_steps}"
         )
 
         return self._run_agent_loop(state, tool_config, conv_state)
@@ -586,9 +565,9 @@ class AgentRunner:
         :returns: Result of the agent run.
         """
         while True:
-            if state.steps_taken >= self.max_steps:
-                logger.warning(f"Agent exceeded max steps: max={self.max_steps}")
-                raise MaxStepsExceededError(self.max_steps, state.steps_taken)
+            if state.steps_taken >= self._config.max_steps:
+                logger.warning(f"Agent exceeded max steps: max={self._config.max_steps}")
+                raise MaxStepsExceededError(self._config.max_steps, state.steps_taken)
 
             response = self._call_llm(state.messages, tool_config)
             stop_reason = self.client.get_stop_reason(response)
@@ -617,7 +596,7 @@ class AgentRunner:
         try:
             return self.client.converse(
                 messages=messages,
-                model_id=self.chat_model,
+                model_id=self._config.chat_model,
                 system_prompt=formatted_prompt,
                 tool_config=tool_config,
                 cache_system_prompt=True,

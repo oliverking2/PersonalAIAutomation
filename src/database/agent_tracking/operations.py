@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 from src.database.agent_tracking.models import AgentConversation, AgentRun, LLMCall
 
 if TYPE_CHECKING:
-    from src.agent.call_tracking import LLMCallRecord, TrackingContext
+    from src.agent.utils.call_tracking import LLMCallRecord, TrackingContext
 
 logger = logging.getLogger(__name__)
 

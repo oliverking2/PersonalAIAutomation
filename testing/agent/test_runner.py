@@ -10,8 +10,9 @@ from pydantic import BaseModel
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError
 from src.agent.models import ToolDef
-from src.agent.runner import DEFAULT_MAX_STEPS, DEFAULT_SYSTEM_PROMPT, AgentRunner
-from src.agent.tool_registry import ToolRegistry
+from src.agent.runner import DEFAULT_SYSTEM_PROMPT, AgentRunner
+from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
+from src.agent.utils.tools.registry import ToolRegistry
 
 
 class DummyArgs(BaseModel):
@@ -102,21 +103,22 @@ class TestAgentRunner(unittest.TestCase):
             runner = AgentRunner(registry=self.registry)
 
             self.assertEqual(runner.system_prompt, DEFAULT_SYSTEM_PROMPT)
-            self.assertEqual(runner.max_steps, DEFAULT_MAX_STEPS)
+            self.assertEqual(runner._config.max_steps, DEFAULT_AGENT_CONFIG.max_steps)
             self.assertTrue(runner.require_confirmation)
 
     def test_init_with_custom_values(self) -> None:
         """Test initialisation with custom values."""
+        custom_config = AgentConfig(max_steps=10)
         runner = AgentRunner(
             registry=self.registry,
             client=self.mock_client,
             system_prompt="Custom prompt",
-            max_steps=10,
             require_confirmation=False,
+            config=custom_config,
         )
 
         self.assertEqual(runner.system_prompt, "Custom prompt")
-        self.assertEqual(runner.max_steps, 10)
+        self.assertEqual(runner._config.max_steps, 10)
         self.assertFalse(runner.require_confirmation)
 
     @patch("src.agent.runner.complete_agent_run")
@@ -391,10 +393,11 @@ class TestAgentRunner(unittest.TestCase):
             "content": [{"toolResult": {"toolUseId": "tool-x"}}],
         }
 
+        config = AgentConfig(max_steps=3)
         runner = AgentRunner(
             registry=self.registry,
             client=self.mock_client,
-            max_steps=3,
+            config=config,
         )
 
         with self.assertRaises(MaxStepsExceededError) as ctx:
