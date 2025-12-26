@@ -1,9 +1,7 @@
 # Roadmap
 
 ## Notion
-- Existing Task checks
-  - Long term: maybe needs a clever incremental extract into a db of current tasks to store task names to save a large extract each time.
-    so each time a request is made we do an incremental extract of tasks, update db then read from db.
+- Idea Tracker - ensure there is a decent description of the idea
 
 ## Orchestration
 - Notion
@@ -29,14 +27,18 @@
 - Add in AI for summarising news articles
 - Standardise JSON validation when getting data from AI
 
-## Telegram
+## Telegram Agent
+- Multiple messages needing to be processed at once
 - Add in AI for 2-way chat
 - Add Notion tasks/goals/reading lists via the Telegram chat
+  - needs to title case names and add descriptions if needed
+  - force a better/clearer task definition if it is vague
 
 ## Other
 - Host application
 - Add CI/CD
 - Connect GlitchTip to Telegram using webhook and FastAPI
+- Split unit test and integration testing, pytest for parallisation and runs on running with Claude
 
 # Roadmap Ideas for Consideration
 

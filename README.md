@@ -544,7 +544,7 @@ API wrapper for Notion to query and manage tasks, goals, and reading items. The 
 
 #### Task Fields
 Task endpoints validate field values using enums:
-- **Status**: Thought, Not started, In progress, Done
+- **Status**: Not started, In progress, Done
 - **Priority**: High, Medium, Low
 - **Effort level**: Small, Medium, Large
 - **Task Group**: Personal, Work, Photography
