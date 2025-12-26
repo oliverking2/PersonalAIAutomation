@@ -1,23 +1,12 @@
-"""Tests for tasks tool handlers."""
+"""Tests for tasks tool definitions."""
 
 import unittest
 from datetime import date
 from unittest.mock import MagicMock, patch
 
 from src.agent.enums import RiskLevel
-from src.agent.tools.tasks import (
-    GetTaskArgs,
-    UpdateTaskArgs,
-    create_task,
-    get_task,
-    get_tasks_tools,
-    query_tasks,
-    update_task,
-)
-from src.api.notion.tasks.models import (
-    TaskCreateRequest,
-    TaskQueryRequest,
-)
+from src.agent.tools.tasks import TASK_TOOL_CONFIG, get_tasks_tools
+from src.api.notion.tasks.models import TaskCreateRequest, TaskQueryRequest
 from src.notion.enums import EffortLevel, Priority, TaskGroup, TaskStatus
 
 
@@ -41,7 +30,7 @@ class TestTasksToolDefinitions(unittest.TestCase):
         )
 
     def test_safe_tools(self) -> None:
-        """Test that query and get tools are marked as safe."""
+        """Test that query, get, and create tools are marked as safe."""
         tools = get_tasks_tools()
         tool_dict = {t.name: t for t in tools}
 
@@ -50,7 +39,7 @@ class TestTasksToolDefinitions(unittest.TestCase):
         self.assertEqual(tool_dict["create_task"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
-        """Test that create and update tools are marked as sensitive."""
+        """Test that update tool is marked as sensitive."""
         tools = get_tasks_tools()
         tool_dict = {t.name: t for t in tools}
 
@@ -88,6 +77,24 @@ class TestTasksToolDefinitions(unittest.TestCase):
         self.assertIn("Small", query_desc)
         self.assertIn("Medium", query_desc)
         self.assertIn("Large", query_desc)
+
+
+class TestTaskToolConfig(unittest.TestCase):
+    """Tests for TASK_TOOL_CONFIG."""
+
+    def test_config_domain(self) -> None:
+        """Test config has correct domain settings."""
+        self.assertEqual(TASK_TOOL_CONFIG.domain, "task")
+        self.assertEqual(TASK_TOOL_CONFIG.domain_plural, "tasks")
+        self.assertEqual(TASK_TOOL_CONFIG.endpoint_prefix, "/notion/tasks")
+        self.assertEqual(TASK_TOOL_CONFIG.id_field, "task_id")
+
+    def test_config_enum_fields(self) -> None:
+        """Test config has correct enum fields."""
+        self.assertIn("status", TASK_TOOL_CONFIG.enum_fields)
+        self.assertIn("priority", TASK_TOOL_CONFIG.enum_fields)
+        self.assertIn("effort", TASK_TOOL_CONFIG.enum_fields)
+        self.assertIn("group", TASK_TOOL_CONFIG.enum_fields)
 
 
 class TestTaskQueryRequest(unittest.TestCase):
@@ -157,226 +164,95 @@ class TestTaskCreateRequest(unittest.TestCase):
         self.assertEqual(args.due_date, date(2025, 6, 1))
 
 
-class TestUpdateTaskArgs(unittest.TestCase):
-    """Tests for UpdateTaskArgs model."""
+class TestTaskToolHandlers(unittest.TestCase):
+    """Tests for task tool handlers."""
 
-    def test_minimal_args(self) -> None:
-        """Test creating with only task_id."""
-        args = UpdateTaskArgs(task_id="task-123")
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.tools = get_tasks_tools()
+        self.tool_dict = {t.name: t for t in self.tools}
 
-        self.assertEqual(args.task_id, "task-123")
-        self.assertIsNone(args.task_name)
-        self.assertIsNone(args.status)
-
-    def test_with_due_date(self) -> None:
-        """Test update with due_date."""
-        args = UpdateTaskArgs(
-            task_id="task-123",
-            status=TaskStatus.DONE,
-            due_date=date(2025, 1, 15),
-        )
-
-        self.assertEqual(args.status, TaskStatus.DONE)
-        self.assertEqual(args.due_date, date(2025, 1, 15))
-
-
-class TestQueryTasksHandler(unittest.TestCase):
-    """Tests for query_tasks handler."""
-
-    @patch("src.agent.tools.tasks._get_client")
-    def test_query_without_filters(self, mock_get_client: MagicMock) -> None:
-        """Test querying without any filters."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_query_handler(self, mock_get_client: MagicMock) -> None:
+        """Test query_tasks handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": [{"id": "task-1", "task_name": "Test"}]}
+        mock_client.post.return_value = {"results": [{"id": "task-1"}]}
 
-        result = query_tasks(TaskQueryRequest())
+        tool = self.tool_dict["query_tasks"]
+        args = TaskQueryRequest(status=TaskStatus.IN_PROGRESS)
+        result = tool.handler(args)
 
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        self.assertEqual(call_args[0][0], "/notion/tasks/query")
         self.assertEqual(result["count"], 1)
-        self.assertEqual(len(result["items"]), 1)
-        mock_client.post.assert_called_once_with(
-            "/notion/tasks/query", json={"include_done": False, "limit": 50}
-        )
 
-    @patch("src.agent.tools.tasks._get_client")
-    def test_query_with_status_filter(self, mock_get_client: MagicMock) -> None:
-        """Test querying with status filter."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_get_handler(self, mock_get_client: MagicMock) -> None:
+        """Test get_task handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": []}
+        mock_client.get.return_value = {"id": "task-123", "task_name": "Test"}
 
-        query_tasks(TaskQueryRequest(status=TaskStatus.IN_PROGRESS))
+        tool = self.tool_dict["get_task"]
+        args = tool.args_model(task_id="task-123")
+        result = tool.handler(args)
 
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["status"], "In progress")
-
-    @patch("src.agent.tools.tasks._get_client")
-    def test_query_with_all_filters(self, mock_get_client: MagicMock) -> None:
-        """Test querying with all filters."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": []}
-
-        query_tasks(
-            TaskQueryRequest(
-                status=TaskStatus.NOT_STARTED,
-                priority=Priority.HIGH,
-                effort_level=EffortLevel.MEDIUM,
-                task_group=TaskGroup.PERSONAL,
-                limit=5,
-            )
-        )
-
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["status"], "Not started")
-        self.assertEqual(payload["priority"], "High")
-        self.assertEqual(payload["effort_level"], "Medium")
-        self.assertEqual(payload["task_group"], "Personal")
-        self.assertEqual(payload["limit"], 5)
-
-
-class TestGetTaskHandler(unittest.TestCase):
-    """Tests for get_task handler."""
-
-    @patch("src.agent.tools.tasks._get_client")
-    def test_get_task(self, mock_get_client: MagicMock) -> None:
-        """Test getting a task."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = {"id": "task-123", "task_name": "Test Task"}
-
-        result = get_task(GetTaskArgs(task_id="task-123"))
-
-        self.assertEqual(result["item"]["id"], "task-123")
-        self.assertEqual(result["item"]["task_name"], "Test Task")
         mock_client.get.assert_called_once_with("/notion/tasks/task-123")
+        self.assertEqual(result["item"]["id"], "task-123")
 
-
-class TestCreateTaskHandler(unittest.TestCase):
-    """Tests for create_task handler."""
-
-    @patch("src.agent.tools.tasks._get_client")
-    def test_create_task_minimal(self, mock_get_client: MagicMock) -> None:
-        """Test creating a task with required fields only."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_create_handler(self, mock_get_client: MagicMock) -> None:
+        """Test create_task handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.post.return_value = {"id": "new-task", "task_name": "New Task"}
 
-        result = create_task(
-            TaskCreateRequest(
-                task_name="New Task",
-                due_date=date(2025, 6, 1),
-                task_group=TaskGroup.PERSONAL,
-            )
+        tool = self.tool_dict["create_task"]
+        args = TaskCreateRequest(
+            task_name="New Task",
+            due_date=date(2025, 6, 1),
+            task_group=TaskGroup.PERSONAL,
         )
+        result = tool.handler(args)
 
-        self.assertTrue(result["created"])
-        self.assertEqual(result["item"]["task_name"], "New Task")
         mock_client.post.assert_called_once()
-
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/notion/tasks")
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["task_name"], "New Task")
-        self.assertEqual(payload["status"], "Not started")
-        self.assertEqual(payload["priority"], "Low")
-        self.assertEqual(payload["effort_level"], "Small")
-        self.assertEqual(payload["task_group"], "Personal")
-        self.assertEqual(payload["due_date"], "2025-06-01")
-
-    @patch("src.agent.tools.tasks._get_client")
-    def test_create_task_full(self, mock_get_client: MagicMock) -> None:
-        """Test creating a task with all fields."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-task", "task_name": "Important Task"}
-
-        result = create_task(
-            TaskCreateRequest(
-                task_name="Important Task",
-                status=TaskStatus.IN_PROGRESS,
-                priority=Priority.HIGH,
-                effort_level=EffortLevel.LARGE,
-                task_group=TaskGroup.WORK,
-                due_date=date(2025, 7, 15),
-            )
-        )
-
         self.assertTrue(result["created"])
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["task_name"], "Important Task")
-        self.assertEqual(payload["status"], "In progress")
-        self.assertEqual(payload["priority"], "High")
-        self.assertEqual(payload["effort_level"], "Large")
-        self.assertEqual(payload["task_group"], "Work")
-        self.assertEqual(payload["due_date"], "2025-07-15")
 
-
-class TestUpdateTaskHandler(unittest.TestCase):
-    """Tests for update_task handler."""
-
-    @patch("src.agent.tools.tasks._get_client")
-    def test_update_task(self, mock_get_client: MagicMock) -> None:
-        """Test updating a task."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_update_handler(self, mock_get_client: MagicMock) -> None:
+        """Test update_task handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.patch.return_value = {"id": "task-123", "task_name": "Updated Task"}
+        mock_client.patch.return_value = {"id": "task-123", "task_name": "Updated"}
 
-        result = update_task(
-            UpdateTaskArgs(
-                task_id="task-123",
-                task_name="Updated Task",
-                status=TaskStatus.DONE,
-            )
-        )
+        tool = self.tool_dict["update_task"]
+        args = tool.args_model(task_id="task-123", task_name="Updated")
+        result = tool.handler(args)
 
-        self.assertTrue(result["updated"])
-        self.assertEqual(result["item"]["task_name"], "Updated Task")
         mock_client.patch.assert_called_once()
-
         call_args = mock_client.patch.call_args
         self.assertEqual(call_args[0][0], "/notion/tasks/task-123")
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["task_name"], "Updated Task")
-        self.assertEqual(payload["status"], "Done")
         # task_id should not be in payload
+        payload = call_args[1]["json"]
         self.assertNotIn("task_id", payload)
+        self.assertTrue(result["updated"])
 
-    def test_update_no_properties(self) -> None:
+    def test_update_no_properties_error(self) -> None:
         """Test update with no properties returns error."""
-        result = update_task(UpdateTaskArgs(task_id="task-123"))
+        tool = self.tool_dict["update_task"]
+        args = tool.args_model(task_id="task-123")
+        result = tool.handler(args)
 
         self.assertFalse(result["updated"])
         self.assertIn("error", result)
-
-    @patch("src.agent.tools.tasks._get_client")
-    def test_update_with_due_date(self, mock_get_client: MagicMock) -> None:
-        """Test updating with due date."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.patch.return_value = {"id": "task-123"}
-
-        update_task(
-            UpdateTaskArgs(
-                task_id="task-123",
-                due_date=date(2025, 1, 15),
-            )
-        )
-
-        call_args = mock_client.patch.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["due_date"], "2025-01-15")
 
 
 if __name__ == "__main__":

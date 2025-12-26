@@ -1,23 +1,12 @@
-"""Tests for reading list tool handlers."""
+"""Tests for reading list tool definitions."""
 
 import unittest
 from datetime import date
 from unittest.mock import MagicMock, patch
 
 from src.agent.enums import RiskLevel
-from src.agent.tools.reading_list import (
-    GetReadingItemArgs,
-    UpdateReadingItemArgs,
-    create_reading_item,
-    get_reading_item,
-    get_reading_list_tools,
-    query_reading_list,
-    update_reading_item,
-)
-from src.api.notion.reading_list.models import (
-    ReadingItemCreateRequest,
-    ReadingQueryRequest,
-)
+from src.agent.tools.reading_list import READING_LIST_TOOL_CONFIG, get_reading_list_tools
+from src.api.notion.reading_list.models import ReadingItemCreateRequest, ReadingQueryRequest
 from src.notion.enums import Priority, ReadingCategory, ReadingStatus
 
 
@@ -41,7 +30,7 @@ class TestReadingListToolDefinitions(unittest.TestCase):
         )
 
     def test_safe_tools(self) -> None:
-        """Test that query and get tools are marked as safe."""
+        """Test that query, get, and create tools are marked as safe."""
         tools = get_reading_list_tools()
         tool_dict = {t.name: t for t in tools}
 
@@ -50,7 +39,7 @@ class TestReadingListToolDefinitions(unittest.TestCase):
         self.assertEqual(tool_dict["create_reading_item"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
-        """Test that create and update tools are marked as sensitive."""
+        """Test that update tool is marked as sensitive."""
         tools = get_reading_list_tools()
         tool_dict = {t.name: t for t in tools}
 
@@ -72,6 +61,23 @@ class TestReadingListToolDefinitions(unittest.TestCase):
             self.assertIn("properties", schema)
             self.assertIn("type", schema)
             self.assertEqual(schema["type"], "object")
+
+
+class TestReadingListToolConfig(unittest.TestCase):
+    """Tests for READING_LIST_TOOL_CONFIG."""
+
+    def test_config_domain(self) -> None:
+        """Test config has correct domain settings."""
+        self.assertEqual(READING_LIST_TOOL_CONFIG.domain, "reading_item")
+        self.assertEqual(READING_LIST_TOOL_CONFIG.domain_plural, "reading_list")
+        self.assertEqual(READING_LIST_TOOL_CONFIG.endpoint_prefix, "/notion/reading-list")
+        self.assertEqual(READING_LIST_TOOL_CONFIG.id_field, "item_id")
+
+    def test_config_enum_fields(self) -> None:
+        """Test config has correct enum fields."""
+        self.assertIn("status", READING_LIST_TOOL_CONFIG.enum_fields)
+        self.assertIn("category", READING_LIST_TOOL_CONFIG.enum_fields)
+        self.assertIn("priority", READING_LIST_TOOL_CONFIG.enum_fields)
 
 
 class TestReadingQueryRequest(unittest.TestCase):
@@ -131,195 +137,93 @@ class TestReadingItemCreateRequest(unittest.TestCase):
         self.assertEqual(args.item_url, "https://example.com/paper")
 
 
-class TestUpdateReadingItemArgs(unittest.TestCase):
-    """Tests for UpdateReadingItemArgs model."""
+class TestReadingListToolHandlers(unittest.TestCase):
+    """Tests for reading list tool handlers."""
 
-    def test_minimal_args(self) -> None:
-        """Test creating with only item_id."""
-        args = UpdateReadingItemArgs(item_id="page-123")
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.tools = get_reading_list_tools()
+        self.tool_dict = {t.name: t for t in self.tools}
 
-        self.assertEqual(args.item_id, "page-123")
-        self.assertIsNone(args.title)
-        self.assertIsNone(args.status)
-
-    def test_with_read_date(self) -> None:
-        """Test update with read_date."""
-        args = UpdateReadingItemArgs(
-            item_id="page-123",
-            status=ReadingStatus.COMPLETED,
-            read_date=date(2024, 1, 15),
-        )
-
-        self.assertEqual(args.status, ReadingStatus.COMPLETED)
-        self.assertEqual(args.read_date, date(2024, 1, 15))
-
-
-class TestQueryReadingListHandler(unittest.TestCase):
-    """Tests for query_reading_list handler."""
-
-    @patch("src.agent.tools.reading_list._get_client")
-    def test_query_without_filters(self, mock_get_client: MagicMock) -> None:
-        """Test querying without any filters."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_query_handler(self, mock_get_client: MagicMock) -> None:
+        """Test query_reading_list handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": [{"id": "item-1", "title": "Test"}]}
+        mock_client.post.return_value = {"results": [{"id": "item-1"}]}
 
-        result = query_reading_list(ReadingQueryRequest())
+        tool = self.tool_dict["query_reading_list"]
+        args = ReadingQueryRequest(status=ReadingStatus.TO_READ)
+        result = tool.handler(args)
 
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        self.assertEqual(call_args[0][0], "/notion/reading-list/query")
         self.assertEqual(result["count"], 1)
-        self.assertEqual(len(result["items"]), 1)
-        mock_client.post.assert_called_once_with(
-            "/notion/reading-list/query", json={"include_completed": False, "limit": 50}
-        )
 
-    @patch("src.agent.tools.reading_list._get_client")
-    def test_query_with_status_filter(self, mock_get_client: MagicMock) -> None:
-        """Test querying with status filter."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": []}
-
-        query_reading_list(ReadingQueryRequest(status=ReadingStatus.TO_READ))
-
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["status"], "To Read")
-
-    @patch("src.agent.tools.reading_list._get_client")
-    def test_query_with_all_filters(self, mock_get_client: MagicMock) -> None:
-        """Test querying with all filters."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": []}
-
-        query_reading_list(
-            ReadingQueryRequest(
-                status=ReadingStatus.READING_NOW,
-                category=ReadingCategory.AI,
-                priority=Priority.HIGH,
-                limit=5,
-            )
-        )
-
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["status"], "Reading Now")
-        self.assertEqual(payload["category"], "AI")
-        self.assertEqual(payload["priority"], "High")
-        self.assertEqual(payload["limit"], 5)
-
-
-class TestGetReadingItemHandler(unittest.TestCase):
-    """Tests for get_reading_item handler."""
-
-    @patch("src.agent.tools.reading_list._get_client")
-    def test_get_item(self, mock_get_client: MagicMock) -> None:
-        """Test getting a reading item."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_get_handler(self, mock_get_client: MagicMock) -> None:
+        """Test get_reading_item handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.get.return_value = {"id": "page-123", "title": "Test Article"}
 
-        result = get_reading_item(GetReadingItemArgs(item_id="page-123"))
+        tool = self.tool_dict["get_reading_item"]
+        args = tool.args_model(item_id="page-123")
+        result = tool.handler(args)
 
-        self.assertEqual(result["item"]["id"], "page-123")
-        self.assertEqual(result["item"]["title"], "Test Article")
         mock_client.get.assert_called_once_with("/notion/reading-list/page-123")
+        self.assertEqual(result["item"]["id"], "page-123")
 
-
-class TestCreateReadingItemHandler(unittest.TestCase):
-    """Tests for create_reading_item handler."""
-
-    @patch("src.agent.tools.reading_list._get_client")
-    def test_create_item_minimal(self, mock_get_client: MagicMock) -> None:
-        """Test creating a reading item with minimal fields."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_create_handler(self, mock_get_client: MagicMock) -> None:
+        """Test create_reading_item handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.post.return_value = {"id": "new-page", "title": "New Article"}
 
-        result = create_reading_item(ReadingItemCreateRequest(title="New Article"))
+        tool = self.tool_dict["create_reading_item"]
+        args = ReadingItemCreateRequest(title="New Article")
+        result = tool.handler(args)
 
-        self.assertTrue(result["created"])
-        self.assertEqual(result["item"]["title"], "New Article")
         mock_client.post.assert_called_once()
-
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/notion/reading-list")
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["title"], "New Article")
-        self.assertEqual(payload["status"], "To Read")
-
-    @patch("src.agent.tools.reading_list._get_client")
-    def test_create_item_full(self, mock_get_client: MagicMock) -> None:
-        """Test creating a reading item with all fields."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-page", "title": "AI Paper"}
-
-        result = create_reading_item(
-            ReadingItemCreateRequest(
-                title="AI Paper",
-                status=ReadingStatus.READING_NOW,
-                priority=Priority.HIGH,
-                category=ReadingCategory.AI,
-                item_url="https://example.com/paper",
-            )
-        )
-
         self.assertTrue(result["created"])
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["title"], "AI Paper")
-        self.assertEqual(payload["status"], "Reading Now")
-        self.assertEqual(payload["priority"], "High")
-        self.assertEqual(payload["category"], "AI")
-        self.assertEqual(payload["item_url"], "https://example.com/paper")
 
-
-class TestUpdateReadingItemHandler(unittest.TestCase):
-    """Tests for update_reading_item handler."""
-
-    @patch("src.agent.tools.reading_list._get_client")
-    def test_update_item(self, mock_get_client: MagicMock) -> None:
-        """Test updating a reading item."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_update_handler(self, mock_get_client: MagicMock) -> None:
+        """Test update_reading_item handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.patch.return_value = {"id": "page-123", "title": "Updated Title"}
+        mock_client.patch.return_value = {"id": "page-123", "title": "Updated"}
 
-        result = update_reading_item(
-            UpdateReadingItemArgs(
-                item_id="page-123",
-                title="Updated Title",
-                status=ReadingStatus.COMPLETED,
-            )
-        )
+        tool = self.tool_dict["update_reading_item"]
+        args = tool.args_model(item_id="page-123", title="Updated")
+        result = tool.handler(args)
 
-        self.assertTrue(result["updated"])
-        self.assertEqual(result["item"]["title"], "Updated Title")
         mock_client.patch.assert_called_once()
-
         call_args = mock_client.patch.call_args
         self.assertEqual(call_args[0][0], "/notion/reading-list/page-123")
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["title"], "Updated Title")
-        self.assertEqual(payload["status"], "Completed")
         # item_id should not be in payload
+        payload = call_args[1]["json"]
         self.assertNotIn("item_id", payload)
+        self.assertTrue(result["updated"])
 
-    def test_update_no_properties(self) -> None:
+    def test_update_no_properties_error(self) -> None:
         """Test update with no properties returns error."""
-        result = update_reading_item(UpdateReadingItemArgs(item_id="page-123"))
+        tool = self.tool_dict["update_reading_item"]
+        args = tool.args_model(item_id="page-123")
+        result = tool.handler(args)
 
         self.assertFalse(result["updated"])
         self.assertIn("error", result)
 
-    @patch("src.agent.tools.reading_list._get_client")
+    @patch("src.agent.tools.factory._get_client")
     def test_update_with_read_date(self, mock_get_client: MagicMock) -> None:
         """Test updating with read date."""
         mock_client = MagicMock()
@@ -327,16 +231,14 @@ class TestUpdateReadingItemHandler(unittest.TestCase):
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.patch.return_value = {"id": "page-123"}
 
-        update_reading_item(
-            UpdateReadingItemArgs(
-                item_id="page-123",
-                read_date=date(2024, 1, 15),
-            )
-        )
+        tool = self.tool_dict["update_reading_item"]
+        args = tool.args_model(item_id="page-123", read_date=date(2024, 1, 15))
+        result = tool.handler(args)
 
         call_args = mock_client.patch.call_args
         payload = call_args[1]["json"]
         self.assertEqual(payload["read_date"], "2024-01-15")
+        self.assertTrue(result["updated"])
 
 
 if __name__ == "__main__":

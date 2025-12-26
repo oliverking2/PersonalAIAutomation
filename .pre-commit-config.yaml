@@ -17,13 +17,13 @@ repos:
 
 # MyPy: Static type checker
 # Ensures type hints are correct and catches type-related bugs
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.19.0
+- repo: local
   hooks:
-  - id: mypy
-    # Type check the entire src directory with config from pyproject.toml
-    args: [--config-file=pyproject.toml, --install-types, --non-interactive, src]
-    pass_filenames: false  # Check entire src/ directory on each run, not individual files
+    - id: mypy
+      name: mypy (poetry)
+      entry: poetry run mypy .
+      language: system
+      pass_filenames: false
 
 # Poetry: Python dependency manager
 # Validates that pyproject.toml is correctly formatted and consistent

@@ -18,8 +18,8 @@ Users lose context when they return to items weeks later.
 1. **Page content support**: API should support reading and writing page body content (not just properties)
 2. **Domain-specific templates**: Each domain (tasks, goals, reading list) should have a default template structure
 3. **Agent prompting**: Agent should gather necessary details to populate the template before creating
-4. **Template sections**: Templates should have logical sections (e.g., Description, Acceptance Criteria, Notes)
-5. **Append/Update**: Support both setting initial content and appending to existing content
+4. **Template sections**: Templates should have logical sections (e.g., Description, Notes)
+5. **Append/Update**: Support both setting initial content and updating existing content (may need a delete and recreate? but ideally not)
 
 ## Proposed Templates
 
@@ -27,10 +27,6 @@ Users lose context when they return to items weeks later.
 ```markdown
 ## Description
 {What needs to be done and why}
-
-## Acceptance Criteria
-- [ ] {Criterion 1}
-- [ ] {Criterion 2}
 
 ## Notes
 {Any additional context, links, or references}
@@ -44,13 +40,6 @@ Created via AI Agent on {date}
 ## Description
 {What this goal aims to achieve}
 
-## Success Criteria
-- [ ] {How will we know this is complete?}
-
-## Key Results
-- {Measurable outcome 1}
-- {Measurable outcome 2}
-
 ## Notes
 {Context, motivation, or related goals}
 
@@ -60,13 +49,6 @@ Created via AI Agent on {date}
 
 ### Reading List Template
 ```markdown
-## Why Read This
-{Reason for adding to reading list}
-
-## Key Topics
-- {Topic 1}
-- {Topic 2}
-
 ## Notes
 {Any notes or takeaways after reading}
 

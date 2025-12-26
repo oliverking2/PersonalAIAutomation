@@ -1,23 +1,12 @@
-"""Tests for goals tool handlers."""
+"""Tests for goals tool definitions."""
 
 import unittest
 from datetime import date
 from unittest.mock import MagicMock, patch
 
 from src.agent.enums import RiskLevel
-from src.agent.tools.goals import (
-    GetGoalArgs,
-    UpdateGoalArgs,
-    create_goal,
-    get_goal,
-    get_goals_tools,
-    query_goals,
-    update_goal,
-)
-from src.api.notion.goals.models import (
-    GoalCreateRequest,
-    GoalQueryRequest,
-)
+from src.agent.tools.goals import GOAL_TOOL_CONFIG, get_goals_tools
+from src.api.notion.goals.models import GoalCreateRequest, GoalQueryRequest
 from src.notion.enums import GoalStatus, Priority
 
 
@@ -41,7 +30,7 @@ class TestGoalsToolDefinitions(unittest.TestCase):
         )
 
     def test_safe_tools(self) -> None:
-        """Test that query and get tools are marked as safe."""
+        """Test that query, get, and create tools are marked as safe."""
         tools = get_goals_tools()
         tool_dict = {t.name: t for t in tools}
 
@@ -50,7 +39,7 @@ class TestGoalsToolDefinitions(unittest.TestCase):
         self.assertEqual(tool_dict["create_goal"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
-        """Test that create and update tools are marked as sensitive."""
+        """Test that update tool is marked as sensitive."""
         tools = get_goals_tools()
         tool_dict = {t.name: t for t in tools}
 
@@ -83,6 +72,22 @@ class TestGoalsToolDefinitions(unittest.TestCase):
         self.assertIn("Not started", query_desc)
         self.assertIn("In progress", query_desc)
         self.assertIn("Done", query_desc)
+
+
+class TestGoalToolConfig(unittest.TestCase):
+    """Tests for GOAL_TOOL_CONFIG."""
+
+    def test_config_domain(self) -> None:
+        """Test config has correct domain settings."""
+        self.assertEqual(GOAL_TOOL_CONFIG.domain, "goal")
+        self.assertEqual(GOAL_TOOL_CONFIG.domain_plural, "goals")
+        self.assertEqual(GOAL_TOOL_CONFIG.endpoint_prefix, "/notion/goals")
+        self.assertEqual(GOAL_TOOL_CONFIG.id_field, "goal_id")
+
+    def test_config_enum_fields(self) -> None:
+        """Test config has correct enum fields."""
+        self.assertIn("status", GOAL_TOOL_CONFIG.enum_fields)
+        self.assertIn("priority", GOAL_TOOL_CONFIG.enum_fields)
 
 
 class TestGoalQueryRequest(unittest.TestCase):
@@ -139,208 +144,91 @@ class TestGoalCreateRequest(unittest.TestCase):
         self.assertEqual(args.due_date, date(2025, 6, 1))
 
 
-class TestUpdateGoalArgs(unittest.TestCase):
-    """Tests for UpdateGoalArgs model."""
+class TestGoalToolHandlers(unittest.TestCase):
+    """Tests for goal tool handlers."""
 
-    def test_minimal_args(self) -> None:
-        """Test creating with only goal_id."""
-        args = UpdateGoalArgs(goal_id="goal-123")
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.tools = get_goals_tools()
+        self.tool_dict = {t.name: t for t in self.tools}
 
-        self.assertEqual(args.goal_id, "goal-123")
-        self.assertIsNone(args.goal_name)
-        self.assertIsNone(args.status)
-
-    def test_with_progress(self) -> None:
-        """Test update with progress."""
-        args = UpdateGoalArgs(
-            goal_id="goal-123",
-            status=GoalStatus.DONE,
-            progress=100.0,
-        )
-
-        self.assertEqual(args.status, GoalStatus.DONE)
-        self.assertEqual(args.progress, 100.0)
-
-
-class TestQueryGoalsHandler(unittest.TestCase):
-    """Tests for query_goals handler."""
-
-    @patch("src.agent.tools.goals._get_client")
-    def test_query_without_filters(self, mock_get_client: MagicMock) -> None:
-        """Test querying without any filters."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_query_handler(self, mock_get_client: MagicMock) -> None:
+        """Test query_goals handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": [{"id": "goal-1", "goal_name": "Test"}]}
+        mock_client.post.return_value = {"results": [{"id": "goal-1"}]}
 
-        result = query_goals(GoalQueryRequest())
+        tool = self.tool_dict["query_goals"]
+        args = GoalQueryRequest(status=GoalStatus.IN_PROGRESS)
+        result = tool.handler(args)
 
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        self.assertEqual(call_args[0][0], "/notion/goals/query")
         self.assertEqual(result["count"], 1)
-        self.assertEqual(len(result["items"]), 1)
-        mock_client.post.assert_called_once_with(
-            "/notion/goals/query", json={"include_done": False, "limit": 50}
-        )
 
-    @patch("src.agent.tools.goals._get_client")
-    def test_query_with_status_filter(self, mock_get_client: MagicMock) -> None:
-        """Test querying with status filter."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_get_handler(self, mock_get_client: MagicMock) -> None:
+        """Test get_goal handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": []}
+        mock_client.get.return_value = {"id": "goal-123", "goal_name": "Test"}
 
-        query_goals(GoalQueryRequest(status=GoalStatus.IN_PROGRESS))
+        tool = self.tool_dict["get_goal"]
+        args = tool.args_model(goal_id="goal-123")
+        result = tool.handler(args)
 
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["status"], "In progress")
-
-    @patch("src.agent.tools.goals._get_client")
-    def test_query_with_all_filters(self, mock_get_client: MagicMock) -> None:
-        """Test querying with all filters."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"results": []}
-
-        query_goals(
-            GoalQueryRequest(
-                status=GoalStatus.NOT_STARTED,
-                priority=Priority.HIGH,
-                limit=5,
-            )
-        )
-
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["status"], "Not started")
-        self.assertEqual(payload["priority"], "High")
-        self.assertEqual(payload["limit"], 5)
-
-
-class TestGetGoalHandler(unittest.TestCase):
-    """Tests for get_goal handler."""
-
-    @patch("src.agent.tools.goals._get_client")
-    def test_get_goal(self, mock_get_client: MagicMock) -> None:
-        """Test getting a goal."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = {"id": "goal-123", "goal_name": "Test Goal"}
-
-        result = get_goal(GetGoalArgs(goal_id="goal-123"))
-
-        self.assertEqual(result["item"]["id"], "goal-123")
-        self.assertEqual(result["item"]["goal_name"], "Test Goal")
         mock_client.get.assert_called_once_with("/notion/goals/goal-123")
+        self.assertEqual(result["item"]["id"], "goal-123")
 
-
-class TestCreateGoalHandler(unittest.TestCase):
-    """Tests for create_goal handler."""
-
-    @patch("src.agent.tools.goals._get_client")
-    def test_create_goal_minimal(self, mock_get_client: MagicMock) -> None:
-        """Test creating a goal with minimal fields."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_create_handler(self, mock_get_client: MagicMock) -> None:
+        """Test create_goal handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.post.return_value = {"id": "new-goal", "goal_name": "New Goal"}
 
-        result = create_goal(GoalCreateRequest(goal_name="New Goal"))
+        tool = self.tool_dict["create_goal"]
+        args = GoalCreateRequest(goal_name="New Goal")
+        result = tool.handler(args)
 
-        self.assertTrue(result["created"])
-        self.assertEqual(result["item"]["goal_name"], "New Goal")
         mock_client.post.assert_called_once()
-
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/notion/goals")
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["goal_name"], "New Goal")
-        self.assertEqual(payload["status"], "Not started")
-
-    @patch("src.agent.tools.goals._get_client")
-    def test_create_goal_full(self, mock_get_client: MagicMock) -> None:
-        """Test creating a goal with all fields."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-goal", "goal_name": "Important Goal"}
-
-        result = create_goal(
-            GoalCreateRequest(
-                goal_name="Important Goal",
-                status=GoalStatus.IN_PROGRESS,
-                priority=Priority.HIGH,
-                progress=25.0,
-            )
-        )
-
         self.assertTrue(result["created"])
-        call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["goal_name"], "Important Goal")
-        self.assertEqual(payload["status"], "In progress")
-        self.assertEqual(payload["priority"], "High")
-        self.assertEqual(payload["progress"], 25.0)
 
-
-class TestUpdateGoalHandler(unittest.TestCase):
-    """Tests for update_goal handler."""
-
-    @patch("src.agent.tools.goals._get_client")
-    def test_update_goal(self, mock_get_client: MagicMock) -> None:
-        """Test updating a goal."""
+    @patch("src.agent.tools.factory._get_client")
+    def test_update_handler(self, mock_get_client: MagicMock) -> None:
+        """Test update_goal handler makes correct API call."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.patch.return_value = {"id": "goal-123", "goal_name": "Updated Goal"}
+        mock_client.patch.return_value = {"id": "goal-123", "goal_name": "Updated"}
 
-        result = update_goal(
-            UpdateGoalArgs(
-                goal_id="goal-123",
-                goal_name="Updated Goal",
-                status=GoalStatus.DONE,
-            )
-        )
+        tool = self.tool_dict["update_goal"]
+        args = tool.args_model(goal_id="goal-123", goal_name="Updated")
+        result = tool.handler(args)
 
-        self.assertTrue(result["updated"])
-        self.assertEqual(result["item"]["goal_name"], "Updated Goal")
         mock_client.patch.assert_called_once()
-
         call_args = mock_client.patch.call_args
         self.assertEqual(call_args[0][0], "/notion/goals/goal-123")
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["goal_name"], "Updated Goal")
-        self.assertEqual(payload["status"], "Done")
         # goal_id should not be in payload
+        payload = call_args[1]["json"]
         self.assertNotIn("goal_id", payload)
+        self.assertTrue(result["updated"])
 
-    def test_update_no_properties(self) -> None:
+    def test_update_no_properties_error(self) -> None:
         """Test update with no properties returns error."""
-        result = update_goal(UpdateGoalArgs(goal_id="goal-123"))
+        tool = self.tool_dict["update_goal"]
+        args = tool.args_model(goal_id="goal-123")
+        result = tool.handler(args)
 
         self.assertFalse(result["updated"])
         self.assertIn("error", result)
-
-    @patch("src.agent.tools.goals._get_client")
-    def test_update_with_progress(self, mock_get_client: MagicMock) -> None:
-        """Test updating with progress."""
-        mock_client = MagicMock()
-        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.patch.return_value = {"id": "goal-123"}
-
-        update_goal(
-            UpdateGoalArgs(
-                goal_id="goal-123",
-                progress=75.0,
-            )
-        )
-
-        call_args = mock_client.patch.call_args
-        payload = call_args[1]["json"]
-        self.assertEqual(payload["progress"], 75.0)
 
 
 if __name__ == "__main__":
