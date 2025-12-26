@@ -6,7 +6,6 @@ from enum import StrEnum
 class TaskStatus(StrEnum):
     """Valid status values for tasks."""
 
-    THOUGHT = "Thought"
     NOT_STARTED = "Not started"
     IN_PROGRESS = "In progress"
     DONE = "Done"

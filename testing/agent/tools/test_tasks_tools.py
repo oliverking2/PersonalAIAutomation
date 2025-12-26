@@ -80,7 +80,6 @@ class TestTasksToolDefinitions(unittest.TestCase):
 
         # Check query_tasks contains status options
         query_desc = tool_dict["query_tasks"].description
-        self.assertIn("Thought", query_desc)
         self.assertIn("Not started", query_desc)
         self.assertIn("In progress", query_desc)
         self.assertIn("Done", query_desc)

@@ -1,7 +1,8 @@
 """Common utilities for Notion API."""
 
+from collections.abc import Callable
 from enum import StrEnum
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import HTTPException, status
 from rapidfuzz import fuzz
@@ -10,6 +11,8 @@ from src.api.notion.common.models import PageResponse
 from src.notion import NotionTask
 from src.notion.client import NotionClient
 from src.notion.exceptions import NotionClientError
+
+T = TypeVar("T")
 
 
 class FuzzyMatchQuality(StrEnum):
@@ -96,10 +99,10 @@ def check_duplicate_name(  # noqa: PLR0913
             )
 
 
-def filter_by_fuzzy_name[T](
+def filter_by_fuzzy_name(
     items: list[T],
     name_filter: str | None,
-    name_getter: Any,
+    name_getter: Callable[[T], str],
     limit: int = DEFAULT_FUZZY_LIMIT,
 ) -> tuple[list[T], FuzzyMatchQuality | None]:
     """Filter items by fuzzy name match.
