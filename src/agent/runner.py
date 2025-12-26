@@ -634,6 +634,10 @@ class AgentRunner:
     ) -> AgentRunResult | None:
         """Handle a tool use response from the LLM.
 
+        When the LLM returns multiple tool uses in one response, we must
+        provide a tool_result for each one. This method handles all tool
+        uses in the response.
+
         :returns: AgentRunResult if the run should stop, None to continue.
         """
         tool_uses = self.client.parse_tool_use(response)
@@ -646,27 +650,75 @@ class AgentRunner:
                 stop_reason="unknown",
             )
 
-        tool_use = tool_uses[0]
-        ctx = _ToolUseContext(
-            tool_use_id=tool_use["toolUseId"],
-            tool_name=tool_use["name"],
-            input_args=tool_use["input"],
-        )
+        # Build contexts for all tool uses
+        contexts: list[_ToolUseContext] = []
+        for tool_use in tool_uses:
+            ctx = _ToolUseContext(
+                tool_use_id=tool_use["toolUseId"],
+                tool_name=tool_use["name"],
+                input_args=tool_use["input"],
+            )
+            contexts.append(ctx)
+            logger.info(f"Tool use requested: tool={ctx.tool_name}, id={ctx.tool_use_id}")
 
-        logger.info(f"Tool use requested: tool={ctx.tool_name}, id={ctx.tool_use_id}")
-
-        if ctx.tool_name not in state.tools:
+        # Check if ANY tool is unknown - if so, error all
+        unknown_tools = [ctx for ctx in contexts if ctx.tool_name not in state.tools]
+        if unknown_tools:
             self._handle_unknown_tool(tool_uses, state, response)
             return None
 
-        tool = state.tools[ctx.tool_name]
+        # Check if ANY tool requires confirmation - if so, pause on first sensitive one
+        for ctx in contexts:
+            tool = state.tools[ctx.tool_name]
+            confirmation_result = self._check_confirmation_required(ctx, tool, state, conv_state)
+            if confirmation_result is not None:
+                return confirmation_result
 
-        confirmation_result = self._check_confirmation_required(ctx, tool, state, conv_state)
-        if confirmation_result is not None:
-            return confirmation_result
-
-        self._execute_and_record_tool(ctx, tool, state, response)
+        # Execute ALL tools and collect results
+        self._execute_all_tools(contexts, state, response)
         return None
+
+    def _execute_all_tools(
+        self,
+        contexts: list[_ToolUseContext],
+        state: _RunState,
+        response: dict[str, Any],
+    ) -> None:
+        """Execute all tools in the response and record results.
+
+        All tool results must be in a SINGLE user message with multiple
+        toolResult blocks. Bedrock requires this format when the assistant
+        returned multiple tool_use blocks.
+
+        :param contexts: List of tool use contexts to execute.
+        :param state: Current run state.
+        :param response: Full LLM response (for the assistant message).
+        """
+        # Add the assistant message once (contains all tool_use blocks)
+        state.messages.append(response["output"]["message"])
+
+        # Execute all tools and collect results
+        tool_result_contents: list[dict[str, Any]] = []
+        for ctx in contexts:
+            tool = state.tools[ctx.tool_name]
+            tool_result, tool_call = self._execute_and_create_tool_call(
+                tool=tool,
+                tool_use_id=ctx.tool_use_id,
+                input_args=ctx.input_args,
+            )
+            state.tool_calls.append(tool_call)
+            tool_result_contents.append(
+                {
+                    "toolResult": {
+                        "toolUseId": ctx.tool_use_id,
+                        "content": [{"json": tool_result}],
+                        "status": "error" if tool_call.is_error else "success",
+                    }
+                }
+            )
+
+        # Add single message with ALL tool results
+        state.messages.append({"role": "user", "content": tool_result_contents})
 
     def _handle_unknown_tool(
         self,
@@ -680,12 +732,17 @@ class AgentRunner:
         unknown, we must provide error results for ALL of them due to Bedrock
         API requirements (every tool_use must have a corresponding tool_result).
 
+        All tool results must be in a SINGLE user message with multiple
+        toolResult blocks.
+
         :param tool_uses: All tool uses from the response.
         :param state: Current run state.
         :param response: Full LLM response.
         """
         state.messages.append(response["output"]["message"])
 
+        # Collect all error results
+        tool_result_contents: list[dict[str, Any]] = []
         for tool_use in tool_uses:
             tool_use_id = tool_use["toolUseId"]
             tool_name = tool_use["name"]
@@ -709,9 +766,18 @@ class AgentRunner:
                     is_error=True,
                 )
             )
-            state.messages.append(
-                self.client.create_tool_result_message(tool_use_id, error_result, is_error=True)
+            tool_result_contents.append(
+                {
+                    "toolResult": {
+                        "toolUseId": tool_use_id,
+                        "content": [{"json": error_result}],
+                        "status": "error",
+                    }
+                }
             )
+
+        # Add single message with ALL tool results
+        state.messages.append({"role": "user", "content": tool_result_contents})
 
     def _check_confirmation_required(
         self,
@@ -761,28 +827,6 @@ class AgentRunner:
                 action_summary=action_summary,
                 tool_use_id=ctx.tool_use_id,
             ),
-        )
-
-    def _execute_and_record_tool(
-        self,
-        ctx: _ToolUseContext,
-        tool: ToolDef,
-        state: _RunState,
-        response: dict[str, Any],
-    ) -> None:
-        """Execute a tool and record the result."""
-        tool_result, tool_call = self._execute_and_create_tool_call(
-            tool=tool,
-            tool_use_id=ctx.tool_use_id,
-            input_args=ctx.input_args,
-        )
-
-        state.tool_calls.append(tool_call)
-        state.messages.append(response["output"]["message"])
-        state.messages.append(
-            self.client.create_tool_result_message(
-                ctx.tool_use_id, tool_result, is_error=tool_call.is_error
-            )
         )
 
     def _build_final_result(

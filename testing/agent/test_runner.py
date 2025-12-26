@@ -528,6 +528,88 @@ class TestAgentRunner(unittest.TestCase):
         self.assertTrue(result.tool_calls[0].is_error)
         self.assertIn("Unknown tool", result.tool_calls[0].output["error"])
 
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_multiple_tools_in_single_response(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that multiple tool uses in a single response are all executed."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        self.mock_client.create_user_message.return_value = {
+            "role": "user",
+            "content": [{"text": "Create two tasks"}],
+        }
+
+        # Response contains TWO tool uses
+        tool_response = {
+            "output": {
+                "message": {
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": "tool-1",
+                                "name": "safe_tool",
+                                "input": {"value": "first"},
+                            }
+                        },
+                        {
+                            "toolUse": {
+                                "toolUseId": "tool-2",
+                                "name": "safe_tool",
+                                "input": {"value": "second"},
+                            }
+                        },
+                    ]
+                }
+            },
+            "stopReason": "tool_use",
+        }
+
+        final_response = {
+            "output": {"message": {"content": [{"text": "Created both!"}]}},
+            "stopReason": "end_turn",
+        }
+
+        self.mock_client.converse.side_effect = [tool_response, final_response]
+        self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
+        self.mock_client.parse_tool_use.return_value = [
+            {"toolUseId": "tool-1", "name": "safe_tool", "input": {"value": "first"}},
+            {"toolUseId": "tool-2", "name": "safe_tool", "input": {"value": "second"}},
+        ]
+        self.mock_client.create_tool_result_message.side_effect = [
+            {"role": "user", "content": [{"toolResult": {"toolUseId": "tool-1"}}]},
+            {"role": "user", "content": [{"toolResult": {"toolUseId": "tool-2"}}]},
+        ]
+        self.mock_client.parse_text_response.return_value = "Created both!"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        result = runner.run("Create two tasks", self.mock_session, tool_names=["safe_tool"])
+
+        self.assertEqual(result.response, "Created both!")
+        self.assertEqual(len(result.tool_calls), 2)
+        self.assertEqual(result.tool_calls[0].tool_name, "safe_tool")
+        self.assertEqual(result.tool_calls[0].input_args, {"value": "first"})
+        self.assertEqual(result.tool_calls[0].output, {"result": "first"})
+        self.assertFalse(result.tool_calls[0].is_error)
+        self.assertEqual(result.tool_calls[1].tool_name, "safe_tool")
+        self.assertEqual(result.tool_calls[1].input_args, {"value": "second"})
+        self.assertEqual(result.tool_calls[1].output, {"result": "second"})
+        self.assertFalse(result.tool_calls[1].is_error)
+        self.assertEqual(result.steps_taken, 1)
+        self.assertEqual(result.stop_reason, "end_turn")
+
 
 class TestAgentRunnerExecuteTool(unittest.TestCase):
     """Tests for AgentRunner._execute_tool method."""

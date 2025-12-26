@@ -218,6 +218,7 @@ This document tracks improvements and technical debt for the `src/agent/` module
 | AGENT-027 | Include user confirmation message in conversation so LLM sees followup requests (e.g., "yes, and also X")   | 2024-12-25 |
 | AGENT-028 | Handle multiple tool uses in response - provide error results for ALL when any is unknown                   | 2024-12-25 |
 | AGENT-029 | Context-aware additive tool selection - selector considers current tools, only adds when needed             | 2024-12-25 |
+| AGENT-030 | Execute ALL tools in multi-tool response - refactored _handle_tool_use to process all tool_use blocks      | 2024-12-26 |
 
 ## Priority Legend
 
