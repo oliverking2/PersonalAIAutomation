@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.notion.common.utils import check_duplicate_name
+from src.api.notion.common.utils import check_duplicate_name, filter_by_fuzzy_name
 from src.api.notion.dependencies import get_notion_client, get_task_data_source_id
 from src.api.notion.tasks.models import (
     TaskCreateRequest,
@@ -14,6 +14,7 @@ from src.api.notion.tasks.models import (
     TaskUpdateRequest,
 )
 from src.notion.client import NotionClient
+from src.notion.enums import TaskStatus
 from src.notion.exceptions import NotionClientError
 from src.notion.models import NotionTask
 from src.notion.parser import build_task_properties, parse_page_to_task
@@ -33,17 +34,34 @@ def query_tasks(
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_task_data_source_id),
 ) -> TaskQueryResponse:
-    """Query all tasks from the configured task tracker."""
+    """Query tasks from the configured task tracker.
+
+    By default, completed (Done) tasks are excluded unless include_done=True.
+    If name_filter is provided, results are fuzzy-matched and limited to top 5.
+    """
     logger.debug("Querying tasks")
     try:
         filter_ = _build_task_filter(request)
         # Default sort by last edited time descending (latest first)
         sorts = [{"timestamp": "last_edited_time", "direction": "descending"}]
         pages_data = client.query_all_data_source(data_source_id, filter_=filter_, sorts=sorts)
-        tasks = [
-            _task_to_response(parse_page_to_task(page)) for page in pages_data[: request.limit]
-        ]
-        return TaskQueryResponse(results=tasks)
+
+        # Parse all pages to task responses
+        tasks = [_task_to_response(parse_page_to_task(page)) for page in pages_data]
+
+        # Apply fuzzy name filter if provided
+        filtered_tasks, fuzzy_quality = filter_by_fuzzy_name(
+            items=tasks,
+            name_filter=request.name_filter,
+            name_getter=lambda t: t.task_name,
+            limit=request.limit if not request.name_filter else 5,
+        )
+
+        return TaskQueryResponse(
+            results=filtered_tasks,
+            fuzzy_match_quality=fuzzy_quality,
+            excluded_done=not request.include_done,
+        )
     except NotionClientError as e:
         logger.exception(f"Failed to query tasks: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -166,6 +184,12 @@ def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
     :returns: Notion filter dictionary or None if no filters.
     """
     conditions: list[dict[str, object]] = []
+
+    # Exclude Done tasks by default unless include_done is True
+    if not request.include_done:
+        conditions.append(
+            {"property": "Status", "status": {"does_not_equal": TaskStatus.DONE.value}}
+        )
 
     if request.status:
         conditions.append({"property": "Status", "status": {"equals": request.status.value}})

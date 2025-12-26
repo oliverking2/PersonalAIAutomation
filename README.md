@@ -283,7 +283,7 @@ poetry run uvicorn src.api.app:app --reload
 ##### Tasks (Task Tracker)
 | Method | Path                | Auth | Description                              |
 |--------|---------------------|------|------------------------------------------|
-| POST   | /notion/tasks/query | Yes  | Query tasks (auto-pagination)            |
+| POST   | /notion/tasks/query | Yes  | Query tasks with fuzzy name search       |
 | GET    | /notion/tasks/{id}  | Yes  | Retrieve a task                          |
 | POST   | /notion/tasks       | Yes  | Create a task with validated enum fields |
 | PATCH  | /notion/tasks/{id}  | Yes  | Update a task                            |
@@ -291,7 +291,7 @@ poetry run uvicorn src.api.app:app --reload
 ##### Goals (Goals Tracker)
 | Method | Path                   | Auth  | Description                              |
 |--------|------------------------|-------|------------------------------------------|
-| POST   | /notion/goals/query    | Yes   | Query goals (auto-pagination)            |
+| POST   | /notion/goals/query    | Yes   | Query goals with fuzzy name search       |
 | GET    | /notion/goals/{id}     | Yes   | Retrieve a goal                          |
 | POST   | /notion/goals          | Yes   | Create a goal with validated enum fields |
 | PATCH  | /notion/goals/{id}     | Yes   | Update a goal                            |
@@ -299,10 +299,21 @@ poetry run uvicorn src.api.app:app --reload
 ##### Reading List
 | Method | Path                       | Auth  | Description                                |
 |--------|----------------------------|-------|--------------------------------------------|
-| POST   | /notion/reading-list/query | Yes   | Query reading items (auto-pagination)      |
+| POST   | /notion/reading-list/query | Yes   | Query reading items with fuzzy name search |
 | GET    | /notion/reading-list/{id}  | Yes   | Retrieve a reading item                    |
 | POST   | /notion/reading            | Yes   | Create a reading item with validated enums |
 | PATCH  | /notion/reading-list/{id}  | Yes   | Update a reading item                      |
+
+##### Fuzzy Name Search
+All query endpoints support fuzzy name matching via `name_filter` parameter. Results are scored using `partial_ratio` matching and returned with a quality indicator:
+- `fuzzy_match_quality: "good"` - Best match score >= 60 (confident matches)
+- `fuzzy_match_quality: "weak"` - No matches above threshold (best guesses)
+- `fuzzy_match_quality: null` - No name filter provided (unfiltered results)
+
+By default, completed items are excluded from queries. Use the include flags to search all items:
+- Tasks: `include_done: true`
+- Goals: `include_done: true`
+- Reading List: `include_completed: true`
 
 ### AI Agent
 Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely execute internal tools. The agent provides structured tool calling via LLMs with validation and safety guardrails.

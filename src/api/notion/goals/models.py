@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from src.api.notion.common.utils import FuzzyMatchQuality
 from src.notion.enums import GoalStatus, Priority
 
 
@@ -45,6 +46,12 @@ class GoalUpdateRequest(BaseModel):
 class GoalQueryRequest(BaseModel):
     """Request model for goal query endpoint with structured filters."""
 
+    name_filter: str | None = Field(
+        None, description="Fuzzy match against goal name (returns top 5 matches)"
+    )
+    include_done: bool = Field(
+        False, description="Whether to include completed goals (default: exclude)"
+    )
     status: GoalStatus | None = Field(
         None, description=f"Filter by goal status ({', '.join(GoalStatus)})"
     )
@@ -59,5 +66,16 @@ class GoalQueryResponse(BaseModel):
 
     results: list[GoalResponse] = Field(
         default_factory=list,
-        description="List of all goals matching the query",
+        description="List of goals matching the query",
+    )
+    fuzzy_match_quality: FuzzyMatchQuality | None = Field(
+        None,
+        description=(
+            "Quality of fuzzy name match: None=unfiltered, "
+            "'good'=best match score >= 60, 'weak'=no matches above threshold"
+        ),
+    )
+    excluded_done: bool = Field(
+        False,
+        description="True if completed goals were excluded from results",
     )

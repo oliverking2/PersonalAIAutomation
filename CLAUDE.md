@@ -300,7 +300,7 @@ src/agent/
 - Generated code must pass mypy according to the project's configured strictness.
 - Prefer precise types over broad ones (use `TypedDict`, `Protocol`, `Literal`, `NewType` where helpful).
 - Avoid `# type: ignore` unless it is narrowly scoped and justified with a reason comment.
-- Add type stubs for third-party libraries where possible. Add them to the poetry `checks` group.
+- Add type stubs for third-party libraries where possible. Add them to the poetry `dev` group.
 
 ## Project-Specific Prohibitions
 

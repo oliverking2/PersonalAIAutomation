@@ -1,13 +1,32 @@
 """Common utilities for Notion API."""
 
+from enum import StrEnum
 from typing import Any
 
 from fastapi import HTTPException, status
+from rapidfuzz import fuzz
 
 from src.api.notion.common.models import PageResponse
 from src.notion import NotionTask
 from src.notion.client import NotionClient
 from src.notion.exceptions import NotionClientError
+
+
+class FuzzyMatchQuality(StrEnum):
+    """Quality indicator for fuzzy name matching results."""
+
+    GOOD = "good"
+    WEAK = "weak"
+
+
+# Minimum token length to include in matching (filters "the", "a", "to", etc.)
+MIN_TOKEN_LENGTH = 3
+
+# Fuzzy match threshold for "good" quality
+FUZZY_MATCH_THRESHOLD = 60
+
+# Default limit for fuzzy search results
+DEFAULT_FUZZY_LIMIT = 5
 
 
 def _page_to_response(task: NotionTask) -> PageResponse:
@@ -75,3 +94,44 @@ def check_duplicate_name(  # noqa: PLR0913
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"An item with this name already exists: '{existing_name}'",
             )
+
+
+def filter_by_fuzzy_name[T](
+    items: list[T],
+    name_filter: str | None,
+    name_getter: Any,
+    limit: int = DEFAULT_FUZZY_LIMIT,
+) -> tuple[list[T], FuzzyMatchQuality | None]:
+    """Filter items by fuzzy name match.
+
+    Uses partial_ratio on the full name string. This is Phase 1 matching.
+    Token-based or weighted matching may be added if false positives become common.
+
+    :param items: List of items to filter.
+    :param name_filter: Search term (None returns unfiltered results).
+    :param name_getter: Callable that extracts the name from an item.
+    :param limit: Maximum results to return.
+    :returns: Tuple of (filtered items, match quality). Quality is None if unfiltered.
+    """
+    if not name_filter:
+        return items[:limit], None
+
+    # Normalise and strip short tokens from search term
+    tokens = name_filter.lower().split()
+    filtered_tokens = [t for t in tokens if len(t) >= MIN_TOKEN_LENGTH]
+    normalised_filter = " ".join(filtered_tokens) if filtered_tokens else name_filter.lower()
+
+    scored: list[tuple[T, float]] = [
+        (item, fuzz.partial_ratio(normalised_filter, name_getter(item).lower())) for item in items
+    ]
+
+    # Filter by threshold and sort by score
+    matches = [(item, score) for item, score in scored if score >= FUZZY_MATCH_THRESHOLD]
+    matches.sort(key=lambda x: x[1], reverse=True)
+
+    if matches:
+        return [item for item, _ in matches[:limit]], FuzzyMatchQuality.GOOD
+
+    # No good matches - return top by any score
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [item for item, _ in scored[:limit]], FuzzyMatchQuality.WEAK

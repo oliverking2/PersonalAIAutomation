@@ -135,9 +135,12 @@ def get_reading_list_tools() -> list[ToolDef]:
         ToolDef(
             name="query_reading_list",
             description=(
-                f"Query items from the reading list. Can filter by status "
-                f"({status_options}), category ({category_options}), "
-                f"and priority ({priority_options})."
+                f"Query items from the reading list. Use name_filter for fuzzy search "
+                f"by title (e.g. 'clean code' matches 'Clean Code book'). "
+                f"By default excludes completed items; set include_completed=true to include them. "
+                f"Can also filter by status ({status_options}), category ({category_options}), "
+                f"and priority ({priority_options}). "
+                f"Response includes fuzzy_match_quality ('good' or 'weak') - ask for clarification if 'weak'."
             ),
             tags=frozenset({"reading", "query", "list"}),
             risk_level=RiskLevel.SAFE,

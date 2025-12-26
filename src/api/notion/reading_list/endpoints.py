@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.notion.common.utils import check_duplicate_name
+from src.api.notion.common.utils import check_duplicate_name, filter_by_fuzzy_name
 from src.api.notion.dependencies import get_notion_client, get_reading_data_source_id
 from src.api.notion.reading_list.models import (
     ReadingItemCreateRequest,
@@ -14,6 +14,7 @@ from src.api.notion.reading_list.models import (
     ReadingQueryResponse,
 )
 from src.notion.client import NotionClient
+from src.notion.enums import ReadingStatus
 from src.notion.exceptions import NotionClientError
 from src.notion.models import NotionReadingItem
 from src.notion.parser import build_reading_properties, parse_page_to_reading_item
@@ -33,18 +34,34 @@ def query_reading(
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_reading_data_source_id),
 ) -> ReadingQueryResponse:
-    """Query all items from the configured reading list."""
+    """Query items from the configured reading list.
+
+    By default, completed items are excluded unless include_completed=True.
+    If name_filter is provided, results are fuzzy-matched and limited to top 5.
+    """
     logger.debug("Querying reading list")
     try:
         filter_ = _build_reading_filter(request)
         # Default sort by last edited time descending (latest first)
         sorts = [{"timestamp": "last_edited_time", "direction": "descending"}]
         pages_data = client.query_all_data_source(data_source_id, filter_=filter_, sorts=sorts)
-        items = [
-            _reading_to_response(parse_page_to_reading_item(page))
-            for page in pages_data[: request.limit]
-        ]
-        return ReadingQueryResponse(results=items)
+
+        # Parse all pages to reading item responses
+        items = [_reading_to_response(parse_page_to_reading_item(page)) for page in pages_data]
+
+        # Apply fuzzy name filter if provided
+        filtered_items, fuzzy_quality = filter_by_fuzzy_name(
+            items=items,
+            name_filter=request.name_filter,
+            name_getter=lambda i: i.title,
+            limit=request.limit if not request.name_filter else 5,
+        )
+
+        return ReadingQueryResponse(
+            results=filtered_items,
+            fuzzy_match_quality=fuzzy_quality,
+            excluded_completed=not request.include_completed,
+        )
     except NotionClientError as e:
         logger.exception(f"Failed to query reading list: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -167,6 +184,12 @@ def _build_reading_filter(request: ReadingQueryRequest) -> dict[str, object] | N
     :returns: Notion filter dictionary or None if no filters.
     """
     conditions: list[dict[str, object]] = []
+
+    # Exclude Completed items by default unless include_completed is True
+    if not request.include_completed:
+        conditions.append(
+            {"property": "Status", "status": {"does_not_equal": ReadingStatus.COMPLETED.value}}
+        )
 
     if request.status:
         conditions.append({"property": "Status", "status": {"equals": request.status.value}})

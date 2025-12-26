@@ -75,11 +75,14 @@ class TestQueryReadingEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        # Verify the filter was built correctly
+        # Verify the filter was built correctly (includes exclude Completed + status filter)
         call_args = mock_client.query_all_data_source.call_args
         filter_arg = call_args[1]["filter_"]
-        self.assertEqual(filter_arg["property"], "Status")
-        self.assertEqual(filter_arg["status"]["equals"], "To Read")
+        self.assertIn("and", filter_arg)
+        conditions = filter_arg["and"]
+        # Should have exclude Completed + status equals To Read
+        status_conditions = [c for c in conditions if c.get("property") == "Status"]
+        self.assertEqual(len(status_conditions), 2)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_query_reading_with_multiple_filters(self, mock_client_class: MagicMock) -> None:
@@ -96,10 +99,11 @@ class TestQueryReadingEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         # Verify the combined filter was built correctly
+        # (includes exclude Completed + status + category + priority)
         call_args = mock_client.query_all_data_source.call_args
         filter_arg = call_args[1]["filter_"]
         self.assertIn("and", filter_arg)
-        self.assertEqual(len(filter_arg["and"]), 3)
+        self.assertEqual(len(filter_arg["and"]), 4)
 
 
 class TestGetReadingItemEndpoint(unittest.TestCase):

@@ -134,8 +134,11 @@ def get_goals_tools() -> list[ToolDef]:
         ToolDef(
             name="query_goals",
             description=(
-                f"Query goals from the goals tracker. Can filter by status "
-                f"({status_options}) and priority ({priority_options})."
+                f"Query goals from the goals tracker. Use name_filter for fuzzy search "
+                f"by goal name (e.g. 'fitness' matches 'Improve fitness'). "
+                f"By default excludes completed goals; set include_done=true to include them. "
+                f"Can also filter by status ({status_options}) and priority ({priority_options}). "
+                f"Response includes fuzzy_match_quality ('good' or 'weak') - ask for clarification if 'weak'."
             ),
             tags=frozenset({"goals", "query", "list"}),
             risk_level=RiskLevel.SAFE,

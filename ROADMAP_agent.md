@@ -4,45 +4,48 @@ This document tracks improvements and technical debt for the `src/agent/` module
 
 ## Critical Priority
 
-### AGENT-001: Add tool execution timeout
+### AGENT-001: Add timeout to tool execution to prevent agent hangs
 - **Location**: `runner.py:602-620` (`_execute_tool`)
-- **Issue**: Tool handlers can hang indefinitely with no timeout mechanism
-- **Risk**: Agent can hang permanently on a stuck tool
-- **Solution**: Wrap execution with `concurrent.futures.ThreadPoolExecutor` or `signal.alarm`
+- **Issue**: Tool handlers can hang indefinitely with no timeout mechanism. If a tool makes an HTTP call that never responds, the entire agent run blocks forever.
+- **Risk**: Agent can hang permanently on a stuck tool, requiring manual intervention
+- **Solution**: Wrap execution with `concurrent.futures.ThreadPoolExecutor` or `signal.alarm` with configurable timeout (default 30s)
 - **Effort**: Small
 
-### AGENT-002: Fix unsafe toolUseId handling
+### AGENT-002: Raise error instead of empty string when Bedrock toolUseId is missing
 - **Location**: `bedrock_client.py:175-191` (`parse_tool_use`)
-- **Issue**: Returns empty string for missing `toolUseId` which causes downstream failures
-- **Risk**: Silent failures when Bedrock response is malformed
-- **Solution**: Validate structure upfront and raise `BedrockClientError` with clear message
+- **Issue**: Returns empty string for missing `toolUseId` which causes downstream failures. The empty ID propagates through the system and causes confusing errors later.
+- **Risk**: Silent failures when Bedrock response is malformed, making debugging difficult
+- **Solution**: Validate structure upfront and raise `BedrockClientError` with clear message like "Bedrock response missing required toolUseId field"
 - **Effort**: Small
 
 ## High Priority
 
-### AGENT-003: Extract duplicate tool patterns into factory
+### AGENT-003: Create generic CRUD tool factory to eliminate 180+ lines of duplicated code
 - **Location**: `tools/tasks.py`, `tools/goals.py`, `tools/reading_list.py`
-- **Issue**: ~180 lines duplicated across three files with identical patterns:
+- **Issue**: ~180 lines duplicated across three files with identical patterns. Adding a new domain (e.g., Projects) requires copying all this boilerplate. Any fix needs to be applied in three places.
   - `_get_client()` function identical in all three
   - `query_*()`, `get_*()`, `create_*()`, `update_*()` nearly identical
   - Tool definition generation with dynamic descriptions
-- **Solution**: Create generic tool factory:
+- **Solution**: Create generic tool factory that generates all CRUD tools from configuration:
   ```python
   def create_crud_tools(
       domain: str,
-      data_source_env: str,
+      endpoint_prefix: str,
+      query_model: type[BaseModel],
       create_model: type[BaseModel],
       update_model: type[BaseModel],
+      enum_fields: dict[str, type[StrEnum]],
   ) -> list[ToolDef]:
       """Generate query/get/create/update tools for a domain."""
   ```
+- **Blocked by**: Consider combining with PRD13 (page content templates) since both affect tool structure
 - **Effort**: Medium
 
-### AGENT-004: Fix HTTP connection pooling for tool handlers
+### AGENT-004: Reuse HTTP connections across tool calls instead of creating new session per call
 - **Location**: `tools/*.py` - `_get_client()` functions
-- **Issue**: Each tool call creates fresh `AgentAPIClient` with new `requests.Session`. No connection reuse.
-- **Risk**: Significant HTTP overhead with many tool calls
-- **Solution**: Module-level singleton or dependency injection:
+- **Issue**: Each tool call creates fresh `AgentAPIClient` with new `requests.Session`. An agent run with 5 tool calls creates 5 TCP connections instead of reusing one. This adds latency and connection overhead.
+- **Risk**: Significant HTTP overhead with many tool calls, especially noticeable with slow networks
+- **Solution**: Module-level singleton or dependency injection to reuse connection pool:
   ```python
   _api_client: AgentAPIClient | None = None
 
@@ -54,24 +57,24 @@ This document tracks improvements and technical debt for the `src/agent/` module
   ```
 - **Effort**: Small
 
-### AGENT-005: Add message size limits to conversation state
+### AGENT-005: Prevent memory exhaustion by adding size limits to conversation state
 - **Location**: `context_manager.py:100-115` (`append_messages`)
-- **Issue**: Messages appended without size check. Could cause memory exhaustion before sliding window triggers.
-- **Solution**: Add `max_message_bytes` parameter and check total size before appending
+- **Issue**: Messages appended without size check. A tool returning a massive JSON response (e.g., query returning 1000 items) could exhaust memory before the sliding window triggers at message count threshold.
+- **Solution**: Add `max_message_bytes` parameter (default 1MB) and check total size before appending. Truncate or summarise oversized messages.
 - **Effort**: Small
 
-### AGENT-006: Fix unknown tool infinite loop
+### AGENT-006: Prevent LLM from repeatedly requesting unknown tools in a loop
 - **Location**: `runner.py:458-460` (`_handle_unknown_tool`)
-- **Issue**: When LLM requests unknown tool, error is added but tool remains in available list. LLM can repeatedly request it.
-- **Solution**: Track failed tool requests and either remove from available tools or add explicit "tool not available" instruction to next prompt
+- **Issue**: When LLM requests an unknown tool (e.g., hallucinated tool name), we return an error message but the tool schema remains unchanged. The LLM may request the same invalid tool again, creating an infinite loop that burns through max_steps.
+- **Solution**: Track failed tool requests per run. Either remove the invalid tool name from available tools, or inject a system message saying "Tool X does not exist. Available tools are: [list]"
 - **Effort**: Small
 
 ## Medium Priority
 
-### AGENT-007: Fix loose message typing
+### AGENT-007: Replace list[Any] with proper MessageTypeDef typing in runner state
 - **Location**: `runner.py:86` (`_RunState.messages`)
-- **Issue**: Typed as `list[Any]` with comment saying it's `MessageTypeDef`. Defeats mypy's purpose.
-- **Solution**: Change to `list[MessageTypeDef]` and fix any resulting type errors
+- **Issue**: Typed as `list[Any]` with comment saying it's `MessageTypeDef`. This defeats mypy's type checking - any invalid message structure won't be caught until runtime. The comment suggests intent but doesn't enforce it.
+- **Solution**: Change to `list[MessageTypeDef]` and fix any resulting type errors. May need to add type: ignore comments for Bedrock response handling.
 - **Effort**: Small
 
 ### AGENT-008: Validate classification response type
@@ -79,22 +82,22 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Location**: `confirmation_classifier.py:128-140` (`_parse_classification_response`)
 - **Resolution**: Added robust error handling with retries and markdown extraction. Now raises `ClassificationParseError` on failure instead of silently defaulting.
 
-### AGENT-009: Remove fake assistant acknowledgement
+### AGENT-009: Remove synthetic "I understand" assistant message from context loading
 - **Location**: `context_manager.py:268-285` (`build_context_messages`)
-- **Issue**: Injects hardcoded "I understand the previous context" message that isn't real. Could confuse the LLM or pollute conversation history.
-- **Solution**: Either remove the fake message or use a different mechanism (system message, metadata field)
+- **Issue**: Injects hardcoded "I understand the previous context" message that the LLM never actually said. This pollutes conversation history with fake content and could confuse the LLM about what it previously said.
+- **Solution**: Either remove the fake message entirely, or use a system message to provide context summary, or store actual LLM acknowledgement from a previous turn
 - **Effort**: Small
 
-### AGENT-010: Add rate limiting and backoff
+### AGENT-010: Add exponential backoff with jitter for Bedrock and API rate limits
 - **Location**: `bedrock_client.py:130`, `api_client.py:115`
-- **Issue**: No backoff or rate limiting for API calls. Could hit quota limits and cause cascading failures.
-- **Solution**: Add exponential backoff with jitter using `tenacity` or custom retry logic
+- **Issue**: No backoff or rate limiting for API calls. If we hit Bedrock's rate limit (ThrottlingException), we fail immediately. Multiple rapid retries could worsen the situation and cause cascading failures.
+- **Solution**: Add exponential backoff with jitter using `tenacity` library. Retry on ThrottlingException and transient HTTP errors (429, 503). Start with 1s delay, max 30s.
 - **Effort**: Medium
 
-### AGENT-011: Validate model configuration at init time
+### AGENT-011: Fail fast on invalid model names by validating at AgentRunner init
 - **Location**: `runner.py:146-149`
-- **Issue**: Invalid model alias from environment variable only caught at first API call, not at initialisation.
-- **Solution**: Validate `AGENT_SELECTOR_MODEL` and `AGENT_CHAT_MODEL` in `AgentRunner.__init__`
+- **Issue**: Invalid model alias (e.g., `AGENT_CHAT_MODEL=gpt4`) from environment variable only caught at first Bedrock API call, not at initialisation. This delays error discovery until runtime.
+- **Solution**: Validate `AGENT_SELECTOR_MODEL` and `AGENT_CHAT_MODEL` against known aliases (haiku, sonnet, opus) in `AgentRunner.__init__`. Raise `ValueError` immediately if invalid.
 - **Effort**: Small
 
 ### AGENT-012: Fix state corruption on NEW_INTENT
@@ -102,10 +105,10 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Location**: `runner.py:320-322`
 - **Resolution**: Removed tool reuse logic entirely - now always re-selects tools on each turn based on current message. This handles mid-conversation intent changes naturally.
 
-### AGENT-013: Validate tool selector response structure
+### AGENT-013: Validate tool_names is a list in selector response to catch malformed LLM output
 - **Location**: `tool_selector.py:84-122` (`_parse_selection_response`)
-- **Issue**: Doesn't validate that `tool_names` is actually a list. If response is `{"tool_names": "string"}`, it won't error immediately but will fail later.
-- **Solution**: Add `isinstance(tool_names, list)` check after JSON parsing
+- **Issue**: Doesn't validate that `tool_names` is actually a list. If LLM returns malformed response like `{"tool_names": "query_tasks"}` (string instead of array), it won't error immediately but will cause confusing failures later when iterating.
+- **Solution**: Add `isinstance(tool_names, list)` check after JSON parsing. Also validate each item is a string.
 - **Effort**: Small
 
 ## Low Priority (Code Quality)
@@ -203,6 +206,16 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Benefit**: Easier to add/modify tools without code changes
 - **Effort**: Large
 
+### AGENT-F06: Require descriptive names before creating tasks/goals to ensure future findability
+- **Description**: Agent should validate that task/goal names are specific enough before creating. Vague names like "task", "thing", "stuff", "meeting" should prompt clarification. Names should be descriptive enough to find via fuzzy search weeks later.
+- **Examples**:
+  - Bad: "email task" → Ask: "What specifically about emails? e.g., 'Reply to John's Q4 proposal email'"
+  - Bad: "meeting" → Ask: "Which meeting? e.g., 'Prepare slides for Monday standup'"
+  - Good: "Review PR #123 for auth refactor" → Create directly
+- **Benefit**: Tasks remain findable and meaningful when revisited later. Reduces "what was this task about?" confusion.
+- **Implementation**: Add name validation in create_task/create_goal tool handlers with LLM-based ambiguity detection or simple heuristics (length < 15 chars, common vague words)
+- **Effort**: Medium
+
 ## Completed
 
 | ID        | Description                                                                                                 | Date       |
@@ -218,7 +231,8 @@ This document tracks improvements and technical debt for the `src/agent/` module
 | AGENT-027 | Include user confirmation message in conversation so LLM sees followup requests (e.g., "yes, and also X")   | 2024-12-25 |
 | AGENT-028 | Handle multiple tool uses in response - provide error results for ALL when any is unknown                   | 2024-12-25 |
 | AGENT-029 | Context-aware additive tool selection - selector considers current tools, only adds when needed             | 2024-12-25 |
-| AGENT-030 | Execute ALL tools in multi-tool response - refactored _handle_tool_use to process all tool_use blocks      | 2024-12-26 |
+| AGENT-030 | Execute ALL tools in multi-tool response - refactored _handle_tool_use to process all tool_use blocks       | 2024-12-26 |
+| AGENT-031 | Fuzzy name search for query tools - name_filter param with rapidfuzz matching and quality indicator          | 2024-12-26 |
 
 ## Priority Legend
 

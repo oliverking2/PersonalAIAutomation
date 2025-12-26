@@ -177,7 +177,9 @@ class TestQueryGoalsHandler(unittest.TestCase):
 
         self.assertEqual(result["count"], 1)
         self.assertEqual(len(result["items"]), 1)
-        mock_client.post.assert_called_once_with("/notion/goals/query", json={"limit": 50})
+        mock_client.post.assert_called_once_with(
+            "/notion/goals/query", json={"include_done": False, "limit": 50}
+        )
 
     @patch("src.agent.tools.goals._get_client")
     def test_query_with_status_filter(self, mock_get_client: MagicMock) -> None:

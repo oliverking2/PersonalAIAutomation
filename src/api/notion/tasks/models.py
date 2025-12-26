@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from src.api.notion.common.utils import FuzzyMatchQuality
 from src.notion.enums import EffortLevel, Priority, TaskGroup, TaskStatus
 
 
@@ -59,6 +60,12 @@ class TaskUpdateRequest(BaseModel):
 class TaskQueryRequest(BaseModel):
     """Request model for task query endpoint with structured filters."""
 
+    name_filter: str | None = Field(
+        None, description="Fuzzy match against task name (returns top 5 matches)"
+    )
+    include_done: bool = Field(
+        False, description="Whether to include completed tasks (default: exclude)"
+    )
     status: TaskStatus | None = Field(
         None, description=f"Filter by task status ({', '.join(TaskStatus)})"
     )
@@ -79,5 +86,16 @@ class TaskQueryResponse(BaseModel):
 
     results: list[TaskResponse] = Field(
         default_factory=list,
-        description="List of all tasks matching the query",
+        description="List of tasks matching the query",
+    )
+    fuzzy_match_quality: FuzzyMatchQuality | None = Field(
+        None,
+        description=(
+            "Quality of fuzzy name match: None=unfiltered, "
+            "'good'=best match score >= 60, 'weak'=no matches above threshold"
+        ),
+    )
+    excluded_done: bool = Field(
+        False,
+        description="True if completed tasks were excluded from results",
     )

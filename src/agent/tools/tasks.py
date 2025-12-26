@@ -136,9 +136,12 @@ def get_tasks_tools() -> list[ToolDef]:
         ToolDef(
             name="query_tasks",
             description=(
-                f"Query tasks from the task tracker. Can filter by status "
-                f"({status_options}), priority ({priority_options}), "
-                f"effort level ({effort_options}), and task group ({group_options})."
+                f"Query tasks from the task tracker. Use name_filter for fuzzy search "
+                f"by task name (e.g. 'email' matches 'Read emails'). "
+                f"By default excludes completed tasks; set include_done=true to include them. "
+                f"Can also filter by status ({status_options}), priority ({priority_options}), "
+                f"effort level ({effort_options}), and task group ({group_options}). "
+                f"Response includes fuzzy_match_quality ('good' or 'weak') - ask for clarification if 'weak'."
             ),
             tags=frozenset({"tasks", "query", "list"}),
             risk_level=RiskLevel.SAFE,

@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from src.api.notion.common.utils import FuzzyMatchQuality
 from src.notion.enums import Priority, ReadingCategory, ReadingStatus
 
 
@@ -54,6 +55,12 @@ class ReadingItemUpdateRequest(BaseModel):
 class ReadingQueryRequest(BaseModel):
     """Request model for reading query endpoint with structured filters."""
 
+    name_filter: str | None = Field(
+        None, description="Fuzzy match against item title (returns top 5 matches)"
+    )
+    include_completed: bool = Field(
+        False, description="Whether to include completed items (default: exclude)"
+    )
     status: ReadingStatus | None = Field(
         None, description=f"Filter by reading status ({', '.join(ReadingStatus)})"
     )
@@ -72,5 +79,16 @@ class ReadingQueryResponse(BaseModel):
 
     results: list[ReadingItemResponse] = Field(
         default_factory=list,
-        description="List of all reading items matching the query",
+        description="List of reading items matching the query",
+    )
+    fuzzy_match_quality: FuzzyMatchQuality | None = Field(
+        None,
+        description=(
+            "Quality of fuzzy name match: None=unfiltered, "
+            "'good'=best match score >= 60, 'weak'=no matches above threshold"
+        ),
+    )
+    excluded_completed: bool = Field(
+        False,
+        description="True if completed items were excluded from results",
     )

@@ -26,11 +26,12 @@ dagster = "^1.12.7"
 dagster-webserver = "^1.12.7"
 dagster-postgres = "^0.28.7"
 sentry-sdk = {extras = ["fastapi"], version = "^2.0.0"}
+rapidfuzz = "^3.14.3"
 
-[tool.poetry.group.checks]
+[tool.poetry.group.dev]
 optional = true
 
-[tool.poetry.group.checks.dependencies]
+[tool.poetry.group.dev.dependencies]
 ruff = "^0.14.9"
 pre-commit = "^4.5.0"
 mypy = "^1.13.0"

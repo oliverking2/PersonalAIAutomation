@@ -1,6 +1,6 @@
 # Pre-commit Configuration
 # Automatically runs code quality checks before each git commit
-# Install: poetry install --with checks && poetry run pre-commit install
+# Install: poetry install --with dev && poetry run pre-commit install
 # Run manually: poetry run pre-commit run --all-files
 
 repos:
