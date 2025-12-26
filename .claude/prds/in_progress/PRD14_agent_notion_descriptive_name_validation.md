@@ -169,9 +169,32 @@ def build_reading_item_content(notes: str | None = None) -> str:
 
 ## Part 3: Tool Updates
 
+### Content Access
+
+Page content (in markdown format) is available via the `content` field on responses:
+- **GET** (`get_task`, `get_goal`, `get_reading_item`): Returns full page content
+- **CREATE** (`create_task`, `create_goal`, `create_reading_item`): Returns the content that was set
+- **UPDATE** (`update_task`, `update_goal`, `update_reading_item`): Can replace content; returns current content
+
+**Note**: Query endpoints (`query_tasks`, `query_goals`, `query_reading_list`) do **NOT** return content as this would require fetching content for every item (too expensive). Use the GET endpoint if you need an item's content.
+
+### Content Update Behaviour
+
+When updating an item:
+- If `content` is provided in the update request, it **replaces** all existing page content
+- If `content` is not provided (or null), existing content is **preserved unchanged**
+- Content-only updates are allowed (no properties required)
+
 ### Updated Tool Descriptions
 
-Update tool descriptions to guide the agent to prompt for details:
+Tool descriptions MUST be updated to inform the agent about content capabilities:
+
+1. **GET tools** should mention: "Returns page content in the `content` field (markdown format)"
+2. **CREATE tools** should mention: "Include `content` parameter for page body (description, criteria, notes)"
+3. **UPDATE tools** should mention: "Include `content` parameter to replace page body; omit to keep existing content"
+4. **QUERY tools** should mention: "Does not return content; use GET endpoint to retrieve an item's content"
+
+Example tool descriptions to guide the agent:
 
 ```python
 # Tasks

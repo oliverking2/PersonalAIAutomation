@@ -13,7 +13,7 @@ from src.api.notion.tasks.models import (
     TaskResponse,
     TaskUpdateRequest,
 )
-from src.notion.blocks import markdown_to_blocks
+from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
 from src.notion.client import NotionClient
 from src.notion.enums import TaskStatus
 from src.notion.exceptions import NotionClientError
@@ -82,7 +82,12 @@ def get_task(
     try:
         data = client.get_page(task_id)
         task = parse_page_to_task(data)
-        return _task_to_response(task)
+
+        # Fetch page content
+        blocks = client.get_page_content(task_id)
+        content = blocks_to_markdown(blocks) if blocks else None
+
+        return _task_to_response(task, content=content)
     except NotionClientError as e:
         logger.exception(f"Failed to retrieve task: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -130,7 +135,7 @@ def create_task(
             blocks = markdown_to_blocks(request.content)
             client.append_page_content(task.id, blocks)
 
-        return _task_to_response(task)
+        return _task_to_response(task, content=request.content)
     except NotionClientError as e:
         logger.exception(f"Failed to create task: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -170,15 +175,33 @@ def update_task(
             task_group=request.task_group,
         )
 
-        if not properties:
+        if not properties and request.content is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No properties to update.",
+                detail="No properties or content to update.",
             )
 
-        data = client.update_page(page_id=task_id, properties=properties)
-        task = parse_page_to_task(data)
-        return _task_to_response(task)
+        # Update properties if any
+        if properties:
+            data = client.update_page(page_id=task_id, properties=properties)
+            task = parse_page_to_task(data)
+        else:
+            # Content-only update - fetch current task
+            data = client.get_page(task_id)
+            task = parse_page_to_task(data)
+
+        # Replace content if provided
+        content: str | None
+        if request.content is not None:
+            new_blocks = markdown_to_blocks(request.content)
+            client.replace_page_content(task_id, new_blocks)
+            content = request.content
+        else:
+            # Fetch existing content
+            blocks = client.get_page_content(task_id)
+            content = blocks_to_markdown(blocks) if blocks else None
+
+        return _task_to_response(task, content=content)
     except NotionClientError as e:
         logger.exception(f"Failed to update task: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -221,8 +244,13 @@ def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
     return {"and": conditions}
 
 
-def _task_to_response(task: NotionTask) -> TaskResponse:
-    """Convert a NotionTask to a TaskResponse."""
+def _task_to_response(task: NotionTask, content: str | None = None) -> TaskResponse:
+    """Convert a NotionTask to a TaskResponse.
+
+    :param task: The NotionTask to convert.
+    :param content: Optional markdown content for the page.
+    :returns: TaskResponse with all fields.
+    """
     return TaskResponse(
         id=task.id,
         task_name=task.task_name,
@@ -233,4 +261,5 @@ def _task_to_response(task: NotionTask) -> TaskResponse:
         task_group=task.task_group,
         assignee=task.assignee,
         url=task.url,
+        content=content,
     )

@@ -296,7 +296,7 @@ class TestUpdateGoalEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("No properties to update", response.json()["detail"])
+        self.assertIn("No properties or content to update", response.json()["detail"])
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_update_goal_duplicate_name_returns_409(self, mock_client_class: MagicMock) -> None:

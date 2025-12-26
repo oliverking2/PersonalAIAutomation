@@ -333,7 +333,7 @@ class TestUpdateReadingItemEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("No properties to update", response.json()["detail"])
+        self.assertIn("No properties or content to update", response.json()["detail"])
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_update_reading_item_duplicate_title_returns_409(

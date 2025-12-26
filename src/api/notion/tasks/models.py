@@ -20,6 +20,7 @@ class TaskResponse(BaseModel):
     task_group: str | None = Field(None, description="Work or Personal category")
     assignee: str | None = Field(None, description="Assigned user name")
     url: str = Field(..., description="Notion page URL")
+    content: str | None = Field(None, description="Page content in markdown format")
 
 
 class TaskCreateRequest(BaseModel):
@@ -55,6 +56,9 @@ class TaskUpdateRequest(BaseModel):
     )
     task_group: TaskGroup | None = Field(
         None, description=f"Task group category ({', '.join(TaskGroup)})"
+    )
+    content: str | None = Field(
+        None, description="Markdown content to replace page body (if provided)"
     )
 
 

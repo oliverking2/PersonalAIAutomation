@@ -13,7 +13,7 @@ from src.api.notion.goals.models import (
     GoalResponse,
     GoalUpdateRequest,
 )
-from src.notion.blocks import markdown_to_blocks
+from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
 from src.notion.client import NotionClient
 from src.notion.enums import GoalStatus
 from src.notion.exceptions import NotionClientError
@@ -82,7 +82,12 @@ def get_goal(
     try:
         data = client.get_page(goal_id)
         goal = parse_page_to_goal(data)
-        return _goal_to_response(goal)
+
+        # Fetch page content
+        blocks = client.get_page_content(goal_id)
+        content = blocks_to_markdown(blocks) if blocks else None
+
+        return _goal_to_response(goal, content=content)
     except NotionClientError as e:
         logger.exception(f"Failed to retrieve goal: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -129,7 +134,7 @@ def create_goal(
             blocks = markdown_to_blocks(request.content)
             client.append_page_content(goal.id, blocks)
 
-        return _goal_to_response(goal)
+        return _goal_to_response(goal, content=request.content)
     except NotionClientError as e:
         logger.exception(f"Failed to create goal: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -168,15 +173,33 @@ def update_goal(
             due_date=request.due_date,
         )
 
-        if not properties:
+        if not properties and request.content is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No properties to update.",
+                detail="No properties or content to update.",
             )
 
-        data = client.update_page(page_id=goal_id, properties=properties)
-        goal = parse_page_to_goal(data)
-        return _goal_to_response(goal)
+        # Update properties if any
+        if properties:
+            data = client.update_page(page_id=goal_id, properties=properties)
+            goal = parse_page_to_goal(data)
+        else:
+            # Content-only update - fetch current goal
+            data = client.get_page(goal_id)
+            goal = parse_page_to_goal(data)
+
+        # Replace content if provided
+        content: str | None
+        if request.content is not None:
+            new_blocks = markdown_to_blocks(request.content)
+            client.replace_page_content(goal_id, new_blocks)
+            content = request.content
+        else:
+            # Fetch existing content
+            blocks = client.get_page_content(goal_id)
+            content = blocks_to_markdown(blocks) if blocks else None
+
+        return _goal_to_response(goal, content=content)
     except NotionClientError as e:
         logger.exception(f"Failed to update goal: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -209,8 +232,13 @@ def _build_goal_filter(request: GoalQueryRequest) -> dict[str, object] | None:
     return {"and": conditions}
 
 
-def _goal_to_response(goal: NotionGoal) -> GoalResponse:
-    """Convert a NotionGoal to a GoalResponse."""
+def _goal_to_response(goal: NotionGoal, content: str | None = None) -> GoalResponse:
+    """Convert a NotionGoal to a GoalResponse.
+
+    :param goal: The NotionGoal to convert.
+    :param content: Optional markdown content for the page.
+    :returns: GoalResponse with all fields.
+    """
     return GoalResponse(
         id=goal.id,
         goal_name=goal.goal_name,
@@ -219,4 +247,5 @@ def _goal_to_response(goal: NotionGoal) -> GoalResponse:
         progress=goal.progress,
         due_date=goal.due_date,
         url=goal.url,
+        content=content,
     )

@@ -19,6 +19,7 @@ class ReadingItemResponse(BaseModel):
     item_url: str | None = Field(None, description="URL of the article/book")
     read_date: date | None = Field(None, description="Date read")
     url: str = Field(..., description="Notion page URL")
+    content: str | None = Field(None, description="Page content in markdown format")
 
 
 class ReadingItemCreateRequest(BaseModel):
@@ -51,6 +52,9 @@ class ReadingItemUpdateRequest(BaseModel):
     )
     item_url: str | None = Field(None, description="URL of the article/book")
     read_date: date | None = Field(None, description="Date read")
+    content: str | None = Field(
+        None, description="Markdown content to replace page body (if provided)"
+    )
 
 
 class ReadingQueryRequest(BaseModel):

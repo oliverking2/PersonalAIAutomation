@@ -13,7 +13,7 @@ from src.api.notion.reading_list.models import (
     ReadingQueryRequest,
     ReadingQueryResponse,
 )
-from src.notion.blocks import markdown_to_blocks
+from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
 from src.notion.client import NotionClient
 from src.notion.enums import ReadingStatus
 from src.notion.exceptions import NotionClientError
@@ -82,7 +82,12 @@ def get_reading_item(
     try:
         data = client.get_page(item_id)
         item = parse_page_to_reading_item(data)
-        return _reading_to_response(item)
+
+        # Fetch page content
+        blocks = client.get_page_content(item_id)
+        content = blocks_to_markdown(blocks) if blocks else None
+
+        return _reading_to_response(item, content=content)
     except NotionClientError as e:
         logger.exception(f"Failed to retrieve reading item: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -130,7 +135,7 @@ def create_reading_item(
             blocks = markdown_to_blocks(request.content)
             client.append_page_content(item.id, blocks)
 
-        return _reading_to_response(item)
+        return _reading_to_response(item, content=request.content)
     except NotionClientError as e:
         logger.exception(f"Failed to create reading item: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -170,15 +175,33 @@ def update_reading_item(
             read_date=request.read_date,
         )
 
-        if not properties:
+        if not properties and request.content is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No properties to update.",
+                detail="No properties or content to update.",
             )
 
-        data = client.update_page(page_id=item_id, properties=properties)
-        item = parse_page_to_reading_item(data)
-        return _reading_to_response(item)
+        # Update properties if any
+        if properties:
+            data = client.update_page(page_id=item_id, properties=properties)
+            item = parse_page_to_reading_item(data)
+        else:
+            # Content-only update - fetch current item
+            data = client.get_page(item_id)
+            item = parse_page_to_reading_item(data)
+
+        # Replace content if provided
+        content: str | None
+        if request.content is not None:
+            new_blocks = markdown_to_blocks(request.content)
+            client.replace_page_content(item_id, new_blocks)
+            content = request.content
+        else:
+            # Fetch existing content
+            blocks = client.get_page_content(item_id)
+            content = blocks_to_markdown(blocks) if blocks else None
+
+        return _reading_to_response(item, content=content)
     except NotionClientError as e:
         logger.exception(f"Failed to update reading item: {e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -214,8 +237,15 @@ def _build_reading_filter(request: ReadingQueryRequest) -> dict[str, object] | N
     return {"and": conditions}
 
 
-def _reading_to_response(item: NotionReadingItem) -> ReadingItemResponse:
-    """Convert a NotionReadingItem to a ReadingItemResponse."""
+def _reading_to_response(
+    item: NotionReadingItem, content: str | None = None
+) -> ReadingItemResponse:
+    """Convert a NotionReadingItem to a ReadingItemResponse.
+
+    :param item: The NotionReadingItem to convert.
+    :param content: Optional markdown content for the page.
+    :returns: ReadingItemResponse with all fields.
+    """
     return ReadingItemResponse(
         id=item.id,
         title=item.title,
@@ -225,4 +255,5 @@ def _reading_to_response(item: NotionReadingItem) -> ReadingItemResponse:
         item_url=item.item_url,
         read_date=item.read_date,
         url=item.url,
+        content=content,
     )

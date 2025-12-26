@@ -18,6 +18,7 @@ class GoalResponse(BaseModel):
     progress: float | None = Field(None, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
     url: str = Field(..., description="Notion page URL")
+    content: str | None = Field(None, description="Page content in markdown format")
 
 
 class GoalCreateRequest(BaseModel):
@@ -42,6 +43,9 @@ class GoalUpdateRequest(BaseModel):
     priority: Priority | None = Field(None, description=f"Goal priority ({', '.join(Priority)})")
     progress: float | None = Field(None, ge=0, le=100, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
+    content: str | None = Field(
+        None, description="Markdown content to replace page body (if provided)"
+    )
 
 
 class GoalQueryRequest(BaseModel):
