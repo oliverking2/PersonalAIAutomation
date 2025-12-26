@@ -189,18 +189,6 @@ def _create_update_tool(config: CRUDToolConfig) -> ToolDef:
 ### Helper Functions
 
 ```python
-# Shared client singleton (addresses AGENT-004)
-_api_client: AgentAPIClient | None = None
-
-
-def _get_shared_client() -> AgentAPIClient:
-    """Get or create shared API client."""
-    global _api_client
-    if _api_client is None:
-        _api_client = AgentAPIClient.from_env()
-    return _api_client
-
-
 def _format_enum_hints(enum_fields: dict[str, type[StrEnum]]) -> str:
     """Format enum field values for tool description."""
     if not enum_fields:
@@ -279,7 +267,6 @@ src/agent/tools/
 2. **Consistency**: All domains follow identical patterns
 3. **Extensibility**: New domain = new config object only
 4. **Maintainability**: Bug fixes in one place
-5. **HTTP Reuse**: Shared client addresses AGENT-004
 
 ## Adding a New Domain
 
@@ -353,4 +340,3 @@ class TestCRUDToolFactory(unittest.TestCase):
 3. Adding new domain requires only config object
 4. All existing tool tests pass unchanged
 5. Tool descriptions remain accurate and helpful
-6. Shared HTTP client reused across calls (AGENT-004)

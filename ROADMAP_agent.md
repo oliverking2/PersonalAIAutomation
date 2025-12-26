@@ -42,6 +42,7 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Effort**: Medium
 
 ### AGENT-004: Reuse HTTP connections across tool calls instead of creating new session per call
+- **Status**: IGNORED
 - **Location**: `tools/*.py` - `_get_client()` functions
 - **Issue**: Each tool call creates fresh `AgentAPIClient` with new `requests.Session`. An agent run with 5 tool calls creates 5 TCP connections instead of reusing one. This adds latency and connection overhead.
 - **Risk**: Significant HTTP overhead with many tool calls, especially noticeable with slow networks
@@ -89,6 +90,7 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Effort**: Small
 
 ### AGENT-010: Add exponential backoff with jitter for Bedrock and API rate limits
+- **Status**: IGNORED - very low priority
 - **Location**: `bedrock_client.py:130`, `api_client.py:115`
 - **Issue**: No backoff or rate limiting for API calls. If we hit Bedrock's rate limit (ThrottlingException), we fail immediately. Multiple rapid retries could worsen the situation and cause cascading failures.
 - **Solution**: Add exponential backoff with jitter using `tenacity` library. Retry on ThrottlingException and transient HTTP errors (429, 503). Start with 1s delay, max 30s.
@@ -114,6 +116,7 @@ This document tracks improvements and technical debt for the `src/agent/` module
 ## Low Priority (Code Quality)
 
 ### AGENT-014: Refactor context_manager into class-based API
+- **Status**: IGNORED - unnecessarily complex
 - **Location**: `context_manager.py`
 - **Issue**: Multiple functions with complex interdependencies. Combines loading, saving, window management, summarisation. No clear contract for what each function assumes about state.
 - **Solution**: Wrap in a class with clear invariants:
@@ -133,6 +136,7 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Effort**: Small
 
 ### AGENT-016: Centralise configuration constants
+- **Status**: Completed
 - **Location**: Multiple files
 - **Issue**: Constants scattered across files:
   - `DEFAULT_MAX_STEPS` in `runner.py`
@@ -163,6 +167,7 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Effort**: Medium
 
 ### AGENT-019: Filter PII from logs
+- **Status**: IGNORED - not so relevant for personal project
 - **Location**: `api_client.py:114`
 - **Issue**: Logs full request JSON without filtering. If JSON contains sensitive data, it's logged.
 - **Solution**: Add PII filter or redact known sensitive fields before logging
@@ -191,20 +196,10 @@ This document tracks improvements and technical debt for the `src/agent/` module
 - **Benefit**: Reduce API calls for repeated queries
 - **Effort**: Medium
 
-### AGENT-F03: Streaming responses
-- **Description**: Support streaming Bedrock responses for real-time output
-- **Benefit**: Better UX for long responses
-- **Effort**: Large
-
 ### AGENT-F04: Tool usage analytics
 - **Description**: Track which tools are used most, success rates, latencies
 - **Benefit**: Identify problematic tools, optimise prompts
 - **Effort**: Medium
-
-### AGENT-F05: Dynamic tool loading
-- **Description**: Load tools from configuration or plugins instead of hardcoded
-- **Benefit**: Easier to add/modify tools without code changes
-- **Effort**: Large
 
 ### AGENT-F06: Require descriptive names before creating tasks/goals to ensure future findability
 - **Description**: Agent should validate that task/goal names are specific enough before creating. Vague names like "task", "thing", "stuff", "meeting" should prompt clarification. Names should be descriptive enough to find via fuzzy search weeks later.
