@@ -13,6 +13,7 @@ from src.api.notion.tasks.models import (
     TaskResponse,
     TaskUpdateRequest,
 )
+from src.notion.blocks import markdown_to_blocks
 from src.notion.client import NotionClient
 from src.notion.enums import TaskStatus
 from src.notion.exceptions import NotionClientError
@@ -123,6 +124,12 @@ def create_task(
             properties=properties,
         )
         task = parse_page_to_task(data)
+
+        # Append content if provided
+        if request.content:
+            blocks = markdown_to_blocks(request.content)
+            client.append_page_content(task.id, blocks)
+
         return _task_to_response(task)
     except NotionClientError as e:
         logger.exception(f"Failed to create task: {e}")

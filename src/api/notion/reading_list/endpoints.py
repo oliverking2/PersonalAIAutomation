@@ -13,6 +13,7 @@ from src.api.notion.reading_list.models import (
     ReadingQueryRequest,
     ReadingQueryResponse,
 )
+from src.notion.blocks import markdown_to_blocks
 from src.notion.client import NotionClient
 from src.notion.enums import ReadingStatus
 from src.notion.exceptions import NotionClientError
@@ -123,6 +124,12 @@ def create_reading_item(
             properties=properties,
         )
         item = parse_page_to_reading_item(data)
+
+        # Append content if provided
+        if request.content:
+            blocks = markdown_to_blocks(request.content)
+            client.append_page_content(item.id, blocks)
+
         return _reading_to_response(item)
     except NotionClientError as e:
         logger.exception(f"Failed to create reading item: {e}")

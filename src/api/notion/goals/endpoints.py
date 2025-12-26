@@ -13,6 +13,7 @@ from src.api.notion.goals.models import (
     GoalResponse,
     GoalUpdateRequest,
 )
+from src.notion.blocks import markdown_to_blocks
 from src.notion.client import NotionClient
 from src.notion.enums import GoalStatus
 from src.notion.exceptions import NotionClientError
@@ -122,6 +123,12 @@ def create_goal(
             properties=properties,
         )
         goal = parse_page_to_goal(data)
+
+        # Append content if provided
+        if request.content:
+            blocks = markdown_to_blocks(request.content)
+            client.append_page_content(goal.id, blocks)
+
         return _goal_to_response(goal)
     except NotionClientError as e:
         logger.exception(f"Failed to create goal: {e}")

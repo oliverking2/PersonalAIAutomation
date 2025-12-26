@@ -40,6 +40,7 @@ class TaskCreateRequest(BaseModel):
         description=f"Task effort level (default: {EffortLevel.SMALL}) ({', '.join(EffortLevel)})",
     )
     task_group: TaskGroup = Field(..., description=f"Task group category ({', '.join(TaskGroup)})")
+    content: str | None = Field(None, description="Markdown content for the task page body")
 
 
 class TaskUpdateRequest(BaseModel):

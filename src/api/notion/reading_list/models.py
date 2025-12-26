@@ -35,6 +35,7 @@ class ReadingItemCreateRequest(BaseModel):
     )
     item_url: str | None = Field(None, description="URL of the article/book")
     read_date: date | None = Field(None, description="Date read")
+    content: str | None = Field(None, description="Markdown content for the reading item page body")
 
 
 class ReadingItemUpdateRequest(BaseModel):

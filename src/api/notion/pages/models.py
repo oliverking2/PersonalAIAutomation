@@ -1,6 +1,7 @@
 """Pydantic models for Notion API endpoints."""
 
 from datetime import date
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,3 +20,22 @@ class PageUpdateRequest(BaseModel):
 
     status: str | None = Field(None, description="New task status")
     due_date: date | None = Field(None, description="New due date")
+
+
+class PageContentResponse(BaseModel):
+    """Response model for page content endpoints."""
+
+    blocks: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of Notion block objects",
+    )
+    markdown: str = Field(
+        "",
+        description="Markdown representation of the page content",
+    )
+
+
+class PageContentRequest(BaseModel):
+    """Request model for page content update/append."""
+
+    markdown: str = Field(..., min_length=1, description="Markdown content to set")

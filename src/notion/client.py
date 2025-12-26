@@ -305,3 +305,95 @@ class NotionClient:
         logger.info(f"Updating page: {page_id}")
         payload = {"properties": properties}
         return self._patch(f"pages/{page_id}", payload)
+
+    # Block (page content) endpoints
+
+    def get_page_content(self, page_id: str) -> list[dict[str, Any]]:
+        """Get all blocks from a page.
+
+        Retrieves the page's child blocks, handling pagination automatically.
+
+        :param page_id: The Notion page ID.
+        :returns: List of block objects.
+        :raises NotionClientError: If the request fails.
+        """
+        logger.info(f"Retrieving page content: {page_id}")
+        all_blocks: list[dict[str, Any]] = []
+        start_cursor: str | None = None
+
+        while True:
+            endpoint = f"blocks/{page_id}/children"
+            if start_cursor:
+                endpoint = f"{endpoint}?start_cursor={start_cursor}"
+
+            response = self._get(endpoint)
+            all_blocks.extend(response.get("results", []))
+
+            if not response.get("has_more", False):
+                break
+
+            start_cursor = response.get("next_cursor")
+            if start_cursor is None:
+                break
+
+        logger.info(f"Retrieved {len(all_blocks)} blocks from page: {page_id}")
+        return all_blocks
+
+    def append_page_content(self, page_id: str, blocks: list[dict[str, Any]]) -> None:
+        """Append blocks to a page.
+
+        :param page_id: The Notion page ID.
+        :param blocks: List of block objects to append.
+        :raises NotionClientError: If the request fails.
+        """
+        if not blocks:
+            logger.debug(f"No blocks to append to page: {page_id}")
+            return
+
+        logger.info(f"Appending {len(blocks)} blocks to page: {page_id}")
+        payload = {"children": blocks}
+        self._patch(f"blocks/{page_id}/children", payload)
+
+    def _delete_block(self, block_id: str) -> None:
+        """Delete a block.
+
+        :param block_id: The block ID to delete.
+        :raises NotionClientError: If the request fails.
+        """
+        logger.debug(f"Deleting block: {block_id}")
+        url = f"{self.BASE_URL}/blocks/{block_id}"
+
+        try:
+            response = requests.delete(url, headers=self._headers, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+
+        except requests.exceptions.Timeout as e:
+            raise NotionClientError(f"Notion API request timed out after {REQUEST_TIMEOUT}s") from e
+        except requests.exceptions.HTTPError as e:
+            error_body = self._extract_error_message(e.response)
+            raise NotionClientError(
+                f"Notion API request failed: {e.response.status_code} - {error_body}"
+            ) from e
+        except requests.exceptions.RequestException as e:
+            raise NotionClientError(f"Notion API request failed: {e}") from e
+
+    def replace_page_content(self, page_id: str, blocks: list[dict[str, Any]]) -> None:
+        """Replace all page content with new blocks.
+
+        Deletes all existing blocks and appends the new ones.
+
+        :param page_id: The Notion page ID.
+        :param blocks: List of block objects to set as the new content.
+        :raises NotionClientError: If any request fails.
+        """
+        logger.info(f"Replacing content for page: {page_id}")
+
+        # Get existing blocks and delete them
+        existing_blocks = self.get_page_content(page_id)
+        for block in existing_blocks:
+            block_id = block.get("id")
+            if block_id:
+                self._delete_block(block_id)
+
+        # Append new blocks
+        self.append_page_content(page_id, blocks)

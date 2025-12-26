@@ -31,6 +31,7 @@ class GoalCreateRequest(BaseModel):
     priority: Priority | None = Field(None, description=f"Goal priority ({', '.join(Priority)})")
     progress: float | None = Field(None, ge=0, le=100, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
+    content: str | None = Field(None, description="Markdown content for the goal page body")
 
 
 class GoalUpdateRequest(BaseModel):
