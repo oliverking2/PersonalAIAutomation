@@ -65,7 +65,8 @@ make clean
 | `src/newsletters/`   | Email parsing and article extraction           |
 | `src/notion/`        | Notion API client, models, and parsing logic   |
 | `src/observability/` | Sentry/GlitchTip error tracking integration    |
-| `src/telegram/`      | Telegram Bot API client and alerting           |
+| `src/telegram/`      | Telegram Bot API client, polling, and chat     |
+| `src/utils/`         | Shared utilities (logging configuration)       |
 
 ### Separation of Concerns
 
@@ -196,8 +197,13 @@ src/<module>/
 ├── models.py             # Pydantic models for data
 ├── parser.py             # Data transformation functions
 ├── enums.py              # StrEnum definitions (if applicable)
-└── exceptions.py         # Custom exceptions
+├── exceptions.py         # Custom exceptions
+└── utils/                # Internal utilities (optional, for larger modules)
 ```
+
+Notes:
+- Larger modules (agent, telegram) use a `utils/` subdirectory for internal helpers
+- Configuration classes using `pydantic-settings` go in `utils/config.py`
 
 ### Agent Module Structure
 
@@ -205,27 +211,39 @@ The agent module provides AI-powered tool calling via AWS Bedrock:
 
 ```
 src/agent/
-├── __init__.py           # Exports public API
-├── client.py             # BedrockClient for Converse API
-├── config.py             # AgentConfig, MODEL_PRICING (centralised constants)
-├── models.py             # ToolDef, ToolMetadata, ToolSelectionResult
-├── registry.py           # ToolRegistry for tool management
-├── selector.py           # ToolSelector (AI-first with fallback)
-├── enums.py              # RiskLevel enum
-├── exceptions.py         # Agent-specific exceptions
-└── tools/                # Tool handlers by domain
-    ├── __init__.py
-    └── reading_list.py   # Reading list tool wrappers
+├── __init__.py              # Exports public API
+├── api_client.py            # AgentAPIClient for calling internal API
+├── bedrock_client.py        # BedrockClient for AWS Converse API
+├── enums.py                 # RiskLevel enum
+├── exceptions.py            # Agent-specific exceptions
+├── models.py                # AgentRunResult, ConfirmationRequest
+├── runner.py                # AgentRunner orchestrates agent execution
+├── tools/                   # Tool definitions by domain
+│   ├── factory.py           # CRUD tool factory for reusable patterns
+│   ├── models.py            # ToolDef, argument models
+│   ├── tasks.py             # Task management tools
+│   ├── goals.py             # Goal management tools
+│   └── reading_list.py      # Reading list tools
+└── utils/                   # Agent utilities
+    ├── config.py            # AgentConfig, MODEL_PRICING
+    ├── call_tracking.py     # LLM call tracking and persistence
+    ├── confirmation_classifier.py  # HITL confirmation logic
+    ├── context_manager.py   # Conversation context management
+    ├── pricing.py           # Token cost calculation
+    ├── templates.py         # System prompt templates
+    └── tools/
+        ├── registry.py      # ToolRegistry for tool management
+        └── selector.py      # ToolSelector (AI-first with fallback)
 ```
 
 **Important**: Tool handlers in `src/agent/tools/` must be thin wrappers:
 - Reuse argument models from domain modules where possible
-- Call domain clients/parsers, never duplicate their logic
+- Call API endpoints via HTTP, not domain clients directly
 - Only add tool-specific concerns (ToolDef metadata, serialisation)
 
 ### Agent Configuration
 
-All agent configuration is centralised in `src/agent/config.py`:
+All agent configuration is centralised in `src/agent/utils/config.py`:
 
 - `AgentConfig`: Frozen dataclass with all tuneable parameters
 - `DEFAULT_AGENT_CONFIG`: Default configuration singleton
@@ -235,6 +253,29 @@ When adding new configuration:
 1. Add the field to `AgentConfig` with a sensible default
 2. Update consuming code to use `config.field_name`
 3. Document the field in the class docstring
+
+### Telegram Module Structure
+
+The telegram module handles bot interactions and newsletter alerts:
+
+```
+src/telegram/
+├── __init__.py           # Exports public API
+├── client.py             # TelegramClient for Bot API
+├── handler.py            # MessageHandler for processing messages
+├── models.py             # Pydantic models (TelegramUpdate, etc.)
+├── polling.py            # PollingRunner for long-polling loop
+├── service.py            # TelegramService for newsletter alerts
+└── utils/
+    ├── config.py         # TelegramSettings (pydantic-settings)
+    ├── session_manager.py # SessionManager for chat sessions
+    └── misc.py           # Utility functions
+```
+
+Key patterns:
+- Configuration uses `pydantic-settings` for environment variable loading
+- Polling groups multiple messages from the same chat before agent invocation
+- Sessions link Telegram chats to AgentConversations in the database
 
 ## Coding Style
 - Ruff compatible formatting. Follow settings in `pyproject.toml`.

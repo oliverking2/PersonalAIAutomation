@@ -12,6 +12,8 @@ The primary use cases include:
 
 The system maintains conversational context across sessions using persisted history and summaries, allowing it to build continuity over time.
 
+This project also contains some reference information for why decisions where made/architectural patterns used.
+
 ## Architecture Overview
 
 This section provides a high-level overview of how the system works, intended as context for designing new features and PRDs.
@@ -96,6 +98,46 @@ User Message → PollingRunner → MessageHandler → SessionManager
 | **Single Telegram chat**   | Private 1:1 assistant, not a multi-user bot                                                 |
 | **Dagster over Celery**    | Better observability, native scheduling, no Redis dependency                                |
 
+### Class-Based Architecture
+
+The codebase uses a layered class-based approach for scalability and testability:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│     Client      │     │ Handler/Service │     │     Runner      │
+│  (I/O boundary) │ ──▶ │ (business logic)│ ──▶ │ (orchestration) │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+   TelegramClient         MessageHandler          PollingRunner
+   NotionClient           TelegramService         AgentRunner
+   BedrockClient          SessionManager
+```
+
+**Layer Responsibilities:**
+
+| Layer               | Purpose                             | Examples                                              |
+|---------------------|-------------------------------------|-------------------------------------------------------|
+| **Client**          | I/O boundary with external APIs     | `TelegramClient`, `NotionClient`, `BedrockClient`     |
+| **Handler/Service** | Business logic and orchestration    | `MessageHandler`, `TelegramService`, `SessionManager` |
+| **Runner**          | Long-running processes and loops    | `PollingRunner`, `AgentRunner`                        |
+| **Settings**        | Configuration via pydantic-settings | `TelegramSettings`, `AgentConfig`                     |
+
+**Why Classes Over Functions:**
+
+1. **Encapsulated State**: Configuration and credentials injected once at construction, not passed to every function call
+2. **Dependency Injection**: Easy to swap real implementations for mocks in tests
+3. **Single Responsibility**: Each class does one thing well (`MessageHandler` processes messages, `SessionManager` manages sessions)
+4. **Lifecycle Management**: Runners can start, stop, and handle graceful shutdown
+5. **Configuration Locality**: All settings in one validated object via pydantic-settings
+
+**When to Use Functions vs Classes:**
+
+| Use Functions                          | Use Classes                              |
+|----------------------------------------|------------------------------------------|
+| Pure transformations (`parse_html()`)  | Stateful operations (clients with auth)  |
+| One-off utilities (`format_message()`) | Multi-step workflows (runners, handlers) |
+| No dependencies needed                 | Dependencies that should be injected     |
+| No configuration                       | Configuration-driven behaviour           |
+
 ### Module Boundaries
 
 ```
@@ -142,8 +184,7 @@ Existing PRDs are in `.claude/prds/` and follow a consistent structure with over
 ### Areas for Improvement
 1. Integration tests - currently all tests use mocking
 2. Structured logging - JSON format for production observability
-3. Centralised config validation - consider Pydantic Settings
-4. Telegram webhook mode - currently polling only (see `.claude/prds/` for Phase 2B)
+3. Telegram webhook mode - currently polling only (see `.claude/prds/` for Phase 2B)
 
 ## Setup
 
@@ -180,12 +221,15 @@ For Docker (used by init script to create databases/users):
 
 #### Telegram
 Send newsletter alerts and enable two-way chat via Telegram bot:
-- `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
-- `TELEGRAM_CHAT_ID`: Target chat ID for messages (used by newsletter alerts)
+- `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather (required)
+- `TELEGRAM_ALLOWED_CHAT_IDS`: Comma-separated list of allowed chat IDs (required)
+- `TELEGRAM_CHAT_ID`: Target chat ID for newsletter alerts (optional)
 - `TELEGRAM_MODE`: Transport mode - `polling` (default) or `webhook`
-- `TELEGRAM_POLL_TIMEOUT`: Long polling timeout in seconds (default: 30)
-- `TELEGRAM_SESSION_TIMEOUT_MINUTES`: Session inactivity timeout (default: 10)
-- `TELEGRAM_ALLOWED_CHAT_IDS`: Comma-separated list of allowed chat IDs for the bot
+- `TELEGRAM_POLL_TIMEOUT`: Long polling timeout in seconds (default: 30, range: 1-60)
+- `TELEGRAM_SESSION_TIMEOUT_MINUTES`: Session inactivity timeout (default: 10, range: 1-60)
+- `TELEGRAM_ERROR_RETRY_DELAY`: Delay between error retries in seconds (default: 5)
+- `TELEGRAM_MAX_CONSECUTIVE_ERRORS`: Errors before backing off (default: 5)
+- `TELEGRAM_BACKOFF_DELAY`: Backoff delay after max errors in seconds (default: 30)
 
 Start the database with Docker:
 ```bash
@@ -308,15 +352,15 @@ poetry run uvicorn src.api.app:app --reload
 | GET    | /health | No   | Health check |
 
 ##### Notion (Generic)
-| Method | Path                                        | Auth  | Description                       |
-|--------|---------------------------------------------|-------|-----------------------------------|
-| GET    | /notion/databases/{database_id}             | Yes   | Retrieve database structure       |
-| GET    | /notion/data-sources/{data_source_id}       | Yes   | Retrieve data source config       |
-| POST   | /notion/data-sources/{data_source_id}/query | Yes   | Query all pages (auto-pagination) |
-| GET    | /notion/data-sources/templates              | Yes   | List data source templates        |
-| GET    | /notion/pages/{page_id}                     | Yes   | Retrieve a single page            |
-| POST   | /notion/pages                               | Yes   | Create a new page                 |
-| PATCH  | /notion/pages/{page_id}                     | Yes   | Update page properties            |
+| Method | Path                                        | Auth | Description                       |
+|--------|---------------------------------------------|------|-----------------------------------|
+| GET    | /notion/databases/{database_id}             | Yes  | Retrieve database structure       |
+| GET    | /notion/data-sources/{data_source_id}       | Yes  | Retrieve data source config       |
+| POST   | /notion/data-sources/{data_source_id}/query | Yes  | Query all pages (auto-pagination) |
+| GET    | /notion/data-sources/templates              | Yes  | List data source templates        |
+| GET    | /notion/pages/{page_id}                     | Yes  | Retrieve a single page            |
+| POST   | /notion/pages                               | Yes  | Create a new page                 |
+| PATCH  | /notion/pages/{page_id}                     | Yes  | Update page properties            |
 
 ##### Tasks (Task Tracker)
 | Method | Path                | Auth | Description                              |
@@ -327,20 +371,20 @@ poetry run uvicorn src.api.app:app --reload
 | PATCH  | /notion/tasks/{id}  | Yes  | Update a task                            |
 
 ##### Goals (Goals Tracker)
-| Method | Path                   | Auth  | Description                              |
-|--------|------------------------|-------|------------------------------------------|
-| POST   | /notion/goals/query    | Yes   | Query goals with fuzzy name search       |
-| GET    | /notion/goals/{id}     | Yes   | Retrieve a goal                          |
-| POST   | /notion/goals          | Yes   | Create a goal with validated enum fields |
-| PATCH  | /notion/goals/{id}     | Yes   | Update a goal                            |
+| Method | Path                   | Auth | Description                              |
+|--------|------------------------|------|------------------------------------------|
+| POST   | /notion/goals/query    | Yes  | Query goals with fuzzy name search       |
+| GET    | /notion/goals/{id}     | Yes  | Retrieve a goal                          |
+| POST   | /notion/goals          | Yes  | Create a goal with validated enum fields |
+| PATCH  | /notion/goals/{id}     | Yes  | Update a goal                            |
 
 ##### Reading List
-| Method | Path                       | Auth  | Description                                |
-|--------|----------------------------|-------|--------------------------------------------|
-| POST   | /notion/reading-list/query | Yes   | Query reading items with fuzzy name search |
-| GET    | /notion/reading-list/{id}  | Yes   | Retrieve a reading item                    |
-| POST   | /notion/reading            | Yes   | Create a reading item with validated enums |
-| PATCH  | /notion/reading-list/{id}  | Yes   | Update a reading item                      |
+| Method | Path                       | Auth | Description                                |
+|--------|----------------------------|------|--------------------------------------------|
+| POST   | /notion/reading-list/query | Yes  | Query reading items with fuzzy name search |
+| GET    | /notion/reading-list/{id}  | Yes  | Retrieve a reading item                    |
+| POST   | /notion/reading            | Yes  | Create a reading item with validated enums |
+| PATCH  | /notion/reading-list/{id}  | Yes  | Update a reading item                      |
 
 ##### Fuzzy Name Search
 All query endpoints support fuzzy name matching via `name_filter` parameter. Results are scored using `partial_ratio` matching and returned with a quality indicator:
