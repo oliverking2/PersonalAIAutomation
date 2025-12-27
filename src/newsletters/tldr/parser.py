@@ -21,6 +21,17 @@ READ_TIME_PATTERN = re.compile(r"(\d+)\s*minute\s*read", re.IGNORECASE)
 # Minimum length for section header text
 MIN_SECTION_HEADER_LENGTH = 3
 
+# Titles to exclude (case-insensitive exact matches)
+EXCLUDED_TITLES: set[str] = {
+    "apply here",
+    "advertise with us",
+}
+
+# Substrings that indicate a title should be excluded (case-insensitive)
+EXCLUDED_TITLE_SUBSTRINGS: set[str] = {
+    "(sponsor)",
+}
+
 
 def identify_newsletter_type(sender_name: str) -> NewsletterType:
     """Determine newsletter type from sender display name.
@@ -89,7 +100,7 @@ def _unpack_href(href: str, *, timeout: int = 10) -> str:
     return resp.url
 
 
-def _extract_article_from_block(
+def _extract_article_from_block(  # noqa: PLR0911
     block: Tag,
 ) -> ParsedArticle | None:
     """Extract article details from a single text-block element.
@@ -121,6 +132,11 @@ def _extract_article_from_block(
         logger.info(f"Skipping link without title: {link}")
         return None
 
+    # Skip excluded titles (sponsors, ads, job links)
+    if _is_excluded_title(title):
+        logger.debug(f"Skipping excluded title: {title}")
+        return None
+
     # Extract description - text after the link
     description = _extract_description(block, link)
 
@@ -134,6 +150,24 @@ def _extract_article_from_block(
     except ValueError as e:
         logger.warning(f"Failed to create ParsedArticle: {e}")
         return None
+
+
+def _is_excluded_title(title: str) -> bool:
+    """Check if an article title should be excluded.
+
+    Excludes sponsored content, job listings, and advertisement links.
+
+    :param title: The article title to check.
+    :returns: True if the title should be excluded.
+    """
+    title_lower = title.lower().strip()
+
+    # Check exact matches
+    if title_lower in EXCLUDED_TITLES:
+        return True
+
+    # Check substring matches
+    return any(substring in title_lower for substring in EXCLUDED_TITLE_SUBSTRINGS)
 
 
 def _is_article_url(url: str) -> bool:

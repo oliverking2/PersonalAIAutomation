@@ -8,6 +8,7 @@ import requests
 from src.newsletters.tldr.models import NewsletterType
 from src.newsletters.tldr.parser import (
     _is_article_url,
+    _is_excluded_title,
     _unpack_href,
     identify_newsletter_type,
 )
@@ -51,6 +52,38 @@ class TestIdentifyNewsletterType(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             identify_newsletter_type("Some Other Newsletter")
         self.assertIn("Unknown newsletter sender", str(context.exception))
+
+
+class TestIsExcludedTitle(unittest.TestCase):
+    """Tests for _is_excluded_title function."""
+
+    def test_excludes_apply_here(self) -> None:
+        """Test that 'Apply here' titles are excluded."""
+        self.assertTrue(_is_excluded_title("Apply here"))
+        self.assertTrue(_is_excluded_title("apply here"))
+        self.assertTrue(_is_excluded_title("APPLY HERE"))
+
+    def test_excludes_advertise_with_us(self) -> None:
+        """Test that 'advertise with us' titles are excluded."""
+        self.assertTrue(_is_excluded_title("advertise with us"))
+        self.assertTrue(_is_excluded_title("Advertise with us"))
+
+    def test_excludes_sponsor_titles(self) -> None:
+        """Test that titles containing '(Sponsor)' are excluded."""
+        self.assertTrue(_is_excluded_title("Great Product (Sponsor)"))
+        self.assertTrue(_is_excluded_title("Something (sponsor) else"))
+        self.assertTrue(_is_excluded_title("(SPONSOR) Advertisement"))
+
+    def test_accepts_regular_titles(self) -> None:
+        """Test that regular article titles are accepted."""
+        self.assertFalse(_is_excluded_title("OpenAI Releases GPT-5"))
+        self.assertFalse(_is_excluded_title("New Python Features"))
+        self.assertFalse(_is_excluded_title("Tech Industry Update"))
+
+    def test_handles_whitespace(self) -> None:
+        """Test that leading/trailing whitespace is handled."""
+        self.assertTrue(_is_excluded_title("  Apply here  "))
+        self.assertTrue(_is_excluded_title("  advertise with us  "))
 
 
 class TestIsArticleUrl(unittest.TestCase):
