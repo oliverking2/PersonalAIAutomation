@@ -1,6 +1,7 @@
 # PRD04: Scheduled Task & Goal Reminders
 
-**Status: PROPOSED**
+**Status: SUPERSEDED by PRD20**
+**Updated: 2024-12-27**
 
 ## Overview
 
@@ -44,7 +45,6 @@ Sends a summary of:
 **Schedule**: Every Monday at 9:00 AM
 
 Sends a summary of:
-- Tasks completed last week
 - Tasks planned for this week
 - Overdue task count
 
