@@ -1,15 +1,15 @@
-"""Tests for AgentAPIClient."""
+"""Tests for InternalAPIClient."""
 
 import unittest
 from unittest.mock import MagicMock, patch
 
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from src.agent.api_client import AgentAPIClient, AgentAPIClientError
+from src.api.client import InternalAPIClient, InternalAPIClientError
 
 
-class TestAgentAPIClient(unittest.TestCase):
-    """Tests for AgentAPIClient."""
+class TestInternalAPIClient(unittest.TestCase):
+    """Tests for InternalAPIClient."""
 
     def test_init_with_defaults(self) -> None:
         """Test client initialisation with environment variables."""
@@ -18,7 +18,7 @@ class TestAgentAPIClient(unittest.TestCase):
             {"API_AUTH_TOKEN": "test-token"},
             clear=False,
         ):
-            client = AgentAPIClient()
+            client = InternalAPIClient()
 
             self.assertEqual(client.base_url, "http://localhost:8000")
             self.assertEqual(client.api_token, "test-token")
@@ -26,7 +26,7 @@ class TestAgentAPIClient(unittest.TestCase):
 
     def test_init_with_custom_values(self) -> None:
         """Test client initialisation with custom values."""
-        client = AgentAPIClient(
+        client = InternalAPIClient(
             base_url="http://example.com",
             api_token="custom-token",
             timeout=60,
@@ -41,11 +41,11 @@ class TestAgentAPIClient(unittest.TestCase):
         """Test that missing API token raises ValueError."""
         with patch.dict("os.environ", {}, clear=True):
             with self.assertRaises(ValueError) as ctx:
-                AgentAPIClient()
+                InternalAPIClient()
 
             self.assertIn("API_AUTH_TOKEN", str(ctx.exception))
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_get_request(self, mock_session_class: MagicMock) -> None:
         """Test GET request."""
         mock_session = MagicMock()
@@ -56,7 +56,7 @@ class TestAgentAPIClient(unittest.TestCase):
         mock_response.json.return_value = {"data": "value"}
         mock_session.request.return_value = mock_response
 
-        client = AgentAPIClient(api_token="test-token")
+        client = InternalAPIClient(api_token="test-token")
         result = client.get("/test", params={"key": "value"})
 
         self.assertEqual(result, {"data": "value"})
@@ -68,7 +68,7 @@ class TestAgentAPIClient(unittest.TestCase):
             timeout=30,
         )
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_post_request(self, mock_session_class: MagicMock) -> None:
         """Test POST request."""
         mock_session = MagicMock()
@@ -79,7 +79,7 @@ class TestAgentAPIClient(unittest.TestCase):
         mock_response.json.return_value = {"created": True}
         mock_session.request.return_value = mock_response
 
-        client = AgentAPIClient(api_token="test-token")
+        client = InternalAPIClient(api_token="test-token")
         result = client.post("/test", json={"title": "Test"})
 
         self.assertEqual(result, {"created": True})
@@ -91,7 +91,7 @@ class TestAgentAPIClient(unittest.TestCase):
             timeout=30,
         )
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_patch_request(self, mock_session_class: MagicMock) -> None:
         """Test PATCH request."""
         mock_session = MagicMock()
@@ -102,7 +102,7 @@ class TestAgentAPIClient(unittest.TestCase):
         mock_response.json.return_value = {"updated": True}
         mock_session.request.return_value = mock_response
 
-        client = AgentAPIClient(api_token="test-token")
+        client = InternalAPIClient(api_token="test-token")
         result = client.patch("/test/123", json={"title": "Updated"})
 
         self.assertEqual(result, {"updated": True})
@@ -114,9 +114,9 @@ class TestAgentAPIClient(unittest.TestCase):
             timeout=30,
         )
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_request_handles_http_error(self, mock_session_class: MagicMock) -> None:
-        """Test that HTTP errors are converted to AgentAPIClientError."""
+        """Test that HTTP errors are converted to InternalAPIClientError."""
         mock_session = MagicMock()
         mock_session_class.return_value = mock_session
 
@@ -125,29 +125,29 @@ class TestAgentAPIClient(unittest.TestCase):
         mock_response.json.return_value = {"detail": "Not found"}
         mock_session.request.return_value = mock_response
 
-        client = AgentAPIClient(api_token="test-token")
+        client = InternalAPIClient(api_token="test-token")
 
-        with self.assertRaises(AgentAPIClientError) as ctx:
+        with self.assertRaises(InternalAPIClientError) as ctx:
             client.get("/not-found")
 
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertIn("Not found", str(ctx.exception))
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_request_handles_connection_error(self, mock_session_class: MagicMock) -> None:
-        """Test that connection errors are converted to AgentAPIClientError."""
+        """Test that connection errors are converted to InternalAPIClientError."""
         mock_session = MagicMock()
         mock_session_class.return_value = mock_session
         mock_session.request.side_effect = RequestsConnectionError("Connection refused")
 
-        client = AgentAPIClient(api_token="test-token")
+        client = InternalAPIClient(api_token="test-token")
 
-        with self.assertRaises(AgentAPIClientError) as ctx:
+        with self.assertRaises(InternalAPIClientError) as ctx:
             client.get("/test")
 
         self.assertIn("Request failed", str(ctx.exception))
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_context_manager(self, mock_session_class: MagicMock) -> None:
         """Test context manager usage."""
         mock_session = MagicMock()
@@ -158,13 +158,13 @@ class TestAgentAPIClient(unittest.TestCase):
         mock_response.json.return_value = {"data": "value"}
         mock_session.request.return_value = mock_response
 
-        with AgentAPIClient(api_token="test-token") as client:
+        with InternalAPIClient(api_token="test-token") as client:
             result = client.get("/test")
 
         self.assertEqual(result, {"data": "value"})
         mock_session.close.assert_called_once()
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_extract_error_detail_with_detail_key(self, mock_session_class: MagicMock) -> None:
         """Test error detail extraction with detail key."""
         mock_session = MagicMock()
@@ -175,14 +175,14 @@ class TestAgentAPIClient(unittest.TestCase):
         mock_response.json.return_value = {"detail": "Validation error"}
         mock_session.request.return_value = mock_response
 
-        client = AgentAPIClient(api_token="test-token")
+        client = InternalAPIClient(api_token="test-token")
 
-        with self.assertRaises(AgentAPIClientError) as ctx:
+        with self.assertRaises(InternalAPIClientError) as ctx:
             client.post("/test")
 
         self.assertIn("Validation error", str(ctx.exception))
 
-    @patch("src.agent.api_client.requests.Session")
+    @patch("src.api.client.requests.Session")
     def test_extract_error_detail_with_text_fallback(self, mock_session_class: MagicMock) -> None:
         """Test error detail extraction falls back to text."""
         mock_session = MagicMock()
@@ -194,9 +194,9 @@ class TestAgentAPIClient(unittest.TestCase):
         mock_response.text = "Internal Server Error"
         mock_session.request.return_value = mock_response
 
-        client = AgentAPIClient(api_token="test-token")
+        client = InternalAPIClient(api_token="test-token")
 
-        with self.assertRaises(AgentAPIClientError) as ctx:
+        with self.assertRaises(InternalAPIClientError) as ctx:
             client.get("/test")
 
         self.assertIn("Internal Server Error", str(ctx.exception))

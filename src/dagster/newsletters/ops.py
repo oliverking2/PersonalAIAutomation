@@ -5,13 +5,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from dagster import Backoff, Jitter, OpExecutionContext, RetryPolicy, op
+from src.alerts import AlertService, AlertType, NewsletterAlertProvider
 from src.database.connection import get_session
 from src.database.extraction_state import get_watermark, set_watermark
 from src.database.newsletters import backfill_article_urls
 from src.enums import ExtractionSource
 from src.graph.auth import GraphAPI
 from src.newsletters.tldr.service import NewsletterService
-from src.telegram import TelegramClient, TelegramService
+from src.telegram import TelegramClient
 from src.telegram.utils.config import get_telegram_settings
 
 # Email address to fetch newsletters for
@@ -102,8 +103,8 @@ def process_newsletters_op(context: OpExecutionContext) -> NewsletterStats:
 def send_alerts_op(context: OpExecutionContext, newsletter_stats: NewsletterStats) -> AlertStats:
     """Send Telegram alerts for unsent newsletters.
 
-    Queries for newsletters that haven't been alerted yet and sends
-    Telegram messages for each.
+    Uses the unified AlertService with NewsletterAlertProvider to send
+    alerts for newsletters that haven't been alerted yet.
 
     :param context: Dagster execution context.
     :param newsletter_stats: Stats from previous newsletter processing op.
@@ -120,15 +121,20 @@ def send_alerts_op(context: OpExecutionContext, newsletter_stats: NewsletterStat
     )
 
     with get_session() as session:
-        telegram_service = TelegramService(session, telegram_client)
-        result = telegram_service.send_unsent_newsletters()
+        provider = NewsletterAlertProvider(session)
+        alert_service = AlertService(
+            session=session,
+            telegram_client=telegram_client,
+            providers=[provider],
+        )
+        result = alert_service.send_alerts(alert_types=[AlertType.NEWSLETTER])
 
     stats = AlertStats(
-        newsletters_sent=result.newsletters_sent,
+        newsletters_sent=result.alerts_sent,
         errors=result.errors,
     )
 
     context.log.info(
-        f"Telegram alerts complete: {result.newsletters_sent} sent, {len(result.errors)} errors"
+        f"Telegram alerts complete: {result.alerts_sent} sent, {len(result.errors)} errors"
     )
     return stats

@@ -225,6 +225,16 @@ def _build_goal_filter(request: GoalQueryRequest) -> dict[str, object] | None:
     if request.priority:
         conditions.append({"property": "Priority", "select": {"equals": request.priority.value}})
 
+    if request.due_before:
+        conditions.append(
+            {"property": "Due date", "date": {"before": request.due_before.isoformat()}}
+        )
+
+    if request.due_after:
+        conditions.append(
+            {"property": "Due date", "date": {"after": request.due_after.isoformat()}}
+        )
+
     if not conditions:
         return None
     if len(conditions) == 1:

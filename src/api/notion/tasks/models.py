@@ -83,6 +83,11 @@ class TaskQueryRequest(BaseModel):
     task_group: TaskGroup | None = Field(
         None, description=f"Filter by task group ({', '.join(TaskGroup)})"
     )
+    due_before: date | None = Field(
+        None, description="Filter tasks due before this date (exclusive)"
+    )
+    due_after: date | None = Field(None, description="Filter tasks due after this date (exclusive)")
+    due_date: date | None = Field(None, description="Filter tasks due on this exact date")
     limit: int = Field(50, ge=1, le=100, description="Maximum number of tasks to return")
 
 

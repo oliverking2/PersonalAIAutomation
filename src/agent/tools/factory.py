@@ -15,9 +15,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, create_model
 
-from src.agent.api_client import AgentAPIClient
 from src.agent.enums import RiskLevel
 from src.agent.models import ToolDef
+from src.api.client import InternalAPIClient
 
 # Type alias for content builder functions
 ContentBuilder = Callable[[BaseModel], str]
@@ -61,12 +61,12 @@ class CRUDToolConfig:
     content_builder: ContentBuilder | None = None
 
 
-def _get_client() -> AgentAPIClient:
+def _get_client() -> InternalAPIClient:
     """Get an API client instance.
 
     :returns: Configured API client.
     """
-    return AgentAPIClient()
+    return InternalAPIClient()
 
 
 def _format_enum_hints(enum_fields: dict[str, type[StrEnum]]) -> str:

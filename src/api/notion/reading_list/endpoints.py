@@ -233,6 +233,22 @@ def _build_reading_filter(request: ReadingQueryRequest) -> dict[str, object] | N
     if request.priority:
         conditions.append({"property": "Priority", "select": {"equals": request.priority.value}})
 
+    if request.edited_before:
+        conditions.append(
+            {
+                "timestamp": "last_edited_time",
+                "last_edited_time": {"before": request.edited_before.isoformat()},
+            }
+        )
+
+    if request.edited_after:
+        conditions.append(
+            {
+                "timestamp": "last_edited_time",
+                "last_edited_time": {"after": request.edited_after.isoformat()},
+            }
+        )
+
     if not conditions:
         return None
     if len(conditions) == 1:

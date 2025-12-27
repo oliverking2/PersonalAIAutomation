@@ -1,5 +1,7 @@
 """Pydantic models for Reading List API endpoints."""
 
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 from src.api.notion.common.utils import FuzzyMatchQuality
@@ -81,6 +83,10 @@ class ReadingQueryRequest(BaseModel):
     priority: Priority | None = Field(
         None, description=f"Filter by priority ({', '.join(Priority)})"
     )
+    edited_before: date | None = Field(
+        None, description="Filter items last edited before this date (for finding stale items)"
+    )
+    edited_after: date | None = Field(None, description="Filter items last edited after this date")
     limit: int = Field(50, ge=1, le=100, description="Maximum number of items to return")
 
 

@@ -4,27 +4,6 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ---
 
-## In Progress
-
-### PRD15: Newsletter Alert Service Refactor
-**Goal**: Separate newsletter alerting from TelegramService for cleaner architecture.
-
-- Move `send_unsent_newsletters()` to new `NewsletterAlertService` in `src/newsletters/`
-- Extract message formatters to `src/newsletters/formatters.py`
-- Simplify `TelegramService` to thin messaging wrapper
-- Foundation for PRD04 (same pattern for reminders)
-
-### PRD04: Daily Task & Goal Reminders
-**Goal**: Scheduled Telegram notifications for tasks and goals.
-**Depends on**: PRD15
-
-- Daily task reminder (8am): overdue, due today, high priority this week
-- Monthly goal review (1st of month): progress visualisation, at-risk detection
-- Weekly reading list reminder (optional)
-- Dagster scheduled jobs for orchestration
-
----
-
 ## Up Next
 
 ### PRD17: Tool Execution Timeout
@@ -130,7 +109,7 @@ End-to-end conversation flow testing.
 | ID     | Location            | Issue                                                        |
 |--------|---------------------|--------------------------------------------------------------|
 | TD-001 | telegram/client.py  | Remove environment variable fallback                         |
-| TD-002 | telegram/service.py | Decouple from newsletter-specific logic (addressed by PRD15) |
+| TD-002 | telegram/service.py | ~~Decouple from newsletter-specific logic~~ (fixed by PRD20) |
 | TD-003 | telegram/handler.py | Inject agent runner instead of lazy init                     |
 
 ---
@@ -165,6 +144,7 @@ End-to-end conversation flow testing.
 | PRD14  | Agent Notion Descriptive Name Validation           | 2024-12 |
 | PRD16  | Agent Config Centralisation                        | 2024-12 |
 | PRD19  | CRUD Tool Factory                                  | 2024-12 |
+| PRD20  | Unified Alert System (supersedes PRD04 & PRD15)    | 2024-12 |
 
 ### Agent Roadmap Items
 

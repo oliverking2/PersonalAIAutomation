@@ -237,6 +237,21 @@ def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
             {"property": "Task Group", "select": {"equals": request.task_group.value}}
         )
 
+    if request.due_before:
+        conditions.append(
+            {"property": "Due date", "date": {"before": request.due_before.isoformat()}}
+        )
+
+    if request.due_after:
+        conditions.append(
+            {"property": "Due date", "date": {"after": request.due_after.isoformat()}}
+        )
+
+    if request.due_date:
+        conditions.append(
+            {"property": "Due date", "date": {"equals": request.due_date.isoformat()}}
+        )
+
     if not conditions:
         return None
     if len(conditions) == 1:

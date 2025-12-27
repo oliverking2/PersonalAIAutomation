@@ -58,6 +58,7 @@ class ReadingCategory(StrEnum):
     DATA_SCIENCE = "Data Science"
     DATA_ENGINEERING = "Data Engineering"
     AI = "AI"
+    PERSONAL_DEVELOPMENT = "Personal Development"
 
 
 class ReadingType(StrEnum):

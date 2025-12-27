@@ -45,11 +45,11 @@ This section provides a high-level overview of how the system works, intended as
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            DOMAIN SERVICES                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  NotionClient          │  TelegramService        │  NewsletterService       │
-│  (Notion API wrapper)  │  (message sending)      │  (email processing)      │
+│  NotionClient          │  AlertService           │  NewsletterService       │
+│  (Notion API wrapper)  │  (unified alerts)       │  (email processing)      │
 │                        │                         │                          │
-│  • Query databases     │  • Format messages      │  • Fetch from Graph API  │
-│  • Create/update pages │  • Send alerts          │  • Parse HTML content    │
+│  • Query databases     │  • Provider-based arch  │  • Fetch from Graph API  │
+│  • Create/update pages │  • Format & send alerts │  • Parse HTML content    │
 │  • Validate enums      │  • Track sent status    │  • Extract articles      │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
@@ -70,7 +70,7 @@ This section provides a high-level overview of how the system works, intended as
 **1. Newsletter Pipeline (Scheduled)**
 ```
 Dagster Schedule → Graph API (fetch emails) → Parser (extract articles)
-    → PostgreSQL (store) → TelegramService (alert) → Telegram Bot API
+    → PostgreSQL (store) → AlertService (alert) → Telegram Bot API
 ```
 
 **2. API Request (HTTP)**
@@ -108,18 +108,18 @@ The codebase uses a layered class-based approach for scalability and testability
 │  (I/O boundary) │ ──▶ │ (business logic)│ ──▶ │ (orchestration) │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
    TelegramClient         MessageHandler          PollingRunner
-   NotionClient           TelegramService         AgentRunner
+   NotionClient           AlertService            AgentRunner
    BedrockClient          SessionManager
 ```
 
 **Layer Responsibilities:**
 
-| Layer               | Purpose                             | Examples                                              |
-|---------------------|-------------------------------------|-------------------------------------------------------|
-| **Client**          | I/O boundary with external APIs     | `TelegramClient`, `NotionClient`, `BedrockClient`     |
-| **Handler/Service** | Business logic and orchestration    | `MessageHandler`, `TelegramService`, `SessionManager` |
-| **Runner**          | Long-running processes and loops    | `PollingRunner`, `AgentRunner`                        |
-| **Settings**        | Configuration via pydantic-settings | `TelegramSettings`, `AgentConfig`                     |
+| Layer               | Purpose                             | Examples                                            |
+|---------------------|-------------------------------------|-----------------------------------------------------|
+| **Client**          | I/O boundary with external APIs     | `TelegramClient`, `NotionClient`, `BedrockClient`   |
+| **Handler/Service** | Business logic and orchestration    | `MessageHandler`, `AlertService`, `SessionManager`  |
+| **Runner**          | Long-running processes and loops    | `PollingRunner`, `AgentRunner`                      |
+| **Settings**        | Configuration via pydantic-settings | `TelegramSettings`, `AgentConfig`                   |
 
 **Why Classes Over Functions:**
 
@@ -253,8 +253,28 @@ Supported newsletters:
 - TLDR AI (AI/ML focused)
 - TLDR Dev (developer focused)
 
-### Telegram Alerts
-Sends newsletter summaries to Telegram with article titles and links. Newsletters are tracked to prevent duplicate alerts.
+### Unified Alert System
+Proactive Telegram notifications using a provider-based architecture. All alerts are tracked in the `sent_alerts` table to prevent duplicates.
+
+#### Alert Types
+| Type | Schedule | Description |
+|------|----------|-------------|
+| Newsletter | On new newsletter | Article summaries from TLDR newsletters |
+| Daily Task | 8:00 AM daily | Overdue tasks, due today, high priority this week |
+| Monthly Goal | 1st of month 9:00 AM | Active goals with progress status |
+| Weekly Reading | Sunday 6:00 PM | High priority and stale reading items |
+
+#### Architecture
+The alert system uses a provider pattern:
+- **AlertProvider**: Protocol defining `get_pending_alerts()` and `mark_sent()`
+- **AlertService**: Orchestrator that sends alerts via TelegramClient and tracks them
+- **Formatters**: HTML message formatting per alert type
+
+Providers:
+- `NewsletterAlertProvider` - Queries database for unsent newsletters
+- `TaskAlertProvider` - Queries API for overdue/due tasks
+- `GoalAlertProvider` - Queries API for active goals
+- `ReadingAlertProvider` - Queries API for high priority/stale reading items
 
 ### Telegram Chat
 Two-way conversational interface for interacting with the AI agent via Telegram. Supports multi-turn conversations with session persistence.

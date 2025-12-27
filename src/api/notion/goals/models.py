@@ -63,6 +63,10 @@ class GoalQueryRequest(BaseModel):
     priority: Priority | None = Field(
         None, description=f"Filter by priority ({', '.join(Priority)})"
     )
+    due_before: date | None = Field(
+        None, description="Filter goals due before this date (exclusive)"
+    )
+    due_after: date | None = Field(None, description="Filter goals due after this date (exclusive)")
     limit: int = Field(50, ge=1, le=100, description="Maximum number of goals to return")
 
 

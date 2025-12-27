@@ -1,4 +1,4 @@
-"""HTTP client for agent tools to call the API."""
+"""HTTP client for internal API calls."""
 
 import logging
 import os
@@ -16,7 +16,7 @@ DEFAULT_TIMEOUT = 30
 HTTP_ERROR_THRESHOLD = 400
 
 
-class AgentAPIClientError(Exception):
+class InternalAPIClientError(Exception):
     """Raised when an API request fails."""
 
     def __init__(self, message: str, status_code: int | None = None) -> None:
@@ -29,10 +29,11 @@ class AgentAPIClientError(Exception):
         self.status_code = status_code
 
 
-class AgentAPIClient:
-    """HTTP client for agent tools to call internal API endpoints.
+class InternalAPIClient:
+    """HTTP client for calling internal API endpoints.
 
-    Provides authenticated access to API endpoints for use by agent tool handlers.
+    Provides authenticated access to API endpoints for use by alert providers,
+    agent tool handlers, and other internal services.
     """
 
     def __init__(
@@ -60,7 +61,7 @@ class AgentAPIClient:
         self._session = requests.Session()
         self._session.headers.update({"Authorization": f"Bearer {self.api_token}"})
 
-        logger.debug(f"AgentAPIClient initialised: base_url={self.base_url}")
+        logger.debug(f"InternalAPIClient initialised: base_url={self.base_url}")
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Make a GET request to the API.
@@ -68,7 +69,7 @@ class AgentAPIClient:
         :param path: API endpoint path.
         :param params: Query parameters.
         :returns: JSON response data.
-        :raises AgentAPIClientError: If the request fails.
+        :raises InternalAPIClientError: If the request fails.
         """
         return self._request("GET", path, params=params)
 
@@ -78,7 +79,7 @@ class AgentAPIClient:
         :param path: API endpoint path.
         :param json: JSON request body.
         :returns: JSON response data.
-        :raises AgentAPIClientError: If the request fails.
+        :raises InternalAPIClientError: If the request fails.
         """
         return self._request("POST", path, json=json)
 
@@ -88,7 +89,7 @@ class AgentAPIClient:
         :param path: API endpoint path.
         :param json: JSON request body.
         :returns: JSON response data.
-        :raises AgentAPIClientError: If the request fails.
+        :raises InternalAPIClientError: If the request fails.
         """
         return self._request("PATCH", path, json=json)
 
@@ -106,7 +107,7 @@ class AgentAPIClient:
         :param params: Query parameters.
         :param json: JSON request body.
         :returns: JSON response data.
-        :raises AgentAPIClientError: If the request fails.
+        :raises InternalAPIClientError: If the request fails.
         """
         url = f"{self.base_url}{path}"
 
@@ -121,13 +122,13 @@ class AgentAPIClient:
                 logger.warning(
                     f"API request failed: {method} {path} -> {response.status_code}: {error_detail}"
                 )
-                raise AgentAPIClientError(error_detail, status_code=response.status_code)
+                raise InternalAPIClientError(error_detail, status_code=response.status_code)
 
             return dict(response.json())
 
         except RequestException as e:
             logger.exception(f"API request error: {method} {path}")
-            raise AgentAPIClientError(f"Request failed: {e}") from e
+            raise InternalAPIClientError(f"Request failed: {e}") from e
 
     @staticmethod
     def _extract_error_detail(response: requests.Response) -> str:
@@ -148,7 +149,7 @@ class AgentAPIClient:
         """Close the HTTP session."""
         self._session.close()
 
-    def __enter__(self) -> "AgentAPIClient":
+    def __enter__(self) -> "InternalAPIClient":
         """Enter context manager."""
         return self
 
