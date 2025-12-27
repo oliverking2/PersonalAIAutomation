@@ -45,6 +45,30 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------
+  # Telegram Bot (polling)
+  # ----------------------------
+#  telegram:
+#    build: .
+#    container_name: personal_automation_telegram
+#    restart: unless-stopped
+#    command: ["python", "-m", "src.telegram.polling"]
+#    env_file: .env
+#    environment:
+#      - DATABASE_HOST=postgres
+#      - AGENT_API_BASE_URL=http://api:8000
+#    depends_on:
+#      postgres:
+#        condition: service_healthy
+#      api:
+#        condition: service_healthy
 
   # ----------------------------
   # Dagster (orchestration)
