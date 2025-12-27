@@ -116,15 +116,15 @@ End-to-end conversation flow testing.
 
 ## Future Ideas
 
-| Idea                        | Description                                           |
-|-----------------------------|-------------------------------------------------------|
-| Async tool execution        | Convert tool handlers to async for parallel execution |
-| Tool usage analytics        | Track tool success rates, latencies, usage patterns   |
-| Smart reminders             | AI-powered prioritisation of what to highlight        |
-| Snooze reminders            | Allow user to snooze via Telegram reply               |
-| Voice message transcription | Transcribe voice messages before processing           |
-| Progress trends             | Show goal progress trends over time                   |
-
+| Idea                        | Description                                              |
+|-----------------------------|----------------------------------------------------------|
+| Async tool execution        | Convert tool handlers to async for parallel execution    |
+| Tool usage analytics        | Track tool success rates, latencies, usage patterns      |
+| Smart reminders             | AI-powered prioritisation of what to highlight           |
+| Snooze reminders            | Allow user to snooze via Telegram reply                  |
+| Voice message transcription | Transcribe voice messages before processing              |
+| Progress trends             | Show goal progress trends over time                      |
+| Running Integration         | Integrate with Strava/Garmin to track running activities |
 ---
 
 ## Completed
