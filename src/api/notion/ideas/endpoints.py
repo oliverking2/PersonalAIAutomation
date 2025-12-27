@@ -15,6 +15,7 @@ from src.api.notion.ideas.models import (
 )
 from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
 from src.notion.client import NotionClient
+from src.notion.enums import IdeaStatus
 from src.notion.exceptions import NotionClientError
 from src.notion.models import NotionIdea
 from src.notion.parser import build_idea_properties, parse_page_to_idea
@@ -104,18 +105,19 @@ def create_idea(
     """Create a new idea in the ideas data source."""
     logger.debug("Creating idea")
 
-    # Check for duplicate names (no status filtering for ideas - check all)
+    # Check for duplicate names (exclude archived ideas)
     check_duplicate_name(
         client=client,
         data_source_id=data_source_id,
         name_property="Idea",
-        complete_status="__NONE__",  # Ideas don't have status, use placeholder
+        complete_status=IdeaStatus.DONE.value,
         new_name=request.idea,
     )
 
     try:
         properties = build_idea_properties(
             idea=request.idea,
+            status=request.status,
             idea_group=request.idea_group,
         )
         data = client.create_page(
@@ -154,7 +156,7 @@ def update_idea(
             client=client,
             data_source_id=data_source_id,
             name_property="Idea",
-            complete_status="__NONE__",  # Ideas don't have status, use placeholder
+            complete_status=IdeaStatus.DONE.value,
             new_name=request.idea,
             exclude_id=idea_id,
         )
@@ -162,6 +164,7 @@ def update_idea(
     try:
         properties = build_idea_properties(
             idea=request.idea,
+            status=request.status,
             idea_group=request.idea_group,
         )
 
@@ -205,6 +208,15 @@ def _build_idea_filter(request: IdeaQueryRequest) -> dict[str, object] | None:
     """
     conditions: list[dict[str, object]] = []
 
+    # Exclude Archived ideas by default unless include_done is True
+    if not request.include_done:
+        conditions.append(
+            {"property": "Status", "status": {"does_not_equal": IdeaStatus.DONE.value}}
+        )
+
+    if request.status:
+        conditions.append({"property": "Status", "status": {"equals": request.status.value}})
+
     if request.idea_group:
         conditions.append(
             {"property": "Idea Group", "select": {"equals": request.idea_group.value}}
@@ -227,6 +239,7 @@ def _idea_to_response(idea: NotionIdea, content: str | None = None) -> IdeaRespo
     return IdeaResponse(
         id=idea.id,
         idea=idea.idea,
+        status=idea.status,
         idea_group=idea.idea_group,
         notion_url=idea.notion_url,
         content=content,

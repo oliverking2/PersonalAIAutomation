@@ -52,15 +52,16 @@ GOAL_FIELDS: dict[str, TaskField] = {
 
 READING_FIELDS: dict[str, TaskField] = {
     "title": TaskField("Title", FieldType.TITLE),
+    "item_type": TaskField("Type", FieldType.SELECT),
     "status": TaskField("Status", FieldType.STATUS),
     "priority": TaskField("Priority", FieldType.SELECT),
     "category": TaskField("Category", FieldType.SELECT),
     "item_url": TaskField("URL", FieldType.URL),
-    "read_date": TaskField("Read Date", FieldType.DATE),
 }
 
 IDEA_FIELDS: dict[str, TaskField] = {
     "idea": TaskField("Idea", FieldType.TITLE),
+    "status": TaskField("Status", FieldType.STATUS),
     "idea_group": TaskField("Idea Group", FieldType.SELECT),
 }
 
@@ -116,11 +117,11 @@ def parse_page_to_reading_item(page: dict[str, Any]) -> NotionReadingItem:
     return NotionReadingItem(
         id=page["id"],
         title=_extract_title(properties.get("Title", {})),
+        item_type=_extract_select(properties.get("Type", {})) or "Other",
         status=_extract_status(properties.get("Status", {})),
         priority=_extract_select(properties.get("Priority", {})),
         category=_extract_select(properties.get("Category", {})),
         item_url=_extract_url(properties.get("URL", {})),
-        read_date=_extract_date(properties.get("Read Date", {})),
         notion_url=page.get("url", ""),
     )
 
@@ -136,6 +137,7 @@ def parse_page_to_idea(page: dict[str, Any]) -> NotionIdea:
     return NotionIdea(
         id=page["id"],
         idea=_extract_title(properties.get("Idea", {})),
+        status=_extract_status(properties.get("Status", {})),
         idea_group=_extract_select(properties.get("Idea Group", {})),
         notion_url=page.get("url", ""),
     )

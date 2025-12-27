@@ -13,9 +13,11 @@ from src.notion.enums import (
     EffortLevel,
     GoalStatus,
     IdeaGroup,
+    IdeaStatus,
     Priority,
     ReadingCategory,
     ReadingStatus,
+    ReadingType,
     TaskGroup,
     TaskStatus,
 )
@@ -97,6 +99,9 @@ class AgentReadingItemCreateArgs(BaseModel):
     """
 
     title: str = Field(..., min_length=1, description="Title of the item to read")
+    item_type: ReadingType = Field(
+        ..., description=f"Type of reading item ({', '.join(ReadingType)})"
+    )
     notes: str | None = Field(
         None,
         description="Why this was added or initial thoughts",
@@ -195,6 +200,9 @@ class AgentReadingItemUpdateArgs(BaseModel):
     """
 
     title: str | None = Field(None, min_length=1, description="Title of the item")
+    item_type: ReadingType | None = Field(
+        None, description=f"Type of reading item ({', '.join(ReadingType)})"
+    )
     notes: str | None = Field(
         None,
         description="Notes or thoughts about this item",
@@ -212,7 +220,6 @@ class AgentReadingItemUpdateArgs(BaseModel):
         None,
         description=f"Content category ({', '.join(ReadingCategory)})",
     )
-    read_date: date | None = Field(None, description="Date when item was read")
 
 
 class AgentIdeaCreateArgs(BaseModel):
@@ -232,6 +239,10 @@ class AgentIdeaCreateArgs(BaseModel):
         min_length=1,
         description="Details, context, and elaboration on the idea (required)",
     )
+    status: IdeaStatus | None = Field(
+        default=IdeaStatus.NOT_STARTED,
+        description=f"Idea status (default: {IdeaStatus.NOT_STARTED})",
+    )
     idea_group: IdeaGroup | None = Field(
         None,
         description=f"Idea group ({', '.join(IdeaGroup)})",
@@ -249,6 +260,10 @@ class AgentIdeaUpdateArgs(BaseModel):
     notes: str | None = Field(
         None,
         description="Additional details, context, or elaboration on the idea",
+    )
+    status: IdeaStatus | None = Field(
+        None,
+        description=f"Idea status ({', '.join(IdeaStatus)})",
     )
     idea_group: IdeaGroup | None = Field(
         None,

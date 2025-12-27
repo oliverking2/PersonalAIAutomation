@@ -5,14 +5,14 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.api.notion.common.models import PageResponse
-from src.api.notion.common.utils import _page_to_response
-from src.api.notion.dependencies import get_notion_client
-from src.api.notion.pages.models import (
+from src.api.notion.common.pages.models import (
     PageContentRequest,
     PageContentResponse,
     PageCreateRequest,
     PageUpdateRequest,
 )
+from src.api.notion.common.utils import _page_to_response
+from src.api.notion.dependencies import get_notion_client
 from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
 from src.notion.client import NotionClient
 from src.notion.exceptions import NotionClientError

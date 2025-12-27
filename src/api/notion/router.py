@@ -4,11 +4,11 @@ import logging
 
 from fastapi import APIRouter
 
-from src.api.notion.databases.endpoints import router as databases_router
-from src.api.notion.datasources.endpoints import router as datasources_router
+from src.api.notion.common.databases.endpoints import router as databases_router
+from src.api.notion.common.datasources.endpoints import router as datasources_router
+from src.api.notion.common.pages.endpoints import router as pages_router
 from src.api.notion.goals.endpoints import router as goals_router
 from src.api.notion.ideas.endpoints import router as ideas_router
-from src.api.notion.pages.endpoints import router as pages_router
 from src.api.notion.reading_list.endpoints import router as reading_router
 from src.api.notion.tasks.endpoints import router as tasks_router
 

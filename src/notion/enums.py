@@ -60,8 +60,25 @@ class ReadingCategory(StrEnum):
     AI = "AI"
 
 
+class ReadingType(StrEnum):
+    """Valid type values for reading list items."""
+
+    BOOK = "Book"
+    ARTICLE = "Article"
+    OTHER = "Other"
+
+
 class IdeaGroup(StrEnum):
     """Valid group values for ideas."""
 
     WORK = "Work"
     PERSONAL = "Personal"
+
+
+class IdeaStatus(StrEnum):
+    """Valid status values for ideas."""
+
+    NOT_STARTED = "Not Started"
+    IN_PROGRESS = "In Progress"
+    ARCHIVED = "Archived"
+    DONE = "Done"

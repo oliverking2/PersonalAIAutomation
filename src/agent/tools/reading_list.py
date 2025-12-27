@@ -11,9 +11,10 @@ from src.agent.tools.factory import CRUDToolConfig, create_crud_tools
 from src.agent.tools.models import AgentReadingItemCreateArgs, AgentReadingItemUpdateArgs
 from src.agent.utils.templates import build_reading_item_content
 from src.api.notion.reading_list.models import ReadingQueryRequest
-from src.notion.enums import Priority, ReadingCategory, ReadingStatus
+from src.notion.enums import Priority, ReadingCategory, ReadingStatus, ReadingType
 
 # Build descriptions with enum options
+_type_options = ", ".join(ReadingType)
 _status_options = ", ".join(ReadingStatus)
 _category_options = ", ".join(ReadingCategory)
 _priority_options = ", ".join(Priority)
@@ -34,6 +35,7 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
     create_model=AgentReadingItemCreateArgs,
     update_model=AgentReadingItemUpdateArgs,
     enum_fields={
+        "item_type": ReadingType,
         "status": ReadingStatus,
         "category": ReadingCategory,
         "priority": Priority,
@@ -44,18 +46,19 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
         f"Query items from the reading list. Use name_filter for fuzzy search "
         f"by title (e.g. 'clean code' matches 'Clean Code book'). "
         f"By default excludes completed items; set include_completed=true to include them. "
-        f"Can also filter by status ({_status_options}), category ({_category_options}), "
-        f"and priority ({_priority_options}). "
+        f"Can also filter by type ({_type_options}), status ({_status_options}), "
+        f"category ({_category_options}), and priority ({_priority_options}). "
         f"Response includes fuzzy_match_quality ('good' or 'weak') - ask for clarification if 'weak'. "
         f"Does NOT return page content; use get_reading_item to retrieve an item's content."
     ),
     get_description=(
         "Get details of a specific reading list item by its ID. "
-        "Returns title, status, priority, category, item_url (article/resource link), "
-        "notion_url (link to Notion page), read date, and page content (in markdown format)."
+        "Returns title, type (Book, Article, Other), status, priority, category, "
+        "item_url (article/resource link), notion_url (link to Notion page), "
+        "and page content (in markdown format)."
     ),
     create_description=(
-        f"Create a new reading list item. Required: title. "
+        f"Create a new reading list item. Required: title and item_type ({_type_options}). "
         f"BEFORE calling: check if title is the actual book/article name. "
         f"Too vague: 'Article', 'Book', 'Blog post'. "
         f"Better: 'Clean Code by Robert Martin', 'React hooks tutorial', 'NYT article on AI'. "
@@ -65,8 +68,8 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
     ),
     update_description=(
         f"Update an existing reading list item. Requires the item_id. "
-        f"Can update title, status ({_status_options}), priority ({_priority_options}), "
-        f"category ({_category_options}), item_url, or read date. "
+        f"Can update title, type ({_type_options}), status ({_status_options}), "
+        f"priority ({_priority_options}), category ({_category_options}), or item_url. "
         f"Use notes to update page content; omit to keep existing."
     ),
 )

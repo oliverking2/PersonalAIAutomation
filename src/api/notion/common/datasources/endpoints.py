@@ -4,9 +4,13 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.datasources.models import (
+    DataSourceResponse,
+    QueryRequest,
+    TemplatesResponse,
+)
 from src.api.notion.common.models import QueryResponse
 from src.api.notion.common.utils import _page_to_response
-from src.api.notion.datasources.models import DataSourceResponse, QueryRequest, TemplatesResponse
 from src.api.notion.dependencies import get_notion_client
 from src.notion.client import NotionClient
 from src.notion.exceptions import NotionClientError

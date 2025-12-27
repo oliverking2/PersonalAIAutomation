@@ -79,11 +79,11 @@ class NotionReadingItem(BaseModel):
 
     id: str = Field(..., min_length=1, description="Notion page ID")
     title: str = Field(..., min_length=1, description="Reading item title")
+    item_type: str = Field(..., description="Type of reading item (Book, Article, Other)")
     status: str | None = Field(None, description="Reading status")
     priority: str | None = Field(None, description="Reading priority level")
     category: str | None = Field(None, description="Reading category")
     item_url: str | None = Field(None, description="URL of the article/book")
-    read_date: date | None = Field(None, description="Date read")
     notion_url: str = Field(..., description="Notion page URL")
 
 
@@ -96,5 +96,6 @@ class NotionIdea(BaseModel):
 
     id: str = Field(..., min_length=1, description="Notion page ID")
     idea: str = Field(..., min_length=1, description="Idea title")
+    status: str | None = Field(None, description="Idea status")
     idea_group: str | None = Field(None, description="Idea group (Work/Personal)")
     notion_url: str = Field(..., description="Notion page URL")

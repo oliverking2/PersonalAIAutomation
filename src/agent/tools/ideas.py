@@ -11,9 +11,10 @@ from src.agent.tools.factory import CRUDToolConfig, create_crud_tools
 from src.agent.tools.models import AgentIdeaCreateArgs, AgentIdeaUpdateArgs
 from src.agent.utils.templates import build_idea_content
 from src.api.notion.ideas.models import IdeaQueryRequest
-from src.notion.enums import IdeaGroup
+from src.notion.enums import IdeaGroup, IdeaStatus
 
 # Build descriptions with enum options
+_status_options = ", ".join(IdeaStatus)
 _group_options = ", ".join(IdeaGroup)
 
 
@@ -32,6 +33,7 @@ IDEAS_TOOL_CONFIG = CRUDToolConfig(
     create_model=AgentIdeaCreateArgs,
     update_model=AgentIdeaUpdateArgs,
     enum_fields={
+        "status": IdeaStatus,
         "idea_group": IdeaGroup,
     },
     tags=frozenset({"ideas"}),
@@ -39,13 +41,14 @@ IDEAS_TOOL_CONFIG = CRUDToolConfig(
     query_description=(
         f"Query ideas from the ideas tracker. Use name_filter for fuzzy search "
         f"by idea title (e.g. 'app' matches 'New mobile app idea'). "
-        f"Can filter by idea_group ({_group_options}). "
+        f"By default excludes Done ideas; set include_done=true to include them. "
+        f"Can filter by status ({_status_options}) and idea_group ({_group_options}). "
         f"Response includes fuzzy_match_quality ('good' or 'weak') - ask for clarification if 'weak'. "
         f"Does NOT return page content; use get_idea to retrieve an idea's full details."
     ),
     get_description=(
         "Get details of a specific idea by its ID. "
-        "Returns idea title, group, and page content (in markdown format)."
+        "Returns idea title, status, group, and page content (in markdown format)."
     ),
     create_description=(
         f"Create a new idea. Required: idea (descriptive title) and notes (details/context). "
@@ -54,11 +57,11 @@ IDEAS_TOOL_CONFIG = CRUDToolConfig(
         f"Better: 'Mobile app for tracking daily habits with gamification'. "
         f"Notes must explain: what is the idea and any initial thoughts. "
         f"If the user only provides a brief mention, ask them to elaborate before creating. "
-        f"Optional: idea_group ({_group_options})."
+        f"Optional: status ({_status_options}), idea_group ({_group_options})."
     ),
     update_description=(
         f"Update an existing idea. Requires the idea_id. "
-        f"Can update idea (title), idea_group ({_group_options}). "
+        f"Can update idea (title), status ({_status_options}), idea_group ({_group_options}). "
         f"Use notes to update page content; omit to keep existing."
     ),
 )

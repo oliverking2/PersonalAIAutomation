@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.notion.databases.models import (
+from src.api.notion.common.databases.models import (
     DatabaseResponse,
 )
 from src.api.notion.dependencies import get_notion_client

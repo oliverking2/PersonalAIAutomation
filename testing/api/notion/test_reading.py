@@ -35,11 +35,11 @@ class TestQueryReadingEndpoint(unittest.TestCase):
                 "url": "https://notion.so/Reading-1",
                 "properties": {
                     "Title": {"title": [{"plain_text": "Clean Code"}]},
+                    "Type": {"select": {"name": "Book"}},
                     "Status": {"status": {"name": "Reading Now"}},
                     "Priority": {"select": {"name": "High"}},
                     "Category": {"select": {"name": "Data Engineering"}},
                     "URL": {"url": "https://example.com/book"},
-                    "Read Date": {"date": None},
                 },
             }
         ]
@@ -56,6 +56,7 @@ class TestQueryReadingEndpoint(unittest.TestCase):
         self.assertEqual(len(data["results"]), 1)
         item = data["results"][0]
         self.assertEqual(item["title"], "Clean Code")
+        self.assertEqual(item["item_type"], "Book")
         self.assertEqual(item["status"], "Reading Now")
         self.assertEqual(item["priority"], "High")
         self.assertEqual(item["category"], "Data Engineering")
@@ -124,11 +125,11 @@ class TestGetReadingItemEndpoint(unittest.TestCase):
             "url": "https://notion.so/My-Book",
             "properties": {
                 "Title": {"title": [{"plain_text": "My Book"}]},
+                "Type": {"select": {"name": "Book"}},
                 "Status": {"status": {"name": "Completed"}},
                 "Priority": {"select": {"name": "Medium"}},
                 "Category": {"select": {"name": "AI"}},
                 "URL": {"url": None},
-                "Read Date": {"date": {"start": "2025-12-20"}},
             },
         }
         mock_client_class.return_value = mock_client
@@ -142,8 +143,8 @@ class TestGetReadingItemEndpoint(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["id"], "reading-123")
         self.assertEqual(data["title"], "My Book")
+        self.assertEqual(data["item_type"], "Book")
         self.assertEqual(data["category"], "AI")
-        self.assertEqual(data["read_date"], "2025-12-20")
 
 
 class TestCreateReadingItemEndpoint(unittest.TestCase):
@@ -164,11 +165,11 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
             "url": "https://notion.so/New-Article",
             "properties": {
                 "Title": {"title": [{"plain_text": "New Article"}]},
+                "Type": {"select": {"name": "Article"}},
                 "Status": {"status": {"name": "To Read"}},
                 "Priority": {"select": {"name": "High"}},
                 "Category": {"select": {"name": "Data Science"}},
                 "URL": {"url": "https://example.com/article"},
-                "Read Date": {"date": None},
             },
         }
         mock_client_class.return_value = mock_client
@@ -178,6 +179,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
             headers=self.auth_headers,
             json={
                 "title": "New Article",
+                "item_type": "Article",
                 "status": "To Read",
                 "priority": "High",
                 "category": "Data Science",
@@ -189,6 +191,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["id"], "reading-new")
         self.assertEqual(data["title"], "New Article")
+        self.assertEqual(data["item_type"], "Article")
         self.assertEqual(data["priority"], "High")
         self.assertEqual(data["category"], "Data Science")
 
@@ -201,11 +204,11 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
             "url": "https://notion.so/Minimal",
             "properties": {
                 "Title": {"title": [{"plain_text": "Minimal"}]},
+                "Type": {"select": {"name": "Other"}},
                 "Status": {"status": {"name": "To Read"}},
                 "Priority": {"select": None},
                 "Category": {"select": None},
                 "URL": {"url": None},
-                "Read Date": {"date": None},
             },
         }
         mock_client_class.return_value = mock_client
@@ -213,7 +216,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"title": "Minimal"},
+            json={"title": "Minimal", "item_type": "Other"},
         )
 
         self.assertEqual(response.status_code, 201)
@@ -223,7 +226,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"status": "To Read"},
+            json={"item_type": "Article"},
         )
 
         self.assertEqual(response.status_code, 422)
@@ -231,12 +234,25 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         self.assertIn("title", detail)
         self.assertIn("field required", detail)
 
+    def test_create_reading_item_missing_type_returns_422(self) -> None:
+        """Test that missing item_type returns 422 with readable error."""
+        response = self.client.post(
+            "/notion/reading-list",
+            headers=self.auth_headers,
+            json={"title": "Article"},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"]
+        self.assertIn("item_type", detail)
+        self.assertIn("field required", detail)
+
     def test_create_reading_item_invalid_status_returns_422(self) -> None:
         """Test that invalid status enum value returns 422 with readable error."""
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"title": "Article", "status": "Invalid"},
+            json={"title": "Article", "item_type": "Article", "status": "Invalid"},
         )
 
         self.assertEqual(response.status_code, 422)
@@ -249,7 +265,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"title": "Article", "category": "Invalid Category"},
+            json={"title": "Article", "item_type": "Article", "category": "Invalid Category"},
         )
 
         self.assertEqual(response.status_code, 422)
@@ -276,7 +292,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"title": "existing article"},  # case insensitive match
+            json={"title": "existing article", "item_type": "Article"},  # case insensitive match
         )
 
         self.assertEqual(response.status_code, 409)
@@ -301,11 +317,11 @@ class TestUpdateReadingItemEndpoint(unittest.TestCase):
             "url": "https://notion.so/Article",
             "properties": {
                 "Title": {"title": [{"plain_text": "Article"}]},
+                "Type": {"select": {"name": "Book"}},
                 "Status": {"status": {"name": "Completed"}},
                 "Priority": {"select": {"name": "Low"}},
                 "Category": {"select": None},
                 "URL": {"url": None},
-                "Read Date": {"date": {"start": "2025-12-24"}},
             },
         }
         mock_client_class.return_value = mock_client
@@ -313,13 +329,13 @@ class TestUpdateReadingItemEndpoint(unittest.TestCase):
         response = self.client.patch(
             "/notion/reading-list/reading-123",
             headers=self.auth_headers,
-            json={"status": "Completed", "read_date": "2025-12-24"},
+            json={"status": "Completed", "item_type": "Book"},
         )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "Completed")
-        self.assertEqual(data["read_date"], "2025-12-24")
+        self.assertEqual(data["item_type"], "Book")
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_update_reading_item_no_fields_returns_400(self, mock_client_class: MagicMock) -> None:

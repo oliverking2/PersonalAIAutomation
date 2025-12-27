@@ -191,6 +191,7 @@ End-to-end conversation flow testing.
 |-------------------------|------------------------------------------------------------|
 | Idea Tracking           | Full CRUD for ideas in Notion (query, get, create, update) |
 | Message duplication fix | Fixed exponential message growth in conversation state     |
+| API Logging             | Improve Logging for the Notion API                         |
 
 ---
 

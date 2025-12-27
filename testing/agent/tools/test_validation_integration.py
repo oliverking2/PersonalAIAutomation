@@ -16,6 +16,7 @@ from src.agent.tools.models import (
 )
 from src.agent.tools.reading_list import READING_LIST_TOOL_CONFIG
 from src.agent.tools.tasks import TASK_TOOL_CONFIG
+from src.notion.enums import ReadingType
 
 
 class TestTaskContentBuilding(unittest.TestCase):
@@ -125,6 +126,7 @@ class TestReadingListContentBuilding(unittest.TestCase):
 
         args = AgentReadingItemCreateArgs(
             title="Clean Code",
+            item_type=ReadingType.BOOK,
             notes="Recommended by colleague",
         )
         result = self.create_tool.handler(args)
@@ -141,6 +143,7 @@ class TestReadingListContentBuilding(unittest.TestCase):
 
         args = AgentReadingItemCreateArgs(
             title="Clean Code",
+            item_type=ReadingType.BOOK,
             notes="Recommended by colleague",
         )
         self.create_tool.handler(args)

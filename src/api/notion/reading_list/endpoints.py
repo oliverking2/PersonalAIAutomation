@@ -118,11 +118,11 @@ def create_reading_item(
     try:
         properties = build_reading_properties(
             title=request.title,
+            item_type=request.item_type,
             status=request.status,
             priority=request.priority,
             category=request.category,
             item_url=request.item_url,
-            read_date=request.read_date,
         )
         data = client.create_page(
             data_source_id=data_source_id,
@@ -168,11 +168,11 @@ def update_reading_item(
     try:
         properties = build_reading_properties(
             title=request.title,
+            item_type=request.item_type,
             status=request.status,
             priority=request.priority,
             category=request.category,
             item_url=request.item_url,
-            read_date=request.read_date,
         )
 
         if not properties and request.content is None:
@@ -221,6 +221,9 @@ def _build_reading_filter(request: ReadingQueryRequest) -> dict[str, object] | N
             {"property": "Status", "status": {"does_not_equal": ReadingStatus.COMPLETED.value}}
         )
 
+    if request.item_type:
+        conditions.append({"property": "Type", "select": {"equals": request.item_type.value}})
+
     if request.status:
         conditions.append({"property": "Status", "status": {"equals": request.status.value}})
 
@@ -249,11 +252,11 @@ def _reading_to_response(
     return ReadingItemResponse(
         id=item.id,
         title=item.title,
+        item_type=item.item_type,
         status=item.status,
         priority=item.priority,
         category=item.category,
         item_url=item.item_url,
-        read_date=item.read_date,
         notion_url=item.notion_url,
         content=content,
     )

@@ -1,13 +1,12 @@
 """Tests for reading list tool definitions."""
 
 import unittest
-from datetime import date
 from unittest.mock import MagicMock, patch
 
 from src.agent.enums import RiskLevel
 from src.agent.tools.reading_list import READING_LIST_TOOL_CONFIG, get_reading_list_tools
 from src.api.notion.reading_list.models import ReadingItemCreateRequest, ReadingQueryRequest
-from src.notion.enums import Priority, ReadingCategory, ReadingStatus
+from src.notion.enums import Priority, ReadingCategory, ReadingStatus, ReadingType
 
 
 class TestReadingListToolDefinitions(unittest.TestCase):
@@ -75,6 +74,7 @@ class TestReadingListToolConfig(unittest.TestCase):
 
     def test_config_enum_fields(self) -> None:
         """Test config has correct enum fields."""
+        self.assertIn("item_type", READING_LIST_TOOL_CONFIG.enum_fields)
         self.assertIn("status", READING_LIST_TOOL_CONFIG.enum_fields)
         self.assertIn("category", READING_LIST_TOOL_CONFIG.enum_fields)
         self.assertIn("priority", READING_LIST_TOOL_CONFIG.enum_fields)
@@ -112,9 +112,10 @@ class TestReadingItemCreateRequest(unittest.TestCase):
 
     def test_minimal_args(self) -> None:
         """Test creating with only required fields."""
-        args = ReadingItemCreateRequest(title="Test Article")
+        args = ReadingItemCreateRequest(title="Test Article", item_type=ReadingType.ARTICLE)
 
         self.assertEqual(args.title, "Test Article")
+        self.assertEqual(args.item_type, ReadingType.ARTICLE)
         self.assertEqual(args.status, ReadingStatus.TO_READ)
         self.assertIsNone(args.priority)
         self.assertIsNone(args.category)
@@ -124,6 +125,7 @@ class TestReadingItemCreateRequest(unittest.TestCase):
         """Test creating with all fields."""
         args = ReadingItemCreateRequest(
             title="AI Paper",
+            item_type=ReadingType.ARTICLE,
             status=ReadingStatus.READING_NOW,
             priority=Priority.HIGH,
             category=ReadingCategory.AI,
@@ -131,6 +133,7 @@ class TestReadingItemCreateRequest(unittest.TestCase):
         )
 
         self.assertEqual(args.title, "AI Paper")
+        self.assertEqual(args.item_type, ReadingType.ARTICLE)
         self.assertEqual(args.status, ReadingStatus.READING_NOW)
         self.assertEqual(args.priority, Priority.HIGH)
         self.assertEqual(args.category, ReadingCategory.AI)
@@ -186,7 +189,7 @@ class TestReadingListToolHandlers(unittest.TestCase):
         mock_client.post.return_value = {"id": "new-page", "title": "New Article"}
 
         tool = self.tool_dict["create_reading_item"]
-        args = ReadingItemCreateRequest(title="New Article")
+        args = ReadingItemCreateRequest(title="New Article", item_type=ReadingType.ARTICLE)
         result = tool.handler(args)
 
         mock_client.post.assert_called_once()
@@ -224,20 +227,20 @@ class TestReadingListToolHandlers(unittest.TestCase):
         self.assertIn("error", result)
 
     @patch("src.agent.tools.factory._get_client")
-    def test_update_with_read_date(self, mock_get_client: MagicMock) -> None:
-        """Test updating with read date."""
+    def test_update_with_item_type(self, mock_get_client: MagicMock) -> None:
+        """Test updating with item type."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.patch.return_value = {"id": "page-123"}
 
         tool = self.tool_dict["update_reading_item"]
-        args = tool.args_model(item_id="page-123", read_date=date(2024, 1, 15))
+        args = tool.args_model(item_id="page-123", item_type=ReadingType.BOOK)
         result = tool.handler(args)
 
         call_args = mock_client.patch.call_args
         payload = call_args[1]["json"]
-        self.assertEqual(payload["read_date"], "2024-01-15")
+        self.assertEqual(payload["item_type"], "Book")
         self.assertTrue(result["updated"])
 
 

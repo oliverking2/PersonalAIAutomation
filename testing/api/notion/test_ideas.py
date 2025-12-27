@@ -34,6 +34,7 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
                 "url": "https://notion.so/Idea-1",
                 "properties": {
                     "Idea": {"title": [{"plain_text": "Mobile app for habit tracking"}]},
+                    "Status": {"status": {"name": "Not Started"}},
                     "Idea Group": {"select": {"name": "Personal"}},
                 },
             }
@@ -51,6 +52,7 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
         self.assertEqual(len(data["results"]), 1)
         item = data["results"][0]
         self.assertEqual(item["idea"], "Mobile app for habit tracking")
+        self.assertEqual(item["status"], "Not Started")
         self.assertEqual(item["idea_group"], "Personal")
 
     @patch("src.api.notion.dependencies.NotionClient")
@@ -67,11 +69,12 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        # Verify the filter was built correctly
+        # Verify the combined filter was built correctly
+        # (includes exclude Archived + idea_group filter)
         call_args = mock_client.query_all_data_source.call_args
         filter_arg = call_args[1]["filter_"]
-        self.assertEqual(filter_arg["property"], "Idea Group")
-        self.assertEqual(filter_arg["select"]["equals"], "Work")
+        self.assertIn("and", filter_arg)
+        self.assertEqual(len(filter_arg["and"]), 2)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_query_ideas_with_name_filter(self, mock_client_class: MagicMock) -> None:
@@ -83,6 +86,7 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
                 "url": "https://notion.so/App-Idea",
                 "properties": {
                     "Idea": {"title": [{"plain_text": "Mobile app for habit tracking"}]},
+                    "Status": {"status": {"name": "Not Started"}},
                     "Idea Group": {"select": {"name": "Personal"}},
                 },
             },
@@ -91,6 +95,7 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
                 "url": "https://notion.so/Web-Project",
                 "properties": {
                     "Idea": {"title": [{"plain_text": "Web dashboard for analytics"}]},
+                    "Status": {"status": {"name": "In Progress"}},
                     "Idea Group": {"select": {"name": "Work"}},
                 },
             },
@@ -127,6 +132,7 @@ class TestGetIdeaEndpoint(unittest.TestCase):
             "url": "https://notion.so/My-Idea",
             "properties": {
                 "Idea": {"title": [{"plain_text": "Build a CLI tool"}]},
+                "Status": {"status": {"name": "In Progress"}},
                 "Idea Group": {"select": {"name": "Work"}},
             },
         }
@@ -142,6 +148,7 @@ class TestGetIdeaEndpoint(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["id"], "idea-123")
         self.assertEqual(data["idea"], "Build a CLI tool")
+        self.assertEqual(data["status"], "In Progress")
         self.assertEqual(data["idea_group"], "Work")
 
 
@@ -164,6 +171,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
             "url": "https://notion.so/New-Idea",
             "properties": {
                 "Idea": {"title": [{"plain_text": "New mobile app idea"}]},
+                "Status": {"status": {"name": "Not Started"}},
                 "Idea Group": {"select": {"name": "Personal"}},
             },
         }
@@ -182,6 +190,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["id"], "idea-new")
         self.assertEqual(data["idea"], "New mobile app idea")
+        self.assertEqual(data["status"], "Not Started")
         self.assertEqual(data["idea_group"], "Personal")
 
     @patch("src.api.notion.dependencies.NotionClient")
@@ -194,6 +203,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
             "url": "https://notion.so/Minimal",
             "properties": {
                 "Idea": {"title": [{"plain_text": "Minimal idea"}]},
+                "Status": {"status": {"name": "Not Started"}},
                 "Idea Group": {"select": None},
             },
         }
@@ -276,6 +286,7 @@ class TestUpdateIdeaEndpoint(unittest.TestCase):
             "url": "https://notion.so/Idea",
             "properties": {
                 "Idea": {"title": [{"plain_text": "Updated Idea Title"}]},
+                "Status": {"status": {"name": "In Progress"}},
                 "Idea Group": {"select": {"name": "Work"}},
             },
         }

@@ -323,11 +323,11 @@ class TestParsePageToReadingItem(unittest.TestCase):
             "url": "https://notion.so/My-Book",
             "properties": {
                 "Title": {"title": [{"plain_text": "Clean Code"}]},
+                "Type": {"select": {"name": "Book"}},
                 "Status": {"status": {"name": "Reading Now"}},
                 "Priority": {"select": {"name": "High"}},
                 "Category": {"select": {"name": "Data Engineering"}},
                 "URL": {"url": "https://example.com/book"},
-                "Read Date": {"date": {"start": "2025-12-20"}},
             },
         }
 
@@ -335,11 +335,11 @@ class TestParsePageToReadingItem(unittest.TestCase):
 
         self.assertEqual(item.id, "reading-123")
         self.assertEqual(item.title, "Clean Code")
+        self.assertEqual(item.item_type, "Book")
         self.assertEqual(item.status, "Reading Now")
         self.assertEqual(item.priority, "High")
         self.assertEqual(item.category, "Data Engineering")
         self.assertEqual(item.item_url, "https://example.com/book")
-        self.assertEqual(item.read_date, date(2025, 12, 20))
         self.assertEqual(item.notion_url, "https://notion.so/My-Book")
 
     def test_parse_reading_item_page_with_missing_optional_properties(self) -> None:
@@ -349,11 +349,11 @@ class TestParsePageToReadingItem(unittest.TestCase):
             "url": "https://notion.so/Minimal-Article",
             "properties": {
                 "Title": {"title": [{"plain_text": "Minimal Article"}]},
+                "Type": {"select": None},
                 "Status": {"status": None},
                 "Priority": {"select": None},
                 "Category": {"select": None},
                 "URL": {"url": None},
-                "Read Date": {"date": None},
             },
         }
 
@@ -361,11 +361,11 @@ class TestParsePageToReadingItem(unittest.TestCase):
 
         self.assertEqual(item.id, "reading-456")
         self.assertEqual(item.title, "Minimal Article")
+        self.assertEqual(item.item_type, "Other")  # Defaults to Other when None
         self.assertIsNone(item.status)
         self.assertIsNone(item.priority)
         self.assertIsNone(item.category)
         self.assertIsNone(item.item_url)
-        self.assertIsNone(item.read_date)
 
 
 class TestBuildGoalProperties(unittest.TestCase):
@@ -416,19 +416,19 @@ class TestBuildReadingProperties(unittest.TestCase):
         """Test building reading properties with all fields."""
         result = build_reading_properties(
             title="New Article",
+            item_type="Book",
             status="To Read",
             priority="High",
             category="Data Science",
             item_url="https://example.com/article",
-            read_date=date(2025, 12, 20),
         )
 
         self.assertIn("Title", result)
+        self.assertIn("Type", result)
         self.assertIn("Status", result)
         self.assertIn("Priority", result)
         self.assertIn("Category", result)
         self.assertIn("URL", result)
-        self.assertIn("Read Date", result)
 
     def test_build_reading_properties_with_title_only(self) -> None:
         """Test building reading properties with title only."""
