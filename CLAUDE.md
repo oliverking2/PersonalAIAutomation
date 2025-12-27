@@ -385,7 +385,7 @@ Key patterns:
 - Before writing new code, look for an existing pattern and match it.
 - If a change could be breaking, propose a non-breaking alternative first.
 - When uncertain about an existing convention, ask a targeted question instead of guessing.
-- Consider the roadmap which is saved in `ROADMAP.md`
+- Review `ROADMAP.md` before starting work and update it when completing features or making significant changes
 - Review existing PRDs in `.claude/prds/` before implementing new features
 
 ## Validation Requirements
@@ -408,3 +408,4 @@ Key patterns:
 - Confirm no secrets, tokens, or private data are introduced.
 - Run `make check` before considering work complete.
 - Make sure `README.md` is up to date with any changes.
+- Update `ROADMAP.md` to reflect completed features or progress on roadmap items.
