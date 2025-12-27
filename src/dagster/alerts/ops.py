@@ -17,8 +17,8 @@ from src.telegram.utils.config import get_telegram_settings
 
 # Retry policy for alert ops
 ALERT_RETRY_POLICY = RetryPolicy(
-    max_retries=3,
-    delay=60,
+    max_retries=1,
+    delay=30,
     backoff=Backoff.EXPONENTIAL,
     jitter=Jitter.FULL,
 )
