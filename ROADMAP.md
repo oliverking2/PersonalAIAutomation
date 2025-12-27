@@ -99,6 +99,9 @@ End-to-end conversation flow testing.
 - Mock infrastructure for deterministic tests
 - Conversation simulator helper
 
+### Misc Improvements
+- Add better logging to the Notion API 
+
 ### Agent Improvements
 
 | ID        | Description                                               | Priority |
@@ -115,7 +118,6 @@ End-to-end conversation flow testing.
 
 | ID       | Description                                             | Priority |
 |----------|---------------------------------------------------------|----------|
-| TELE-007 | Typing indicators while agent processes                 | High     |
 | TELE-005 | Structured logging with chat_id, session_id             | Medium   |
 | TELE-003 | Graceful long-poll timeout handling                     | Medium   |
 | TELE-009 | Integration test suite                                  | Medium   |
@@ -185,13 +187,18 @@ End-to-end conversation flow testing.
 | AGENT-031 | Fuzzy name search for query tools             | 2024-12-26 |
 | AGENT-F06 | Descriptive name validation (via PRD14)       | 2024-12    |
 
+### Telegram Roadmap Items
+
+| ID       | Description                             | Date       |
+|----------|-----------------------------------------|------------|
+| TELE-007 | Typing indicators while agent processes | 2024-12-27 |
+
 ### Other
 
 | Item                    | Description                                                |
 |-------------------------|------------------------------------------------------------|
 | Idea Tracking           | Full CRUD for ideas in Notion (query, get, create, update) |
 | Message duplication fix | Fixed exponential message growth in conversation state     |
-| API Logging             | Improve Logging for the Notion API                         |
 
 ---
 

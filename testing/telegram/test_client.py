@@ -275,5 +275,93 @@ class TestTelegramClientGetUpdates(unittest.TestCase):
         self.assertIn("timed out", str(context.exception).lower())
 
 
+class TestTelegramClientSendChatAction(unittest.TestCase):
+    """Tests for TelegramClient.send_chat_action method."""
+
+    @patch("src.telegram.client.requests.post")
+    def test_send_chat_action_success(self, mock_post: MagicMock) -> None:
+        """Test successful sending of chat action."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True, "result": True}
+        mock_post.return_value = mock_response
+
+        client = TelegramClient(bot_token="test-token", chat_id="12345")
+        client.send_chat_action()
+
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["chat_id"], "12345")
+        self.assertEqual(call_kwargs["json"]["action"], "typing")
+
+    @patch("src.telegram.client.requests.post")
+    def test_send_chat_action_with_explicit_chat_id(self, mock_post: MagicMock) -> None:
+        """Test sending chat action to explicit chat_id parameter."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True, "result": True}
+        mock_post.return_value = mock_response
+
+        client = TelegramClient(bot_token="test-token", chat_id="12345")
+        client.send_chat_action(chat_id="99999")
+
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["chat_id"], "99999")
+
+    @patch("src.telegram.client.requests.post")
+    def test_send_chat_action_custom_action(self, mock_post: MagicMock) -> None:
+        """Test sending custom chat action."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True, "result": True}
+        mock_post.return_value = mock_response
+
+        client = TelegramClient(bot_token="test-token", chat_id="12345")
+        client.send_chat_action(action="upload_document")
+
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["action"], "upload_document")
+
+    def test_send_chat_action_without_chat_id_raises_value_error(self) -> None:
+        """Test sending chat action without any chat_id raises ValueError."""
+        client = TelegramClient(bot_token="test-token")
+
+        with self.assertRaises(ValueError) as context:
+            client.send_chat_action()
+
+        self.assertIn("chat_id", str(context.exception).lower())
+
+    @patch("src.telegram.client.requests.post")
+    def test_send_chat_action_api_error_raises_exception(self, mock_post: MagicMock) -> None:
+        """Test that API error response raises TelegramClientError."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "ok": False,
+            "description": "Bad Request: chat not found",
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        client = TelegramClient(bot_token="test-token", chat_id="12345")
+
+        with self.assertRaises(TelegramClientError) as context:
+            client.send_chat_action()
+
+        self.assertIn("chat not found", str(context.exception))
+
+    @patch("src.telegram.client.requests.post")
+    def test_send_chat_action_timeout_raises_exception(self, mock_post: MagicMock) -> None:
+        """Test that timeout raises TelegramClientError."""
+        mock_post.side_effect = requests.exceptions.Timeout("Connection timed out")
+
+        client = TelegramClient(bot_token="test-token", chat_id="12345")
+
+        with self.assertRaises(TelegramClientError) as context:
+            client.send_chat_action()
+
+        self.assertIn("timed out", str(context.exception).lower())
+
+
 if __name__ == "__main__":
     unittest.main()

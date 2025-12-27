@@ -59,9 +59,17 @@ class PollingRunner:
         self._handler = handler or MessageHandler(
             settings=self._settings,
             session_manager=self._session_manager,
+            typing_callback=self._send_typing_indicator,
         )
         self._running = False
         self._consecutive_errors = 0
+
+    def _send_typing_indicator(self, chat_id: str) -> None:
+        """Send typing indicator to a chat.
+
+        :param chat_id: Target chat ID.
+        """
+        self._client.send_chat_action(action="typing", chat_id=chat_id)
 
     def run(self) -> None:
         """Start the polling loop.

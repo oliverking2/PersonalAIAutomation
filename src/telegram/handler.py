@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
     from src.telegram.models import TelegramMessageInfo, TelegramUpdate
     from src.telegram.utils.config import TelegramConfig
     from src.telegram.utils.session_manager import SessionManager
+
+# Type alias for typing callback: accepts chat_id as argument
+TypingCallback = Callable[[str], None]
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,7 @@ class MessageHandler:
         settings: TelegramConfig,
         session_manager: SessionManager,
         agent_runner: AgentRunner | None = None,
+        typing_callback: TypingCallback | None = None,
     ) -> None:
         """Initialise the message handler.
 
@@ -89,10 +94,13 @@ class MessageHandler:
         :param session_manager: Session manager for session lifecycle.
         :param agent_runner: Optional agent runner. If not provided, one will
             be created with the default tool registry.
+        :param typing_callback: Optional callback to send typing indicator.
+            Called with chat_id before agent invocation.
         """
         self._settings = settings
         self._session_manager = session_manager
         self._agent_runner = agent_runner
+        self._typing_callback = typing_callback
 
     def _get_agent_runner(self) -> AgentRunner:
         """Get or create the agent runner.
@@ -327,6 +335,15 @@ class MessageHandler:
         :returns: Agent response text.
         """
         agent_runner = self._get_agent_runner()
+
+        # Send typing indicator before agent invocation
+        if self._typing_callback:
+            try:
+                self._typing_callback(telegram_session.chat_id)
+            except Exception:
+                logger.warning(
+                    f"Failed to send typing indicator: chat_id={telegram_session.chat_id}"
+                )
 
         try:
             result: AgentRunResult = agent_runner.run(

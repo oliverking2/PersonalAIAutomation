@@ -156,3 +156,49 @@ class TelegramClient:
             ) from e
         except requests.exceptions.RequestException as e:
             raise TelegramClientError(f"Telegram API request failed: {e}") from e
+
+    def send_chat_action(
+        self,
+        action: str = "typing",
+        chat_id: str | None = None,
+    ) -> None:
+        """Send a chat action (e.g., typing indicator) to a chat.
+
+        The action automatically expires after 5 seconds or when a message
+        is sent, whichever comes first.
+
+        :param action: The action to send. Common values: "typing", "upload_document".
+        :param chat_id: Target chat ID. If not provided, uses the configured chat_id.
+        :raises TelegramClientError: If the API request fails.
+        :raises ValueError: If no chat_id is provided or configured.
+        """
+        target_chat_id = chat_id or self._chat_id
+        if not target_chat_id:
+            raise ValueError(
+                "No chat_id provided. Set TELEGRAM_CHAT_ID environment variable, "
+                "pass chat_id to constructor, or provide chat_id parameter."
+            )
+
+        url = f"{self._base_url}/sendChatAction"
+        payload = {
+            "chat_id": target_chat_id,
+            "action": action,
+        }
+
+        try:
+            response = requests.post(url, json=payload, timeout=DEFAULT_REQUEST_TIMEOUT)
+            response.raise_for_status()
+
+            result = response.json()
+            if not result.get("ok"):
+                error_description = result.get("description", "Unknown error")
+                raise TelegramClientError(f"Telegram API returned error: {error_description}")
+
+            logger.debug(f"Sent chat action '{action}' to chat_id={target_chat_id}")
+
+        except requests.exceptions.Timeout as e:
+            raise TelegramClientError(
+                f"Telegram API request timed out after {DEFAULT_REQUEST_TIMEOUT}s"
+            ) from e
+        except requests.exceptions.RequestException as e:
+            raise TelegramClientError(f"Telegram API request failed: {e}") from e

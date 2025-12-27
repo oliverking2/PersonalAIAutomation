@@ -243,6 +243,74 @@ class TestMessageHandler(unittest.TestCase):
         self.assertFalse(self.handler._is_chat_allowed("99999"))
         self.assertFalse(self.handler._is_chat_allowed("11111"))
 
+    @patch("src.telegram.handler.create_telegram_message")
+    def test_typing_callback_called_before_agent(
+        self,
+        mock_create_message: MagicMock,
+    ) -> None:
+        """Test that typing callback is called before agent invocation."""
+        mock_typing_callback = MagicMock()
+        handler = MessageHandler(
+            settings=self.settings,
+            session_manager=self.mock_session_manager,
+            agent_runner=self.mock_agent_runner,
+            typing_callback=mock_typing_callback,
+        )
+
+        update = self._create_update(123, 12345, "Hello")
+
+        mock_session = MagicMock()
+        mock_session.id = uuid.uuid4()
+        mock_session.chat_id = "12345"
+        mock_session.agent_conversation_id = uuid.uuid4()
+        self.mock_session_manager.get_or_create_session.return_value = (mock_session, False)
+        self.mock_session_manager.ensure_agent_conversation.return_value = mock_session
+
+        mock_result = MagicMock()
+        mock_result.stop_reason = "end_turn"
+        mock_result.response = "Response"
+        self.mock_agent_runner.run.return_value = mock_result
+
+        handler.handle_update(self.mock_db_session, update)
+
+        # Verify typing callback was called with the chat_id
+        mock_typing_callback.assert_called_once_with("12345")
+
+    @patch("src.telegram.handler.create_telegram_message")
+    def test_typing_callback_error_does_not_block_agent(
+        self,
+        mock_create_message: MagicMock,
+    ) -> None:
+        """Test that typing callback error doesn't prevent agent invocation."""
+        mock_typing_callback = MagicMock()
+        mock_typing_callback.side_effect = RuntimeError("Typing failed")
+        handler = MessageHandler(
+            settings=self.settings,
+            session_manager=self.mock_session_manager,
+            agent_runner=self.mock_agent_runner,
+            typing_callback=mock_typing_callback,
+        )
+
+        update = self._create_update(123, 12345, "Hello")
+
+        mock_session = MagicMock()
+        mock_session.id = uuid.uuid4()
+        mock_session.chat_id = "12345"
+        mock_session.agent_conversation_id = uuid.uuid4()
+        self.mock_session_manager.get_or_create_session.return_value = (mock_session, False)
+        self.mock_session_manager.ensure_agent_conversation.return_value = mock_session
+
+        mock_result = MagicMock()
+        mock_result.stop_reason = "end_turn"
+        mock_result.response = "Response"
+        self.mock_agent_runner.run.return_value = mock_result
+
+        result = handler.handle_update(self.mock_db_session, update)
+
+        # Agent should still be called despite typing callback error
+        self.mock_agent_runner.run.assert_called_once()
+        self.assertEqual(result, "Response")
+
 
 class TestUnauthorisedChatError(unittest.TestCase):
     """Tests for UnauthorisedChatError exception."""
