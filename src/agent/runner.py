@@ -86,6 +86,7 @@ class _RunState:
     tools: dict[str, ToolDef]
     confirmed_tool_use_ids: set[str]
     all_tool_names: list[str]
+    context_length: int = 0  # Number of messages from conversation context
 
 
 @dataclass
@@ -354,6 +355,7 @@ class AgentRunner:
         # Build messages: context + user confirmation + assistant tool request + tool result
         # Include user message so LLM can see any additional requests in the confirmation
         context_messages = build_context_messages(conv_state)
+        context_length = len(context_messages)
         user_confirmation_msg = self.client.create_user_message(user_message)
         assistant_tool_request = self.client.create_assistant_tool_use_message(
             tool_use_id=pending.tool_use_id,
@@ -381,6 +383,7 @@ class AgentRunner:
             tools=self._build_tools_dict(all_tool_names),
             confirmed_tool_use_ids=set(),
             all_tool_names=all_tool_names,
+            context_length=context_length,
         )
 
         return self._run_agent_loop(state, self._build_tool_config(all_tool_names), conv_state)
@@ -440,18 +443,19 @@ class AgentRunner:
         self,
         user_message: str,
         conv_state: ConversationState | None,
-    ) -> list[Any]:
+    ) -> tuple[list[Any], int]:
         """Build initial messages for the agent run.
 
         :param user_message: The user's input message.
         :param conv_state: Optional conversation state for context.
-        :returns: List of messages to start the conversation.
+        :returns: Tuple of (messages, context_length) where context_length is
+            the number of messages from conversation history.
         """
         if conv_state is not None:
             context_messages = build_context_messages(conv_state)
             new_user_message = self.client.create_user_message(user_message)
-            return [*context_messages, new_user_message]
-        return [self.client.create_user_message(user_message)]
+            return [*context_messages, new_user_message], len(context_messages)
+        return [self.client.create_user_message(user_message)], 0
 
     def _build_tool_config(
         self,
@@ -534,7 +538,7 @@ class AgentRunner:
             conv_state.selected_tools = selected_tools
 
         tool_config = self._build_tool_config(all_tool_names)
-        initial_messages = self._build_initial_messages(user_message, conv_state)
+        initial_messages, context_length = self._build_initial_messages(user_message, conv_state)
 
         state = _RunState(
             messages=initial_messages,
@@ -543,6 +547,7 @@ class AgentRunner:
             tools=self._build_tools_dict(all_tool_names),
             confirmed_tool_use_ids=set(),
             all_tool_names=all_tool_names,
+            context_length=context_length,
         )
 
         logger.info(
@@ -831,7 +836,9 @@ class AgentRunner:
             set_pending_confirmation(conv_state, pending)
 
             # Save current messages to state for resumption
-            append_messages(conv_state, state.messages)
+            # Only append new messages (skip context that's already stored)
+            new_messages = state.messages[state.context_length :]
+            append_messages(conv_state, new_messages)
 
         return AgentRunResult(
             response="",
@@ -861,7 +868,9 @@ class AgentRunner:
         if conv_state is not None:
             # Add the final assistant message
             state.messages.append(response["output"]["message"])
-            append_messages(conv_state, state.messages)
+            # Only append new messages (skip context that's already stored)
+            new_messages = state.messages[state.context_length :]
+            append_messages(conv_state, new_messages)
 
         if stop_reason == "end_turn":
             logger.info(

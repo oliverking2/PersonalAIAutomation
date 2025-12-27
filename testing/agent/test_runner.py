@@ -776,5 +776,438 @@ class TestAgentRunnerGenerateActionSummary(unittest.TestCase):
         self.assertIn("priority='High'", summary)
 
 
+class TestMessageDuplicationPrevention(unittest.TestCase):
+    """Tests to ensure messages are not duplicated across conversation turns.
+
+    These tests verify that the fix for the message duplication bug is working:
+    - Only NEW messages from each run are appended to conversation state
+    - Context messages (already in state) are not re-appended
+    - Multi-turn conversations maintain correct message count
+    """
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.registry = ToolRegistry()
+
+        # Create mock database objects
+        self.mock_session, self.mock_conversation, self.mock_run = _create_mock_db_objects()
+
+        # Register a safe tool
+        self.safe_tool = ToolDef(
+            name="safe_tool",
+            description="A safe test tool",
+            tags=frozenset({"test"}),
+            risk_level=RiskLevel.SAFE,
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(self.safe_tool)
+
+        # Register a sensitive tool
+        self.sensitive_tool = ToolDef(
+            name="sensitive_tool",
+            description="A sensitive test tool",
+            tags=frozenset({"test"}),
+            risk_level=RiskLevel.SENSITIVE,
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(self.sensitive_tool)
+
+        self.mock_client = MagicMock()
+
+    def _make_user_message(self, text: str) -> dict[str, Any]:
+        """Create a user message dict."""
+        return {"role": "user", "content": [{"text": text}]}
+
+    def _make_assistant_message(self, text: str) -> dict[str, Any]:
+        """Create an assistant message dict."""
+        return {"role": "assistant", "content": [{"text": text}]}
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_first_turn_stores_only_new_messages(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that first turn stores exactly the new user and assistant messages."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        user_msg = self._make_user_message("Hello")
+        assistant_msg = self._make_assistant_message("Hi there!")
+
+        self.mock_client.create_user_message.return_value = user_msg
+        self.mock_client.converse.return_value = {
+            "output": {"message": assistant_msg},
+            "stopReason": "end_turn",
+        }
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = "Hi there!"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        runner.run("Hello", self.mock_session, tool_names=["safe_tool"])
+
+        # Check saved state has exactly 2 messages (user + assistant)
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]  # Third argument is conv_state
+        self.assertEqual(len(saved_state.messages), 2)
+        self.assertEqual(saved_state.messages[0]["role"], "user")
+        self.assertEqual(saved_state.messages[1]["role"], "assistant")
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.get_agent_conversation_by_id")
+    def test_second_turn_does_not_duplicate_first_turn_messages(
+        self,
+        mock_get_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that second turn doesn't duplicate messages from the first turn."""
+        # Simulate first turn's messages already in conversation state
+        existing_messages = [
+            self._make_user_message("First message"),
+            self._make_assistant_message("First response"),
+        ]
+        self.mock_conversation.messages_json = existing_messages
+        self.mock_conversation.message_count = 2
+        mock_get_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        # Second turn messages
+        user_msg = self._make_user_message("Second message")
+        assistant_msg = self._make_assistant_message("Second response")
+
+        self.mock_client.create_user_message.return_value = user_msg
+        self.mock_client.converse.return_value = {
+            "output": {"message": assistant_msg},
+            "stopReason": "end_turn",
+        }
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = "Second response"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        runner.run(
+            "Second message",
+            self.mock_session,
+            conversation_id=self.mock_conversation.id,
+            tool_names=["safe_tool"],
+        )
+
+        # Check saved state has exactly 4 messages (2 existing + 2 new)
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]
+
+        # Should have 4 total messages, not 6 (which would indicate duplication)
+        self.assertEqual(len(saved_state.messages), 4)
+
+        # Verify message order: first turn's messages + second turn's messages
+        self.assertEqual(saved_state.messages[0]["content"][0]["text"], "First message")
+        self.assertEqual(saved_state.messages[1]["content"][0]["text"], "First response")
+        self.assertEqual(saved_state.messages[2]["role"], "user")
+        self.assertEqual(saved_state.messages[3]["role"], "assistant")
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.get_agent_conversation_by_id")
+    def test_third_turn_no_exponential_growth(
+        self,
+        mock_get_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that third turn doesn't cause exponential message growth.
+
+        Before the fix, messages would grow exponentially:
+        - Turn 1: 2 messages
+        - Turn 2: 6 messages (2 context + 4 = 2 + 2 + 2)
+        - Turn 3: 14 messages (6 context + 8 = 6 + 6 + 2)
+
+        After the fix, messages should grow linearly:
+        - Turn 1: 2 messages
+        - Turn 2: 4 messages
+        - Turn 3: 6 messages
+        """
+        # Simulate two turns already completed
+        existing_messages = [
+            self._make_user_message("First message"),
+            self._make_assistant_message("First response"),
+            self._make_user_message("Second message"),
+            self._make_assistant_message("Second response"),
+        ]
+        self.mock_conversation.messages_json = existing_messages
+        self.mock_conversation.message_count = 4
+        mock_get_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        # Third turn messages
+        user_msg = self._make_user_message("Third message")
+        assistant_msg = self._make_assistant_message("Third response")
+
+        self.mock_client.create_user_message.return_value = user_msg
+        self.mock_client.converse.return_value = {
+            "output": {"message": assistant_msg},
+            "stopReason": "end_turn",
+        }
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = "Third response"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        runner.run(
+            "Third message",
+            self.mock_session,
+            conversation_id=self.mock_conversation.id,
+            tool_names=["safe_tool"],
+        )
+
+        # Check saved state has exactly 6 messages (4 existing + 2 new)
+        # NOT 14 messages (which would indicate exponential growth)
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]
+        self.assertEqual(len(saved_state.messages), 6)
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.get_agent_conversation_by_id")
+    def test_tool_use_turn_no_duplication(
+        self,
+        mock_get_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that tool-use turns don't duplicate messages."""
+        existing_messages = [
+            self._make_user_message("Previous message"),
+            self._make_assistant_message("Previous response"),
+        ]
+        self.mock_conversation.messages_json = existing_messages
+        self.mock_conversation.message_count = 2
+        mock_get_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        user_msg = self._make_user_message("Use the tool")
+        tool_use_msg = {
+            "role": "assistant",
+            "content": [{"toolUse": {"toolUseId": "t1", "name": "safe_tool", "input": {}}}],
+        }
+        final_msg = self._make_assistant_message("Done with tool")
+
+        self.mock_client.create_user_message.return_value = user_msg
+        self.mock_client.converse.side_effect = [
+            {"output": {"message": tool_use_msg}, "stopReason": "tool_use"},
+            {"output": {"message": final_msg}, "stopReason": "end_turn"},
+        ]
+        self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
+        self.mock_client.parse_tool_use.return_value = [
+            {"toolUseId": "t1", "name": "safe_tool", "input": {"value": "test"}}
+        ]
+        self.mock_client.create_tool_result_message.return_value = {
+            "role": "user",
+            "content": [{"toolResult": {"toolUseId": "t1"}}],
+        }
+        self.mock_client.parse_text_response.return_value = "Done with tool"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        runner.run(
+            "Use the tool",
+            self.mock_session,
+            conversation_id=self.mock_conversation.id,
+            tool_names=["safe_tool"],
+        )
+
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]
+
+        # Should have: 2 existing + 1 user + 1 tool_use + 1 tool_result + 1 final = 6
+        # NOT 8 (which would include duplicated context)
+        self.assertEqual(len(saved_state.messages), 6)
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.get_agent_conversation_by_id")
+    def test_confirmation_pending_no_duplication(
+        self,
+        mock_get_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that requesting confirmation doesn't duplicate messages."""
+        existing_messages = [
+            self._make_user_message("Previous message"),
+            self._make_assistant_message("Previous response"),
+        ]
+        self.mock_conversation.messages_json = existing_messages
+        self.mock_conversation.message_count = 2
+        mock_get_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        user_msg = self._make_user_message("Update something")
+        tool_use_msg = {
+            "role": "assistant",
+            "content": [
+                {"toolUse": {"toolUseId": "t1", "name": "sensitive_tool", "input": {"value": "x"}}}
+            ],
+        }
+
+        self.mock_client.create_user_message.return_value = user_msg
+        self.mock_client.converse.return_value = {
+            "output": {"message": tool_use_msg},
+            "stopReason": "tool_use",
+        }
+        self.mock_client.get_stop_reason.return_value = "tool_use"
+        self.mock_client.parse_tool_use.return_value = [
+            {"toolUseId": "t1", "name": "sensitive_tool", "input": {"value": "x"}}
+        ]
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+            require_confirmation=True,
+        )
+
+        result = runner.run(
+            "Update something",
+            self.mock_session,
+            conversation_id=self.mock_conversation.id,
+            tool_names=["sensitive_tool"],
+        )
+
+        self.assertEqual(result.stop_reason, "confirmation_required")
+
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]
+
+        # Should have: 2 existing + 1 user = 3
+        # NOT 5 (which would include duplicated context)
+        self.assertEqual(len(saved_state.messages), 3)
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_context_length_tracking_first_turn(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that context_length is 0 for first turn (no prior context)."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        # Track messages passed to converse
+        messages_received: list[Any] = []
+
+        def track_converse(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            messages_received.extend(kwargs.get("messages", []))
+            return {
+                "output": {"message": self._make_assistant_message("Response")},
+                "stopReason": "end_turn",
+            }
+
+        self.mock_client.create_user_message.return_value = self._make_user_message("Hello")
+        self.mock_client.converse.side_effect = track_converse
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = "Response"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        runner.run("Hello", self.mock_session, tool_names=["safe_tool"])
+
+        # First turn should have 1 message sent (just the user message)
+        self.assertEqual(len(messages_received), 1)
+        self.assertEqual(messages_received[0]["role"], "user")
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.get_agent_conversation_by_id")
+    def test_context_length_tracking_subsequent_turn(
+        self,
+        mock_get_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that context_length correctly tracks prior messages."""
+        existing_messages = [
+            self._make_user_message("First"),
+            self._make_assistant_message("First response"),
+        ]
+        self.mock_conversation.messages_json = existing_messages
+        self.mock_conversation.message_count = 2
+        mock_get_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        # Track messages passed to converse
+        messages_received: list[Any] = []
+
+        def track_converse(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            messages_received.extend(kwargs.get("messages", []))
+            return {
+                "output": {"message": self._make_assistant_message("Second response")},
+                "stopReason": "end_turn",
+            }
+
+        self.mock_client.create_user_message.return_value = self._make_user_message("Second")
+        self.mock_client.converse.side_effect = track_converse
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = "Second response"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        runner.run(
+            "Second",
+            self.mock_session,
+            conversation_id=self.mock_conversation.id,
+            tool_names=["safe_tool"],
+        )
+
+        # Should receive: 2 context messages + 1 new user message = 3
+        self.assertEqual(len(messages_received), 3)
+
+        # Verify saved state only added 2 new messages
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]
+        self.assertEqual(len(saved_state.messages), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
