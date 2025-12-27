@@ -12,6 +12,7 @@ from src.enums import ExtractionSource
 from src.graph.auth import GraphAPI
 from src.newsletters.tldr.service import NewsletterService
 from src.telegram import TelegramClient, TelegramService
+from src.telegram.utils.config import get_telegram_settings
 
 # Email address to fetch newsletters for
 GRAPH_USER_EMAIL = os.environ["GRAPH_TARGET_UPN"]
@@ -112,7 +113,11 @@ def send_alerts_op(context: OpExecutionContext, newsletter_stats: NewsletterStat
         f"Starting Telegram alerts (processed {newsletter_stats.newsletters_processed} newsletters)"
     )
 
-    telegram_client = TelegramClient()
+    settings = get_telegram_settings()
+    telegram_client = TelegramClient(
+        bot_token=settings.bot_token,
+        chat_id=settings.chat_id,
+    )
 
     with get_session() as session:
         telegram_service = TelegramService(session, telegram_client)

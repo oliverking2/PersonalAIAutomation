@@ -39,6 +39,7 @@ class TelegramMessageInfo(BaseModel):
     chat: TelegramChat
     from_user: TelegramUser | None = Field(default=None, alias="from")
     text: str | None = None
+    reply_to_message: "TelegramMessageInfo | None" = None
 
     model_config = {"populate_by_name": True}
 

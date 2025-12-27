@@ -15,7 +15,7 @@ class TestPollingRunnerGrouping(unittest.TestCase):
         """Set up test fixtures."""
         self.settings = TelegramConfig(
             bot_token="test-token",
-            allowed_chat_ids_raw="12345,67890",
+            allowed_chat_ids="12345,67890",
             _env_file=None,
         )
         self.mock_client = MagicMock()

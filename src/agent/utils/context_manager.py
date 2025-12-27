@@ -35,6 +35,10 @@ def load_conversation_state(
 ) -> ConversationState:
     """Load conversation state from a database record.
 
+    Note: We create copies of mutable collections to ensure that mutations
+    to the ConversationState don't accidentally affect SQLAlchemy's tracked
+    objects before an explicit save.
+
     :param conversation: AgentConversation record.
     :returns: ConversationState populated from the record.
     """
@@ -45,10 +49,11 @@ def load_conversation_state(
         except Exception as e:
             logger.warning(f"Failed to parse pending confirmation: {e}")
 
+    # Create copies of mutable collections to avoid SQLAlchemy change detection issues
     state = ConversationState(
         conversation_id=conversation.id,
-        messages=conversation.messages_json or [],
-        selected_tools=conversation.selected_tools or [],
+        messages=list(conversation.messages_json) if conversation.messages_json else [],
+        selected_tools=list(conversation.selected_tools) if conversation.selected_tools else [],
         pending_confirmation=pending,
         summary=conversation.summary,
         message_count=conversation.message_count,
@@ -70,12 +75,18 @@ def save_conversation_state(
 ) -> None:
     """Save conversation state to a database record.
 
+    Note: We create copies of mutable collections (messages, selected_tools)
+    to ensure SQLAlchemy detects the change. When the same list object is
+    mutated in place and reassigned, SQLAlchemy may not mark it as dirty
+    because the object reference hasn't changed.
+
     :param session: Database session.
     :param conversation: AgentConversation record to update.
     :param state: ConversationState to persist.
     """
-    conversation.messages_json = state.messages
-    conversation.selected_tools = state.selected_tools
+    # Create copies to ensure SQLAlchemy detects changes to mutable JSONB fields
+    conversation.messages_json = list(state.messages)
+    conversation.selected_tools = list(state.selected_tools) if state.selected_tools else []
     conversation.pending_confirmation = (
         state.pending_confirmation.model_dump() if state.pending_confirmation else None
     )

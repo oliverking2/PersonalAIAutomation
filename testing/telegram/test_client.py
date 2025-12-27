@@ -15,51 +15,20 @@ from src.telegram.client import (
 class TestTelegramClientInitialisation(unittest.TestCase):
     """Tests for TelegramClient initialisation."""
 
-    @patch.dict(
-        "os.environ",
-        {"TELEGRAM_BOT_TOKEN": "test-token", "TELEGRAM_CHAT_ID": "12345"},
-    )
-    def test_initialisation_with_env_vars(self) -> None:
-        """Test successful initialisation with environment variables."""
-        client = TelegramClient()
+    def test_initialisation_with_all_parameters(self) -> None:
+        """Test successful initialisation with all parameters."""
+        client = TelegramClient(bot_token="test-token", chat_id="12345")
 
         self.assertEqual(client._bot_token, "test-token")
         self.assertEqual(client._chat_id, "12345")
         self.assertIn("test-token", client._base_url)
 
-    def test_initialisation_with_explicit_parameters(self) -> None:
-        """Test successful initialisation with explicit parameters."""
-        client = TelegramClient(bot_token="explicit-token", chat_id="67890")
-
-        self.assertEqual(client._bot_token, "explicit-token")
-        self.assertEqual(client._chat_id, "67890")
-
-    @patch.dict("os.environ", {}, clear=True)
-    def test_initialisation_missing_bot_token_raises_value_error(self) -> None:
-        """Test initialisation fails when bot token is missing."""
-        with self.assertRaises(ValueError) as context:
-            TelegramClient()
-
-        self.assertIn("bot token", str(context.exception).lower())
-
-    @patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test-token"}, clear=True)
     def test_initialisation_without_chat_id_succeeds(self) -> None:
         """Test initialisation succeeds without chat_id (for receive-only usage)."""
-        client = TelegramClient()
+        client = TelegramClient(bot_token="test-token")
 
         self.assertEqual(client._bot_token, "test-token")
         self.assertIsNone(client._chat_id)
-
-    @patch.dict(
-        "os.environ",
-        {"TELEGRAM_BOT_TOKEN": "env-token", "TELEGRAM_CHAT_ID": "env-chat"},
-    )
-    def test_explicit_parameters_override_env_vars(self) -> None:
-        """Test that explicit parameters take precedence over environment variables."""
-        client = TelegramClient(bot_token="explicit-token", chat_id="explicit-chat")
-
-        self.assertEqual(client._bot_token, "explicit-token")
-        self.assertEqual(client._chat_id, "explicit-chat")
 
     def test_poll_timeout_configuration(self) -> None:
         """Test that poll_timeout can be configured."""

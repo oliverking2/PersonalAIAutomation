@@ -15,7 +15,7 @@ class TestTelegramSettings(unittest.TestCase):
         """Test creating settings with valid values."""
         settings = TelegramConfig(
             bot_token="test-token",
-            allowed_chat_ids_raw="123,456",
+            allowed_chat_ids="123,456",
             _env_file=None,
         )
 
@@ -23,7 +23,7 @@ class TestTelegramSettings(unittest.TestCase):
         self.assertEqual(settings.mode, TelegramMode.POLLING)
         self.assertEqual(settings.poll_timeout, 30)
         self.assertEqual(settings.session_timeout_minutes, 10)
-        self.assertEqual(settings.allowed_chat_ids, frozenset({"123", "456"}))
+        self.assertEqual(settings.allowed_chat_ids_set, frozenset({"123", "456"}))
 
     def test_custom_values(self) -> None:
         """Test settings with custom values."""
@@ -33,7 +33,7 @@ class TestTelegramSettings(unittest.TestCase):
             mode=TelegramMode.WEBHOOK,
             poll_timeout=60,
             session_timeout_minutes=15,
-            allowed_chat_ids_raw="123,456,789",
+            allowed_chat_ids="123,456,789",
             _env_file=None,
         )
 
@@ -41,12 +41,12 @@ class TestTelegramSettings(unittest.TestCase):
         self.assertEqual(settings.mode, TelegramMode.WEBHOOK)
         self.assertEqual(settings.poll_timeout, 60)
         self.assertEqual(settings.session_timeout_minutes, 15)
-        self.assertEqual(settings.allowed_chat_ids, frozenset({"123", "456", "789"}))
+        self.assertEqual(settings.allowed_chat_ids_set, frozenset({"123", "456", "789"}))
 
     def test_missing_bot_token_raises_error(self) -> None:
         """Test that missing bot_token raises validation error."""
         with self.assertRaises(ValidationError) as context:
-            TelegramConfig(allowed_chat_ids_raw="123", _env_file=None)
+            TelegramConfig(allowed_chat_ids="123", _env_file=None)
 
         errors = context.exception.errors()
         self.assertTrue(any(e["loc"] == ("bot_token",) for e in errors))
@@ -57,28 +57,25 @@ class TestTelegramSettings(unittest.TestCase):
             TelegramConfig(bot_token="test-token", _env_file=None)
 
         errors = context.exception.errors()
-        # Check for either the raw field name or alias
-        self.assertTrue(
-            any(e["loc"] in (("allowed_chat_ids",), ("allowed_chat_ids_raw",)) for e in errors)
-        )
+        self.assertTrue(any(e["loc"] == ("allowed_chat_ids",) for e in errors))
 
     def test_empty_allowed_chat_ids_raises_error(self) -> None:
         """Test that empty allowed_chat_ids string raises validation error."""
         with self.assertRaises(ValidationError) as context:
-            TelegramConfig(bot_token="test-token", allowed_chat_ids_raw="", _env_file=None)
+            TelegramConfig(bot_token="test-token", allowed_chat_ids="", _env_file=None)
 
         errors = context.exception.errors()
-        self.assertTrue(any(e["loc"] == ("allowed_chat_ids_raw",) for e in errors))
+        self.assertTrue(any(e["loc"] == ("allowed_chat_ids",) for e in errors))
 
     def test_allowed_chat_ids_whitespace_handling(self) -> None:
         """Test that whitespace in allowed_chat_ids is handled correctly."""
         settings = TelegramConfig(
             bot_token="test-token",
-            allowed_chat_ids_raw="  123 , 456  ,  789  ",
+            allowed_chat_ids="  123 , 456  ,  789  ",
             _env_file=None,
         )
 
-        self.assertEqual(settings.allowed_chat_ids, frozenset({"123", "456", "789"}))
+        self.assertEqual(settings.allowed_chat_ids_set, frozenset({"123", "456", "789"}))
 
     def test_poll_timeout_validation(self) -> None:
         """Test poll_timeout validation constraints."""
@@ -86,7 +83,7 @@ class TestTelegramSettings(unittest.TestCase):
         with self.assertRaises(ValidationError):
             TelegramConfig(
                 bot_token="test-token",
-                allowed_chat_ids_raw="123",
+                allowed_chat_ids="123",
                 poll_timeout=0,
                 _env_file=None,
             )
@@ -95,7 +92,7 @@ class TestTelegramSettings(unittest.TestCase):
         with self.assertRaises(ValidationError):
             TelegramConfig(
                 bot_token="test-token",
-                allowed_chat_ids_raw="123",
+                allowed_chat_ids="123",
                 poll_timeout=100,
                 _env_file=None,
             )
@@ -106,7 +103,7 @@ class TestTelegramSettings(unittest.TestCase):
         with self.assertRaises(ValidationError):
             TelegramConfig(
                 bot_token="test-token",
-                allowed_chat_ids_raw="123",
+                allowed_chat_ids="123",
                 session_timeout_minutes=0,
                 _env_file=None,
             )
@@ -115,7 +112,7 @@ class TestTelegramSettings(unittest.TestCase):
         with self.assertRaises(ValidationError):
             TelegramConfig(
                 bot_token="test-token",
-                allowed_chat_ids_raw="123",
+                allowed_chat_ids="123",
                 session_timeout_minutes=100,
                 _env_file=None,
             )
@@ -140,7 +137,7 @@ class TestGetTelegramSettings(unittest.TestCase):
         settings = get_telegram_settings()
 
         self.assertEqual(settings.bot_token, "env-token")
-        self.assertEqual(settings.allowed_chat_ids, frozenset({"123", "456"}))
+        self.assertEqual(settings.allowed_chat_ids_set, frozenset({"123", "456"}))
 
     @patch.dict(
         "os.environ",
@@ -166,7 +163,7 @@ class TestGetTelegramSettings(unittest.TestCase):
         self.assertEqual(settings.mode, TelegramMode.WEBHOOK)
         self.assertEqual(settings.poll_timeout, 45)
         self.assertEqual(settings.session_timeout_minutes, 20)
-        self.assertEqual(settings.allowed_chat_ids, frozenset({"111", "222", "333"}))
+        self.assertEqual(settings.allowed_chat_ids_set, frozenset({"111", "222", "333"}))
 
 
 class TestTelegramMode(unittest.TestCase):

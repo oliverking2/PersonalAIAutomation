@@ -1,7 +1,6 @@
 """Telegram Bot API client for sending and receiving messages."""
 
 import logging
-import os
 
 import requests
 
@@ -28,29 +27,19 @@ class TelegramClient:
     def __init__(
         self,
         *,
-        bot_token: str | None = None,
+        bot_token: str,
         chat_id: str | None = None,
         poll_timeout: int = 30,
     ) -> None:
         """Initialise the Telegram client.
 
-        :param bot_token: Telegram bot token. If not provided, reads from
-            TELEGRAM_BOT_TOKEN environment variable.
-        :param chat_id: Target chat ID for sending. If not provided, reads from
-            TELEGRAM_CHAT_ID environment variable. Optional for receive-only usage.
+        :param bot_token: Telegram bot token from @BotFather.
+        :param chat_id: Default chat ID for sending messages. Can be overridden per-message.
         :param poll_timeout: Timeout in seconds for long polling.
-        :raises ValueError: If bot_token is not provided and not found in environment.
         """
-        self._bot_token = bot_token or os.environ.get("TELEGRAM_BOT_TOKEN")
-        self._chat_id = chat_id or os.environ.get("TELEGRAM_CHAT_ID")
+        self._bot_token = bot_token
+        self._chat_id = chat_id
         self._poll_timeout = poll_timeout
-
-        if not self._bot_token:
-            raise ValueError(
-                "Telegram bot token not provided. Set TELEGRAM_BOT_TOKEN environment "
-                "variable or pass bot_token parameter."
-            )
-
         self._base_url = f"https://api.telegram.org/bot{self._bot_token}"
         logger.debug(f"TelegramClient initialised with poll_timeout={poll_timeout}s")
 

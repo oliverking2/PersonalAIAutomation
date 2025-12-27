@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.agent.models import AgentRunResult
@@ -14,14 +16,41 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from src.database.telegram import TelegramSession
-    from src.telegram.models import TelegramUpdate
+    from src.telegram.models import TelegramMessageInfo, TelegramUpdate
     from src.telegram.utils.config import TelegramConfig
     from src.telegram.utils.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
-# Command prefix for Telegram commands
-COMMAND_NEWCHAT = "/newchat"
+# Template for including replied-to message context
+REPLY_CONTEXT_TEMPLATE = "[Replying to previous message: {quoted_text}]\n\n{message}"
+
+# Pattern to match Telegram commands (e.g., /newchat, /help)
+# Captures: group 1 = command name, group 2 = optional args (may be None)
+COMMAND_PATTERN = re.compile(r"^/([a-zA-Z_]+)(?:\s+(.*))?$", re.DOTALL)
+
+
+@dataclass
+class ParsedCommand:
+    """Parsed Telegram command."""
+
+    name: str
+    args: str | None
+
+
+def parse_command(text: str) -> ParsedCommand | None:
+    """Parse a Telegram command from message text.
+
+    :param text: The message text to parse.
+    :returns: ParsedCommand if text starts with a command, None otherwise.
+    """
+    match = COMMAND_PATTERN.match(text.strip())
+    if match:
+        return ParsedCommand(
+            name=match.group(1).lower(),
+            args=match.group(2).strip() if match.group(2) else None,
+        )
+    return None
 
 
 class UnauthorisedChatError(Exception):
@@ -111,12 +140,56 @@ class MessageHandler:
 
         logger.info(f"Processing message: chat_id={chat_id}, text={text[:50]}...")
 
-        # Handle commands
-        if text.strip().lower() == COMMAND_NEWCHAT:
-            return self._handle_newchat_command(db_session, chat_id, message.message_id)
+        # Check if message is a command
+        command = parse_command(text)
+        if command is not None:
+            return self._handle_command(db_session, chat_id, message.message_id, command)
 
-        # Handle regular message
-        return self._handle_message(db_session, chat_id, text, message.message_id)
+        # Handle regular message (with optional reply context)
+        return self._handle_message(
+            db_session,
+            chat_id,
+            text,
+            message.message_id,
+            reply_to_message=message.reply_to_message,
+        )
+
+    def _handle_command(
+        self,
+        db_session: Session,
+        chat_id: str,
+        telegram_message_id: int,
+        command: ParsedCommand,
+    ) -> str:
+        """Route a command to the appropriate handler.
+
+        :param db_session: Database session.
+        :param chat_id: Telegram chat ID.
+        :param telegram_message_id: Telegram message ID.
+        :param command: Parsed command.
+        :returns: Response text.
+        """
+        # Command dispatch table - add new commands here
+        handlers: dict[str, str] = {
+            "newchat": "_cmd_newchat",
+            # Add future commands here, e.g.:
+            # "help": "_cmd_help",
+            # "status": "_cmd_status",
+        }
+
+        handler_name = handlers.get(command.name)
+        if handler_name is None:
+            logger.debug(f"Unknown command: /{command.name}")
+            # Unknown commands are passed to the agent as regular messages
+            return self._handle_message(
+                db_session,
+                chat_id,
+                f"/{command.name}" + (f" {command.args}" if command.args else ""),
+                telegram_message_id,
+            )
+
+        handler = getattr(self, handler_name)
+        return handler(db_session, chat_id, telegram_message_id, command.args)
 
     def _is_chat_allowed(self, chat_id: str) -> bool:
         """Check if a chat ID is in the allowlist.
@@ -124,19 +197,21 @@ class MessageHandler:
         :param chat_id: The chat ID to check.
         :returns: True if allowed, False otherwise.
         """
-        return chat_id in self._settings.allowed_chat_ids
+        return chat_id in self._settings.allowed_chat_ids_set
 
-    def _handle_newchat_command(
+    def _cmd_newchat(
         self,
         db_session: Session,
         chat_id: str,
         telegram_message_id: int,
+        _args: str | None,
     ) -> str:
         """Handle the /newchat command to reset the session.
 
         :param db_session: Database session.
         :param chat_id: Telegram chat ID.
         :param telegram_message_id: Telegram message ID.
+        :param _args: Command arguments (unused for this command).
         :returns: Confirmation message.
         """
         telegram_session = self._session_manager.reset_session(db_session, chat_id)
@@ -146,7 +221,7 @@ class MessageHandler:
             db_session,
             telegram_session,
             role="user",
-            content=COMMAND_NEWCHAT,
+            content="/newchat",
             telegram_message_id=telegram_message_id,
         )
 
@@ -168,6 +243,7 @@ class MessageHandler:
         chat_id: str,
         text: str,
         telegram_message_id: int,
+        reply_to_message: TelegramMessageInfo | None = None,
     ) -> str:
         """Handle a regular message by invoking the AI agent.
 
@@ -175,6 +251,7 @@ class MessageHandler:
         :param chat_id: Telegram chat ID.
         :param text: Message text.
         :param telegram_message_id: Telegram message ID.
+        :param reply_to_message: Optional message being replied to.
         :returns: Agent response text.
         """
         # Get or create session
@@ -183,7 +260,10 @@ class MessageHandler:
         if is_new:
             logger.info(f"Started new session for chat_id={chat_id}")
 
-        # Record user message
+        # Build message with reply context if applicable
+        agent_text = self._build_message_with_reply_context(text, reply_to_message)
+
+        # Record user message (store the original text, not the augmented version)
         create_telegram_message(
             db_session,
             telegram_session,
@@ -192,8 +272,13 @@ class MessageHandler:
             telegram_message_id=telegram_message_id,
         )
 
-        # Invoke agent
-        response = self._invoke_agent(db_session, telegram_session, text)
+        # Ensure agent conversation exists (lazy creation)
+        telegram_session = self._session_manager.ensure_agent_conversation(
+            db_session, telegram_session
+        )
+
+        # Invoke agent with potentially augmented text
+        response = self._invoke_agent(db_session, telegram_session, agent_text)
 
         # Record assistant response
         create_telegram_message(
@@ -204,6 +289,29 @@ class MessageHandler:
         )
 
         return response
+
+    def _build_message_with_reply_context(
+        self,
+        text: str,
+        reply_to_message: TelegramMessageInfo | None,
+    ) -> str:
+        """Build message text with reply context if applicable.
+
+        :param text: The user's message text.
+        :param reply_to_message: Optional message being replied to.
+        :returns: Message text, potentially with reply context prepended.
+        """
+        if reply_to_message is None or not reply_to_message.text:
+            return text
+
+        logger.info(
+            f"Including reply context: replying to message_id={reply_to_message.message_id}"
+        )
+
+        return REPLY_CONTEXT_TEMPLATE.format(
+            quoted_text=reply_to_message.text,
+            message=text,
+        )
 
     def _invoke_agent(
         self,

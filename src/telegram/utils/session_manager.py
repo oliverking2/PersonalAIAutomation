@@ -95,26 +95,54 @@ class SessionManager:
         db_session: Session,
         chat_id: str,
     ) -> TelegramSession:
-        """Create a new session with a linked agent conversation.
+        """Create a new session without an agent conversation.
+
+        The agent conversation is created lazily when the first message
+        is processed, not when /newchat is called.
 
         :param db_session: Database session.
         :param chat_id: Telegram chat ID.
         :returns: The newly created session.
         """
-        # Create agent conversation with chat_id as external_id
-        external_id = f"telegram:{chat_id}:{uuid.uuid4().hex[:8]}"
-        agent_conversation = create_agent_conversation(db_session, external_id=external_id)
-
-        # Create telegram session linked to agent conversation
+        # Create telegram session without agent conversation (lazy creation)
         telegram_session = create_telegram_session(
             db_session,
             chat_id=chat_id,
-            agent_conversation_id=agent_conversation.id,
+            agent_conversation_id=None,
         )
 
         logger.info(
             f"Created new session: session_id={telegram_session.id}, "
-            f"chat_id={chat_id}, agent_conversation_id={agent_conversation.id}"
+            f"chat_id={chat_id}, agent_conversation_id=None (lazy)"
+        )
+
+        return telegram_session
+
+    def ensure_agent_conversation(
+        self,
+        db_session: Session,
+        telegram_session: TelegramSession,
+    ) -> TelegramSession:
+        """Ensure the session has an agent conversation, creating one if needed.
+
+        :param db_session: Database session.
+        :param telegram_session: The Telegram session.
+        :returns: The session with agent_conversation_id populated.
+        """
+        if telegram_session.agent_conversation_id is not None:
+            return telegram_session
+
+        # Create agent conversation with chat_id as external_id
+        external_id = f"telegram:{telegram_session.chat_id}:{uuid.uuid4().hex[:8]}"
+        agent_conversation = create_agent_conversation(db_session, external_id=external_id)
+
+        # Link to telegram session
+        telegram_session.agent_conversation_id = agent_conversation.id
+        db_session.flush()
+
+        logger.info(
+            f"Created agent conversation for session: session_id={telegram_session.id}, "
+            f"agent_conversation_id={agent_conversation.id}"
         )
 
         return telegram_session

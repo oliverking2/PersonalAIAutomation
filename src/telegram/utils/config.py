@@ -3,8 +3,12 @@
 from enum import StrEnum
 from functools import cached_property, lru_cache
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from src.paths import PROJECT_ROOT
+
+_ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class TelegramMode(StrEnum):
@@ -27,12 +31,14 @@ class TelegramConfig(BaseSettings):
     :param error_retry_delay: Delay in seconds between retries after an error.
     :param max_consecutive_errors: Maximum consecutive errors before backing off.
     :param backoff_delay: Delay in seconds after max consecutive errors.
-    :param allowed_chat_ids_raw: Comma-separated list of chat IDs allowed to interact.
+    :param allowed_chat_ids: Comma-separated list of chat IDs allowed to interact.
+    :param error_bot_token: Separate bot token for error notifications (optional).
+    :param error_chat_id: Chat ID for error notifications (optional).
     """
 
     model_config = SettingsConfigDict(
         env_prefix="TELEGRAM_",
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
@@ -77,17 +83,20 @@ class TelegramConfig(BaseSettings):
         le=300,
         description="Delay in seconds after max consecutive errors",
     )
-    allowed_chat_ids_raw: str = Field(
+    allowed_chat_ids: str = Field(
         ...,
-        validation_alias=AliasChoices(
-            "allowed_chat_ids_raw",
-            "allowed_chat_ids",
-            "TELEGRAM_ALLOWED_CHAT_IDS",
-        ),
         description="Comma-separated list of allowed chat IDs",
     )
+    error_bot_token: str | None = Field(
+        default=None,
+        description="Separate bot token for error notifications",
+    )
+    error_chat_id: str | None = Field(
+        default=None,
+        description="Chat ID for error notifications",
+    )
 
-    @field_validator("allowed_chat_ids_raw")
+    @field_validator("allowed_chat_ids")
     @classmethod
     def validate_allowed_chat_ids(cls, v: str) -> str:
         """Validate that at least one chat ID is provided.
@@ -105,13 +114,13 @@ class TelegramConfig(BaseSettings):
         return v
 
     @cached_property
-    def allowed_chat_ids(self) -> frozenset[str]:
+    def allowed_chat_ids_set(self) -> frozenset[str]:
         """Get the allowed chat IDs as a frozenset.
 
         :returns: Frozenset of allowed chat ID strings.
         """
         return frozenset(
-            chat_id.strip() for chat_id in self.allowed_chat_ids_raw.split(",") if chat_id.strip()
+            chat_id.strip() for chat_id in self.allowed_chat_ids.split(",") if chat_id.strip()
         )
 
 

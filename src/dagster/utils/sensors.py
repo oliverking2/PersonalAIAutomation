@@ -1,7 +1,5 @@
 """Dagster Util Sensors."""
 
-import os
-
 from dagster import (
     DefaultSensorStatus,
     Definitions,
@@ -9,6 +7,7 @@ from dagster import (
     run_failure_sensor,
 )
 from src.telegram import TelegramClient
+from src.telegram.utils.config import get_telegram_settings
 from src.telegram.utils.misc import _escape_md
 
 
@@ -22,9 +21,17 @@ def telegram_on_run_failure(context: RunFailureSensorContext) -> None:
 
     subject = f"Dagster failure: {run.job_name}"
 
-    # Keep it simple and readable in Telegram.
+    settings = get_telegram_settings()
+    if not settings.error_bot_token or not settings.error_chat_id:
+        context.log.warning(
+            "Error notification skipped: TELEGRAM_ERROR_BOT_TOKEN or "
+            "TELEGRAM_ERROR_CHAT_ID not configured"
+        )
+        return
+
     client = TelegramClient(
-        bot_token=os.environ["TELEGRAM_ERROR_BOT_TOKEN"], chat_id=os.environ["TELEGRAM_CHAT_ID"]
+        bot_token=settings.error_bot_token,
+        chat_id=settings.error_chat_id,
     )
     context.log.info(f"Sending Telegram alert for failed run: {subject}")
     text = (

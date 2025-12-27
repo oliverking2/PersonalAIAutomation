@@ -8,13 +8,17 @@ import time
 from types import FrameType
 from typing import TYPE_CHECKING
 
+from dotenv import load_dotenv
+
 from src.database.connection import get_session
 from src.database.telegram import get_or_create_polling_cursor, update_polling_cursor
+from src.paths import PROJECT_ROOT
 from src.telegram.client import TelegramClient, TelegramClientError
 from src.telegram.handler import MessageHandler, UnauthorisedChatError
 from src.telegram.models import TelegramMessageInfo, TelegramUpdate
 from src.telegram.utils.config import TelegramConfig, get_telegram_settings
 from src.telegram.utils.session_manager import SessionManager
+from src.utils.logging import configure_logging
 
 if TYPE_CHECKING:
     pass
@@ -45,7 +49,10 @@ class PollingRunner:
         :param handler: Message handler. If not provided, creates default one.
         """
         self._settings = settings or get_telegram_settings()
-        self._client = client or TelegramClient(poll_timeout=self._settings.poll_timeout)
+        self._client = client or TelegramClient(
+            bot_token=self._settings.bot_token,
+            poll_timeout=self._settings.poll_timeout,
+        )
         self._session_manager = SessionManager(
             session_timeout_minutes=self._settings.session_timeout_minutes
         )
@@ -255,3 +262,15 @@ class PollingRunner:
             self._consecutive_errors = 0
         else:
             time.sleep(self._settings.error_retry_delay)
+
+
+def main() -> None:
+    """Entry point for running the Telegram polling bot."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    configure_logging()
+    runner = PollingRunner()
+    runner.run()
+
+
+if __name__ == "__main__":
+    main()
