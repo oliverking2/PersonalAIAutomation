@@ -13,6 +13,12 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src.api.app import app
+from testing.api.notion.fixtures import (
+    DEFAULT_IDEA_GROUP,
+    DEFAULT_IDEA_STATUS,
+    build_idea_create_payload,
+    build_notion_idea_page,
+)
 
 
 class TestQueryIdeasEndpoint(unittest.TestCase):
@@ -29,15 +35,11 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
         """Test successful ideas query."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = [
-            {
-                "id": "idea-1",
-                "url": "https://notion.so/Idea-1",
-                "properties": {
-                    "Idea": {"title": [{"plain_text": "Mobile app for habit tracking"}]},
-                    "Status": {"status": {"name": "Not Started"}},
-                    "Idea Group": {"select": {"name": "Personal"}},
-                },
-            }
+            build_notion_idea_page(
+                page_id="idea-1",
+                url="https://notion.so/Idea-1",
+                idea="Mobile app for habit tracking",
+            )
         ]
         mock_client_class.return_value = mock_client
 
@@ -52,8 +54,8 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
         self.assertEqual(len(data["results"]), 1)
         item = data["results"][0]
         self.assertEqual(item["idea"], "Mobile app for habit tracking")
-        self.assertEqual(item["status"], "Not Started")
-        self.assertEqual(item["idea_group"], "Personal")
+        self.assertEqual(item["status"], DEFAULT_IDEA_STATUS)
+        self.assertEqual(item["idea_group"], DEFAULT_IDEA_GROUP)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_query_ideas_with_group_filter(self, mock_client_class: MagicMock) -> None:
@@ -65,7 +67,7 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas/query",
             headers=self.auth_headers,
-            json={"idea_group": "Work"},
+            json={"idea_group": DEFAULT_IDEA_GROUP},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -81,24 +83,16 @@ class TestQueryIdeasEndpoint(unittest.TestCase):
         """Test ideas query with fuzzy name filter."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = [
-            {
-                "id": "idea-1",
-                "url": "https://notion.so/App-Idea",
-                "properties": {
-                    "Idea": {"title": [{"plain_text": "Mobile app for habit tracking"}]},
-                    "Status": {"status": {"name": "Not Started"}},
-                    "Idea Group": {"select": {"name": "Personal"}},
-                },
-            },
-            {
-                "id": "idea-2",
-                "url": "https://notion.so/Web-Project",
-                "properties": {
-                    "Idea": {"title": [{"plain_text": "Web dashboard for analytics"}]},
-                    "Status": {"status": {"name": "In Progress"}},
-                    "Idea Group": {"select": {"name": "Work"}},
-                },
-            },
+            build_notion_idea_page(
+                page_id="idea-1",
+                url="https://notion.so/App-Idea",
+                idea="Mobile app for habit tracking",
+            ),
+            build_notion_idea_page(
+                page_id="idea-2",
+                url="https://notion.so/Web-Project",
+                idea="Web dashboard for analytics",
+            ),
         ]
         mock_client_class.return_value = mock_client
 
@@ -127,15 +121,11 @@ class TestGetIdeaEndpoint(unittest.TestCase):
     def test_get_idea_success(self, mock_client_class: MagicMock) -> None:
         """Test successful idea retrieval."""
         mock_client = MagicMock()
-        mock_client.get_page.return_value = {
-            "id": "idea-123",
-            "url": "https://notion.so/My-Idea",
-            "properties": {
-                "Idea": {"title": [{"plain_text": "Build a CLI tool"}]},
-                "Status": {"status": {"name": "In Progress"}},
-                "Idea Group": {"select": {"name": "Work"}},
-            },
-        }
+        mock_client.get_page.return_value = build_notion_idea_page(
+            page_id="idea-123",
+            url="https://notion.so/My-Idea",
+            idea="Build a CLI tool",
+        )
         mock_client.get_page_content.return_value = []
         mock_client_class.return_value = mock_client
 
@@ -148,8 +138,8 @@ class TestGetIdeaEndpoint(unittest.TestCase):
         data = response.json()
         self.assertEqual(data["id"], "idea-123")
         self.assertEqual(data["idea"], "Build a CLI tool")
-        self.assertEqual(data["status"], "In Progress")
-        self.assertEqual(data["idea_group"], "Work")
+        self.assertEqual(data["status"], DEFAULT_IDEA_STATUS)
+        self.assertEqual(data["idea_group"], DEFAULT_IDEA_GROUP)
 
 
 class TestCreateIdeaEndpoint(unittest.TestCase):
@@ -166,32 +156,28 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         """Test successful idea creation with all fields."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = []  # No duplicates
-        mock_client.create_page.return_value = {
-            "id": "idea-new",
-            "url": "https://notion.so/New-Idea",
-            "properties": {
-                "Idea": {"title": [{"plain_text": "New mobile app idea"}]},
-                "Status": {"status": {"name": "Not Started"}},
-                "Idea Group": {"select": {"name": "Personal"}},
-            },
-        }
+        mock_client.create_page.return_value = build_notion_idea_page(
+            page_id="idea-new",
+            url="https://notion.so/New-Idea",
+            idea="New mobile app idea",
+        )
         mock_client_class.return_value = mock_client
 
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json={
-                "idea": "New mobile app idea",
-                "idea_group": "Personal",
-            },
+            json=build_idea_create_payload(
+                idea="New mobile app idea",
+                idea_group=DEFAULT_IDEA_GROUP,
+            ),
         )
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
         self.assertEqual(data["id"], "idea-new")
         self.assertEqual(data["idea"], "New mobile app idea")
-        self.assertEqual(data["status"], "Not Started")
-        self.assertEqual(data["idea_group"], "Personal")
+        self.assertEqual(data["status"], DEFAULT_IDEA_STATUS)
+        self.assertEqual(data["idea_group"], DEFAULT_IDEA_GROUP)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_idea_minimal(self, mock_client_class: MagicMock) -> None:
@@ -203,7 +189,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
             "url": "https://notion.so/Minimal",
             "properties": {
                 "Idea": {"title": [{"plain_text": "Minimal idea"}]},
-                "Status": {"status": {"name": "Not Started"}},
+                "Status": {"status": {"name": DEFAULT_IDEA_STATUS}},
                 "Idea Group": {"select": None},
             },
         }
@@ -212,7 +198,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json={"idea": "Minimal idea"},
+            json=build_idea_create_payload(idea="Minimal idea"),
         )
 
         self.assertEqual(response.status_code, 201)
@@ -222,7 +208,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json={"idea_group": "Work"},
+            json={"idea_group": DEFAULT_IDEA_GROUP},
         )
 
         self.assertEqual(response.status_code, 422)
@@ -260,7 +246,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json={"idea": "existing idea"},  # case insensitive match
+            json=build_idea_create_payload(idea="existing idea"),
         )
 
         self.assertEqual(response.status_code, 409)
@@ -281,28 +267,24 @@ class TestUpdateIdeaEndpoint(unittest.TestCase):
         """Test successful idea update."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = []  # No duplicate
-        mock_client.update_page.return_value = {
-            "id": "idea-123",
-            "url": "https://notion.so/Idea",
-            "properties": {
-                "Idea": {"title": [{"plain_text": "Updated Idea Title"}]},
-                "Status": {"status": {"name": "In Progress"}},
-                "Idea Group": {"select": {"name": "Work"}},
-            },
-        }
+        mock_client.update_page.return_value = build_notion_idea_page(
+            page_id="idea-123",
+            url="https://notion.so/Idea",
+            idea="Updated Idea Title",
+        )
         mock_client.get_page_content.return_value = []
         mock_client_class.return_value = mock_client
 
         response = self.client.patch(
             "/notion/ideas/idea-123",
             headers=self.auth_headers,
-            json={"idea": "Updated Idea Title", "idea_group": "Work"},
+            json={"idea": "Updated Idea Title", "idea_group": DEFAULT_IDEA_GROUP},
         )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["idea"], "Updated Idea Title")
-        self.assertEqual(data["idea_group"], "Work")
+        self.assertEqual(data["idea_group"], DEFAULT_IDEA_GROUP)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_update_idea_no_fields_returns_400(self, mock_client_class: MagicMock) -> None:

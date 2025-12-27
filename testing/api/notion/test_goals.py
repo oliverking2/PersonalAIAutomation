@@ -14,6 +14,12 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src.api.app import app
+from testing.api.notion.fixtures import (
+    DEFAULT_GOAL_STATUS,
+    DEFAULT_PRIORITY,
+    build_goal_create_payload,
+    build_notion_goal_page,
+)
 
 
 class TestQueryGoalsEndpoint(unittest.TestCase):
@@ -30,17 +36,13 @@ class TestQueryGoalsEndpoint(unittest.TestCase):
         """Test successful goals query."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = [
-            {
-                "id": "goal-1",
-                "url": "https://notion.so/Goal-1",
-                "properties": {
-                    "Goal name": {"title": [{"plain_text": "Learn Python"}]},
-                    "Status": {"status": {"name": "In progress"}},
-                    "Priority": {"select": {"name": "High"}},
-                    "Progress": {"number": 50},
-                    "Due date": {"date": {"start": "2025-12-31"}},
-                },
-            }
+            build_notion_goal_page(
+                page_id="goal-1",
+                url="https://notion.so/Goal-1",
+                goal_name="Learn Python",
+                progress=50,
+                due_date="2025-12-31",
+            )
         ]
         mock_client_class.return_value = mock_client
 
@@ -55,8 +57,8 @@ class TestQueryGoalsEndpoint(unittest.TestCase):
         self.assertEqual(len(data["results"]), 1)
         goal = data["results"][0]
         self.assertEqual(goal["goal_name"], "Learn Python")
-        self.assertEqual(goal["status"], "In progress")
-        self.assertEqual(goal["priority"], "High")
+        self.assertEqual(goal["status"], DEFAULT_GOAL_STATUS)
+        self.assertEqual(goal["priority"], DEFAULT_PRIORITY)
         self.assertEqual(goal["progress"], 50)
 
     @patch("src.api.notion.dependencies.NotionClient")
@@ -90,17 +92,12 @@ class TestGetGoalEndpoint(unittest.TestCase):
     def test_get_goal_success(self, mock_client_class: MagicMock) -> None:
         """Test successful goal retrieval."""
         mock_client = MagicMock()
-        mock_client.get_page.return_value = {
-            "id": "goal-123",
-            "url": "https://notion.so/My-Goal",
-            "properties": {
-                "Goal name": {"title": [{"plain_text": "My Goal"}]},
-                "Status": {"status": {"name": "Not started"}},
-                "Priority": {"select": {"name": "Medium"}},
-                "Progress": {"number": 0},
-                "Due date": {"date": None},
-            },
-        }
+        mock_client.get_page.return_value = build_notion_goal_page(
+            page_id="goal-123",
+            url="https://notion.so/My-Goal",
+            goal_name="My Goal",
+            progress=0,
+        )
         mock_client_class.return_value = mock_client
 
         response = self.client.get(
@@ -128,36 +125,31 @@ class TestCreateGoalEndpoint(unittest.TestCase):
     def test_create_goal_success(self, mock_client_class: MagicMock) -> None:
         """Test successful goal creation with all fields."""
         mock_client = MagicMock()
-        mock_client.create_page.return_value = {
-            "id": "goal-new",
-            "url": "https://notion.so/New-Goal",
-            "properties": {
-                "Goal name": {"title": [{"plain_text": "New Goal"}]},
-                "Status": {"status": {"name": "Not started"}},
-                "Priority": {"select": {"name": "High"}},
-                "Progress": {"number": 25},
-                "Due date": {"date": {"start": "2025-12-31"}},
-            },
-        }
+        mock_client.create_page.return_value = build_notion_goal_page(
+            page_id="goal-new",
+            url="https://notion.so/New-Goal",
+            goal_name="New Goal",
+            progress=25,
+            due_date="2025-12-31",
+        )
         mock_client_class.return_value = mock_client
 
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={
-                "goal_name": "New Goal",
-                "status": "Not started",
-                "priority": "High",
-                "progress": 25,
-                "due_date": "2025-12-31",
-            },
+            json=build_goal_create_payload(
+                goal_name="New Goal",
+                status=DEFAULT_GOAL_STATUS,
+                priority=DEFAULT_PRIORITY,
+                progress=25,
+            ),
         )
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
         self.assertEqual(data["id"], "goal-new")
         self.assertEqual(data["goal_name"], "New Goal")
-        self.assertEqual(data["priority"], "High")
+        self.assertEqual(data["priority"], DEFAULT_PRIORITY)
         self.assertEqual(data["progress"], 25)
 
     @patch("src.api.notion.dependencies.NotionClient")
@@ -169,7 +161,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
             "url": "https://notion.so/Minimal",
             "properties": {
                 "Goal name": {"title": [{"plain_text": "Minimal"}]},
-                "Status": {"status": {"name": "Not started"}},
+                "Status": {"status": {"name": DEFAULT_GOAL_STATUS}},
                 "Priority": {"select": None},
                 "Progress": {"number": None},
                 "Due date": {"date": None},
@@ -180,7 +172,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={"goal_name": "Minimal"},
+            json=build_goal_create_payload(goal_name="Minimal"),
         )
 
         self.assertEqual(response.status_code, 201)
@@ -190,7 +182,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={"status": "Not started"},
+            json={"status": DEFAULT_GOAL_STATUS},
         )
 
         self.assertEqual(response.status_code, 422)
@@ -203,13 +195,13 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={"goal_name": "Goal", "status": "Invalid"},
+            json={"goal_name": "Goal", "status": "InvalidStatus"},
         )
 
         self.assertEqual(response.status_code, 422)
         detail = response.json()["detail"]
         self.assertIn("status", detail)
-        self.assertIn("invalid value 'Invalid'", detail)
+        self.assertIn("invalid value 'InvalidStatus'", detail)
 
     def test_create_goal_progress_out_of_range_returns_422(self) -> None:
         """Test that progress outside 0-100 returns 422."""
@@ -240,7 +232,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={"goal_name": "existing goal"},  # case insensitive match
+            json=build_goal_create_payload(goal_name="existing goal"),
         )
 
         self.assertEqual(response.status_code, 409)
@@ -260,28 +252,23 @@ class TestUpdateGoalEndpoint(unittest.TestCase):
     def test_update_goal_success(self, mock_client_class: MagicMock) -> None:
         """Test successful goal update."""
         mock_client = MagicMock()
-        mock_client.update_page.return_value = {
-            "id": "goal-123",
-            "url": "https://notion.so/Goal",
-            "properties": {
-                "Goal name": {"title": [{"plain_text": "Goal"}]},
-                "Status": {"status": {"name": "Done"}},
-                "Priority": {"select": {"name": "Low"}},
-                "Progress": {"number": 100},
-                "Due date": {"date": None},
-            },
-        }
+        mock_client.update_page.return_value = build_notion_goal_page(
+            page_id="goal-123",
+            url="https://notion.so/Goal",
+            goal_name="Goal",
+            progress=100,
+        )
         mock_client_class.return_value = mock_client
 
         response = self.client.patch(
             "/notion/goals/goal-123",
             headers=self.auth_headers,
-            json={"status": "Done", "progress": 100},
+            json={"status": DEFAULT_GOAL_STATUS, "progress": 100},
         )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["status"], "Done")
+        self.assertEqual(data["status"], DEFAULT_GOAL_STATUS)
         self.assertEqual(data["progress"], 100)
 
     @patch("src.api.notion.dependencies.NotionClient")

@@ -366,6 +366,27 @@ Key patterns:
 - Aim for at least 80% test coverage.
 - Leverage `setUp`/`setUpClass` and `tearDown`/`tearDownClass` to avoid boilerplate.
 
+### Dynamic Enum Testing
+When testing code that uses enums representing external picklists (e.g., Notion dropdown fields), avoid hardcoding specific enum values. Instead:
+
+1. **Use shared fixtures** in `testing/api/notion/fixtures.py` that derive values from actual enums
+2. **Use helper functions** like `first_value(EnumClass)` to get valid enum values dynamically
+3. **Use fixture builders** like `build_notion_task_page()` instead of inline dicts with hardcoded values
+
+This prevents tests from breaking when enum values are added, removed, or reordered in Notion.
+
+```python
+# Bad: Hardcoded enum values break when Notion changes
+mock_client.get_page.return_value = {
+    "properties": {"Status": {"status": {"name": "To Do"}}}  # Breaks if "To Do" is renamed
+}
+
+# Good: Dynamic values from actual enums
+from testing.api.notion.fixtures import DEFAULT_TASK_STATUS, build_notion_task_page
+
+mock_client.get_page.return_value = build_notion_task_page(status=DEFAULT_TASK_STATUS)
+```
+
 ## Static Analysis (mypy)
 - Generated code must pass mypy according to the project's configured strictness.
 - Prefer precise types over broad ones (use `TypedDict`, `Protocol`, `Literal`, `NewType` where helpful).
