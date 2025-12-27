@@ -136,19 +136,22 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json=build_task_create_payload(
-                task_name="New Task",
-                status=DEFAULT_TASK_STATUS,
-                priority=DEFAULT_PRIORITY,
-                effort_level=DEFAULT_EFFORT,
-            ),
+            json=[
+                build_task_create_payload(
+                    task_name="New Task",
+                    status=DEFAULT_TASK_STATUS,
+                    priority=DEFAULT_PRIORITY,
+                    effort_level=DEFAULT_EFFORT,
+                )
+            ],
         )
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(data["id"], "task-new")
-        self.assertEqual(data["task_name"], "New Task")
-        self.assertEqual(data["priority"], DEFAULT_PRIORITY)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], "task-new")
+        self.assertEqual(data[0]["task_name"], "New Task")
+        self.assertEqual(data[0]["priority"], DEFAULT_PRIORITY)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_task_minimal(self, mock_client_class: MagicMock) -> None:
@@ -173,7 +176,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json=build_task_create_payload(task_name="Minimal"),
+            json=[build_task_create_payload(task_name="Minimal")],
         )
 
         self.assertEqual(response.status_code, 201)
@@ -183,7 +186,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json={"status": DEFAULT_TASK_STATUS},
+            json=[{"status": DEFAULT_TASK_STATUS}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -196,7 +199,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json={"task_name": "Task", "status": "InvalidStatus"},
+            json=[{"task_name": "Task", "status": "InvalidStatus"}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -210,7 +213,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json={"task_name": "Task", "priority": "InvalidPriority"},
+            json=[{"task_name": "Task", "priority": "InvalidPriority"}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -235,7 +238,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json=build_task_create_payload(task_name="existing task"),
+            json=[build_task_create_payload(task_name="existing task")],
         )
 
         self.assertEqual(response.status_code, 409)
@@ -263,7 +266,7 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/tasks",
             headers=self.auth_headers,
-            json=build_task_create_payload(task_name="New Task"),
+            json=[build_task_create_payload(task_name="New Task")],
         )
 
         self.assertEqual(response.status_code, 201)

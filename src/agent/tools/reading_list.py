@@ -31,6 +31,7 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
     domain_plural="reading_list",
     endpoint_prefix="/notion/reading-list",
     id_field="item_id",
+    name_field="title",
     query_model=ReadingQueryRequest,
     create_model=AgentReadingItemCreateArgs,
     update_model=AgentReadingItemUpdateArgs,
@@ -54,8 +55,7 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
     get_description=(
         "Get details of a specific reading list item by its ID. "
         "Returns title, type (Book, Article, Other), status, priority, category, "
-        "item_url (article/resource link), notion_url (link to Notion page), "
-        "and page content (in markdown format)."
+        "item_url (article/resource link), and page content (in markdown format)."
     ),
     create_description=(
         f"Create a new reading list item. Required: title and item_type ({_type_options}). "

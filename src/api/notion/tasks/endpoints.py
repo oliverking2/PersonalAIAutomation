@@ -95,50 +95,54 @@ def get_task(
 
 @router.post(
     "",
-    response_model=TaskResponse,
+    response_model=list[TaskResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Create task",
+    summary="Create tasks",
 )
-def create_task(
-    request: TaskCreateRequest,
+def create_tasks(
+    requests: list[TaskCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_task_data_source_id),
-) -> TaskResponse:
-    """Create a new task in the task tracker."""
-    logger.debug("Creating task")
+) -> list[TaskResponse]:
+    """Create one or more tasks in the task tracker."""
+    logger.debug(f"Creating {len(requests)} tasks")
+    results: list[TaskResponse] = []
 
-    check_duplicate_name(
-        client=client,
-        data_source_id=data_source_id,
-        name_property="Task name",
-        complete_status="Done",
-        new_name=request.task_name,
-    )
-
-    try:
-        properties = build_task_properties(
-            task_name=request.task_name,
-            status=request.status,
-            due_date=request.due_date,
-            priority=request.priority,
-            effort_level=request.effort_level,
-            task_group=request.task_group,
-        )
-        data = client.create_page(
+    for request in requests:
+        check_duplicate_name(
+            client=client,
             data_source_id=data_source_id,
-            properties=properties,
+            name_property="Task name",
+            complete_status="Done",
+            new_name=request.task_name,
         )
-        task = parse_page_to_task(data)
 
-        # Append content if provided
-        if request.content:
-            blocks = markdown_to_blocks(request.content)
-            client.append_page_content(task.id, blocks)
+        try:
+            properties = build_task_properties(
+                task_name=request.task_name,
+                status=request.status,
+                due_date=request.due_date,
+                priority=request.priority,
+                effort_level=request.effort_level,
+                task_group=request.task_group,
+            )
+            data = client.create_page(
+                data_source_id=data_source_id,
+                properties=properties,
+            )
+            task = parse_page_to_task(data)
 
-        return _task_to_response(task, content=request.content)
-    except NotionClientError as e:
-        logger.exception(f"Failed to create task: {e}")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            # Append content if provided
+            if request.content:
+                blocks = markdown_to_blocks(request.content)
+                client.append_page_content(task.id, blocks)
+
+            results.append(_task_to_response(task, content=request.content))
+        except NotionClientError as e:
+            logger.exception(f"Failed to create task: {e}")
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+
+    return results
 
 
 @router.patch(
@@ -274,7 +278,5 @@ def _task_to_response(task: NotionTask, content: str | None = None) -> TaskRespo
         priority=task.priority,
         effort_level=task.effort_level,
         task_group=task.task_group,
-        assignee=task.assignee,
-        notion_url=task.notion_url,
         content=content,
     )

@@ -45,8 +45,6 @@ class TestParsePageToTask(unittest.TestCase):
         self.assertEqual(task.priority, "High")
         self.assertEqual(task.effort_level, "Medium")
         self.assertEqual(task.task_group, "Work")
-        self.assertEqual(task.assignee, "John Doe")
-        self.assertEqual(task.notion_url, "https://notion.so/My-Task")
 
     def test_parse_page_with_missing_optional_properties(self) -> None:
         """Test parsing a page with missing optional properties."""
@@ -74,7 +72,6 @@ class TestParsePageToTask(unittest.TestCase):
         self.assertIsNone(task.priority)
         self.assertIsNone(task.effort_level)
         self.assertIsNone(task.task_group)
-        self.assertIsNone(task.assignee)
 
     def test_parse_page_with_multi_segment_title(self) -> None:
         """Test parsing a page with a title split across multiple segments."""
@@ -287,7 +284,6 @@ class TestParsePageToGoal(unittest.TestCase):
         self.assertEqual(goal.priority, "High")
         self.assertEqual(goal.progress, 50)
         self.assertEqual(goal.due_date, date(2025, 12, 31))
-        self.assertEqual(goal.notion_url, "https://notion.so/My-Goal")
 
     def test_parse_goal_page_with_missing_optional_properties(self) -> None:
         """Test parsing a goal page with missing optional properties."""
@@ -340,7 +336,6 @@ class TestParsePageToReadingItem(unittest.TestCase):
         self.assertEqual(item.priority, "High")
         self.assertEqual(item.category, "Data Engineering")
         self.assertEqual(item.item_url, "https://example.com/book")
-        self.assertEqual(item.notion_url, "https://notion.so/My-Book")
 
     def test_parse_reading_item_page_with_missing_optional_properties(self) -> None:
         """Test parsing a reading item page with missing optional properties."""

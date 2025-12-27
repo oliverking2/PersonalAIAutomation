@@ -83,8 +83,6 @@ def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
         priority=_extract_select(properties.get("Priority", {})),
         effort_level=_extract_select(properties.get("Effort level", {})),
         task_group=_extract_select(properties.get("Task Group", {})),
-        assignee=_extract_people(properties.get("Assignee", {})),
-        notion_url=page.get("url", ""),
     )
 
 
@@ -104,7 +102,6 @@ def parse_page_to_goal(page: dict[str, Any]) -> NotionGoal:
         category=_extract_select(properties.get("Category", {})),
         progress=_extract_number(properties.get("Progress", {})),
         due_date=_extract_date(properties.get("Due date", {})),
-        notion_url=page.get("url", ""),
     )
 
 
@@ -124,7 +121,6 @@ def parse_page_to_reading_item(page: dict[str, Any]) -> NotionReadingItem:
         priority=_extract_select(properties.get("Priority", {})),
         category=_extract_select(properties.get("Category", {})),
         item_url=_extract_url(properties.get("URL", {})),
-        notion_url=page.get("url", ""),
     )
 
 
@@ -141,7 +137,6 @@ def parse_page_to_idea(page: dict[str, Any]) -> NotionIdea:
         idea=_extract_title(properties.get("Idea", {})),
         status=_extract_status(properties.get("Status", {})),
         idea_group=_extract_select(properties.get("Idea Group", {})),
-        notion_url=page.get("url", ""),
     )
 
 
@@ -185,15 +180,6 @@ def _extract_rich_text(prop: dict[str, Any]) -> str | None:
         return None
     text = "".join(item.get("plain_text", "") for item in rich_text_items)
     return text if text else None
-
-
-def _extract_people(prop: dict[str, Any]) -> str | None:
-    """Extract first person's name from a people property."""
-    people = prop.get("people", [])
-    if not people:
-        return None
-    first_person = people[0]
-    return first_person.get("name")
 
 
 def _extract_number(prop: dict[str, Any]) -> float | None:

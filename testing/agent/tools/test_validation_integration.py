@@ -33,7 +33,7 @@ class TestTaskContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "task-123", "task_name": "Test"}
+        mock_client.post.return_value = [{"id": "task-123", "task_name": "Test"}]
 
         args = AgentTaskCreateArgs(
             task_name="Fix login bug",
@@ -53,7 +53,7 @@ class TestTaskContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "task-123"}
+        mock_client.post.return_value = [{"id": "task-123"}]
 
         args = AgentTaskCreateArgs(
             task_name="Review Q4 budget proposal from finance",
@@ -64,9 +64,9 @@ class TestTaskContentBuilding(unittest.TestCase):
         )
         self.create_tool.handler(args)
 
-        # Check the payload sent to API
+        # Check the payload sent to API (factory wraps in a list)
         call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
+        payload = call_args[1]["json"][0]
 
         # Content should be built from template
         self.assertIn("content", payload)
@@ -88,7 +88,7 @@ class TestTaskContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "task-123"}
+        mock_client.post.return_value = [{"id": "task-123"}]
 
         args = AgentTaskCreateArgs(
             task_name="Review Q4 budget proposal from finance",
@@ -97,9 +97,9 @@ class TestTaskContentBuilding(unittest.TestCase):
         )
         self.create_tool.handler(args)
 
-        # Check the payload sent to API
+        # Check the payload sent to API (factory wraps in a list)
         call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
+        payload = call_args[1]["json"][0]
 
         # Content should still be present with at least the footer
         self.assertIn("content", payload)
@@ -122,7 +122,7 @@ class TestReadingListContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "item-123"}
+        mock_client.post.return_value = [{"id": "item-123"}]
 
         args = AgentReadingItemCreateArgs(
             title="Clean Code",
@@ -139,7 +139,7 @@ class TestReadingListContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "item-123"}
+        mock_client.post.return_value = [{"id": "item-123"}]
 
         args = AgentReadingItemCreateArgs(
             title="Clean Code",
@@ -148,8 +148,9 @@ class TestReadingListContentBuilding(unittest.TestCase):
         )
         self.create_tool.handler(args)
 
+        # Check the payload sent to API (factory wraps in a list)
         call_args = mock_client.post.call_args
-        payload = call_args[1]["json"]
+        payload = call_args[1]["json"][0]
 
         self.assertIn("content", payload)
         self.assertIn("Recommended by colleague", payload["content"])
@@ -170,7 +171,7 @@ class TestGoalContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "goal-123"}
+        mock_client.post.return_value = [{"id": "goal-123"}]
 
         args = AgentGoalCreateArgs(
             goal_name="Run a half marathon by June 2025",

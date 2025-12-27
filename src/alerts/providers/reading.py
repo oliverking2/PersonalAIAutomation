@@ -2,6 +2,7 @@
 
 import logging
 from datetime import date, timedelta
+from typing import Any, cast
 
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
@@ -42,16 +43,19 @@ class ReadingAlertProvider:
         items: list[AlertItem] = []
 
         # Get high priority items marked "To Read"
-        high_priority_response = self._client.post(
-            "/notion/reading-list/query",
-            json={"priority": "High", "status": "To Read", "include_completed": False},
+        high_priority_response = cast(
+            dict[str, Any],
+            self._client.post(
+                "/notion/reading-list/query",
+                json={"priority": "High", "status": "To Read", "include_completed": False},
+            ),
         )
         high_priority_items = high_priority_response.get("results", [])
         for item in high_priority_items:
             items.append(
                 AlertItem(
                     name=item.get("title", "Untitled"),
-                    url=item.get("item_url") or item.get("notion_url"),
+                    url=item.get("item_url"),
                     metadata={
                         "section": "high_priority",
                         "item_type": item.get("item_type", ""),
@@ -61,13 +65,16 @@ class ReadingAlertProvider:
 
         # Get stale items (not edited in 30+ days)
         stale_cutoff = today - timedelta(days=self.STALE_DAYS)
-        stale_response = self._client.post(
-            "/notion/reading-list/query",
-            json={
-                "edited_before": stale_cutoff.isoformat(),
-                "status": "To Read",
-                "include_completed": False,
-            },
+        stale_response = cast(
+            dict[str, Any],
+            self._client.post(
+                "/notion/reading-list/query",
+                json={
+                    "edited_before": stale_cutoff.isoformat(),
+                    "status": "To Read",
+                    "include_completed": False,
+                },
+            ),
         )
         stale_items = stale_response.get("results", [])
         for item in stale_items:
@@ -76,7 +83,7 @@ class ReadingAlertProvider:
                 items.append(
                     AlertItem(
                         name=item.get("title", "Untitled"),
-                        url=item.get("item_url") or item.get("notion_url"),
+                        url=item.get("item_url"),
                         metadata={
                             "section": "stale",
                             "item_type": item.get("item_type", ""),

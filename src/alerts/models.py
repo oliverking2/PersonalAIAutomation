@@ -9,7 +9,7 @@ class AlertItem(BaseModel):
     """An item within an alert (e.g., a task, article, reading item)."""
 
     name: str = Field(..., description="Item name or title")
-    url: str | None = Field(None, description="Optional link URL")
+    url: str | None = Field(default=None, description="Optional link URL")
     metadata: dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
 

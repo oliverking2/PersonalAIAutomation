@@ -13,7 +13,6 @@ class IdeaResponse(BaseModel):
     idea: str = Field(..., description="Idea title")
     status: str | None = Field(None, description="Idea status")
     idea_group: str | None = Field(None, description="Idea group (Work/Personal)")
-    notion_url: str = Field(..., description="Notion page URL")
     content: str | None = Field(None, description="Page content in markdown format")
 
 

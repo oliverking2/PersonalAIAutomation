@@ -177,7 +177,7 @@ class TestIdeasToolHandlers(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-idea", "idea": "New Idea"}
+        mock_client.post.return_value = [{"id": "new-idea", "idea": "New Idea"}]
 
         tool = self.tool_dict["create_idea"]
         args = AgentIdeaCreateArgs(
@@ -189,9 +189,9 @@ class TestIdeasToolHandlers(unittest.TestCase):
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/notion/ideas")
-        # Content should be built from notes
+        # Content should be built from notes, payload is now a list
         payload = call_args[1]["json"]
-        self.assertIn("content", payload)
+        self.assertIn("content", payload[0])
         self.assertTrue(result["created"])
 
     @patch("src.agent.tools.factory._get_client")

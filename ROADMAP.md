@@ -80,6 +80,7 @@ End-to-end conversation flow testing.
 
 ### Misc Improvements
 - Add better logging to the Notion API 
+- Alert ops need to send a message to the Errors bot rather than silently failing
 
 ### Agent Improvements
 

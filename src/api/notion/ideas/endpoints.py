@@ -93,48 +93,52 @@ def get_idea(
 
 @router.post(
     "",
-    response_model=IdeaResponse,
+    response_model=list[IdeaResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Create idea",
+    summary="Create ideas",
 )
-def create_idea(
-    request: IdeaCreateRequest,
+def create_ideas(
+    requests: list[IdeaCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_ideas_data_source_id),
-) -> IdeaResponse:
-    """Create a new idea in the ideas data source."""
-    logger.debug("Creating idea")
+) -> list[IdeaResponse]:
+    """Create one or more ideas in the ideas data source."""
+    logger.debug(f"Creating {len(requests)} ideas")
+    results: list[IdeaResponse] = []
 
-    # Check for duplicate names (exclude archived ideas)
-    check_duplicate_name(
-        client=client,
-        data_source_id=data_source_id,
-        name_property="Idea",
-        complete_status=IdeaStatus.DONE.value,
-        new_name=request.idea,
-    )
-
-    try:
-        properties = build_idea_properties(
-            idea=request.idea,
-            status=request.status,
-            idea_group=request.idea_group,
-        )
-        data = client.create_page(
+    for request in requests:
+        # Check for duplicate names (exclude archived ideas)
+        check_duplicate_name(
+            client=client,
             data_source_id=data_source_id,
-            properties=properties,
+            name_property="Idea",
+            complete_status=IdeaStatus.DONE.value,
+            new_name=request.idea,
         )
-        idea = parse_page_to_idea(data)
 
-        # Append content if provided
-        if request.content:
-            blocks = markdown_to_blocks(request.content)
-            client.append_page_content(idea.id, blocks)
+        try:
+            properties = build_idea_properties(
+                idea=request.idea,
+                status=request.status,
+                idea_group=request.idea_group,
+            )
+            data = client.create_page(
+                data_source_id=data_source_id,
+                properties=properties,
+            )
+            idea = parse_page_to_idea(data)
 
-        return _idea_to_response(idea, content=request.content)
-    except NotionClientError as e:
-        logger.exception(f"Failed to create idea: {e}")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            # Append content if provided
+            if request.content:
+                blocks = markdown_to_blocks(request.content)
+                client.append_page_content(idea.id, blocks)
+
+            results.append(_idea_to_response(idea, content=request.content))
+        except NotionClientError as e:
+            logger.exception(f"Failed to create idea: {e}")
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+
+    return results
 
 
 @router.patch(
@@ -241,6 +245,5 @@ def _idea_to_response(idea: NotionIdea, content: str | None = None) -> IdeaRespo
         idea=idea.idea,
         status=idea.status,
         idea_group=idea.idea_group,
-        notion_url=idea.notion_url,
         content=content,
     )

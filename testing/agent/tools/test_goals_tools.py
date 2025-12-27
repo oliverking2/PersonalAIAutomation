@@ -197,7 +197,7 @@ class TestGoalToolHandlers(unittest.TestCase):
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         goal_name = "Run a half marathon by June"
-        mock_client.post.return_value = {"id": "new-goal", "goal_name": goal_name}
+        mock_client.post.return_value = [{"id": "new-goal", "goal_name": goal_name}]
 
         tool = self.tool_dict["create_goal"]
         args = AgentGoalCreateArgs(goal_name=goal_name)

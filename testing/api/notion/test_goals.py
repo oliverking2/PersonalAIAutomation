@@ -137,20 +137,23 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json=build_goal_create_payload(
-                goal_name="New Goal",
-                status=DEFAULT_GOAL_STATUS,
-                priority=DEFAULT_PRIORITY,
-                progress=25,
-            ),
+            json=[
+                build_goal_create_payload(
+                    goal_name="New Goal",
+                    status=DEFAULT_GOAL_STATUS,
+                    priority=DEFAULT_PRIORITY,
+                    progress=25,
+                )
+            ],
         )
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(data["id"], "goal-new")
-        self.assertEqual(data["goal_name"], "New Goal")
-        self.assertEqual(data["priority"], DEFAULT_PRIORITY)
-        self.assertEqual(data["progress"], 25)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], "goal-new")
+        self.assertEqual(data[0]["goal_name"], "New Goal")
+        self.assertEqual(data[0]["priority"], DEFAULT_PRIORITY)
+        self.assertEqual(data[0]["progress"], 25)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_goal_minimal(self, mock_client_class: MagicMock) -> None:
@@ -172,7 +175,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json=build_goal_create_payload(goal_name="Minimal"),
+            json=[build_goal_create_payload(goal_name="Minimal")],
         )
 
         self.assertEqual(response.status_code, 201)
@@ -182,7 +185,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={"status": DEFAULT_GOAL_STATUS},
+            json=[{"status": DEFAULT_GOAL_STATUS}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -195,7 +198,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={"goal_name": "Goal", "status": "InvalidStatus"},
+            json=[{"goal_name": "Goal", "status": "InvalidStatus"}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -208,7 +211,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json={"goal_name": "Goal", "progress": 150},
+            json=[{"goal_name": "Goal", "progress": 150}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -232,7 +235,7 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/goals",
             headers=self.auth_headers,
-            json=build_goal_create_payload(goal_name="existing goal"),
+            json=[build_goal_create_payload(goal_name="existing goal")],
         )
 
         self.assertEqual(response.status_code, 409)

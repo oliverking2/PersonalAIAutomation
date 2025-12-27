@@ -95,50 +95,54 @@ def get_goal(
 
 @router.post(
     "",
-    response_model=GoalResponse,
+    response_model=list[GoalResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Create goal",
+    summary="Create goals",
 )
-def create_goal(
-    request: GoalCreateRequest,
+def create_goals(
+    requests: list[GoalCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_goals_data_source_id),
-) -> GoalResponse:
-    """Create a new goal in the goals tracker."""
-    logger.debug("Creating goal")
+) -> list[GoalResponse]:
+    """Create one or more goals in the goals tracker."""
+    logger.debug(f"Creating {len(requests)} goals")
+    results: list[GoalResponse] = []
 
-    check_duplicate_name(
-        client=client,
-        data_source_id=data_source_id,
-        name_property="Goal name",
-        complete_status="Done",
-        new_name=request.goal_name,
-    )
-
-    try:
-        properties = build_goal_properties(
-            goal_name=request.goal_name,
-            status=request.status,
-            priority=request.priority,
-            category=request.category,
-            progress=request.progress,
-            due_date=request.due_date,
-        )
-        data = client.create_page(
+    for request in requests:
+        check_duplicate_name(
+            client=client,
             data_source_id=data_source_id,
-            properties=properties,
+            name_property="Goal name",
+            complete_status="Done",
+            new_name=request.goal_name,
         )
-        goal = parse_page_to_goal(data)
 
-        # Append content if provided
-        if request.content:
-            blocks = markdown_to_blocks(request.content)
-            client.append_page_content(goal.id, blocks)
+        try:
+            properties = build_goal_properties(
+                goal_name=request.goal_name,
+                status=request.status,
+                priority=request.priority,
+                category=request.category,
+                progress=request.progress,
+                due_date=request.due_date,
+            )
+            data = client.create_page(
+                data_source_id=data_source_id,
+                properties=properties,
+            )
+            goal = parse_page_to_goal(data)
 
-        return _goal_to_response(goal, content=request.content)
-    except NotionClientError as e:
-        logger.exception(f"Failed to create goal: {e}")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            # Append content if provided
+            if request.content:
+                blocks = markdown_to_blocks(request.content)
+                client.append_page_content(goal.id, blocks)
+
+            results.append(_goal_to_response(goal, content=request.content))
+        except NotionClientError as e:
+            logger.exception(f"Failed to create goal: {e}")
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+
+    return results
 
 
 @router.patch(
@@ -262,6 +266,5 @@ def _goal_to_response(goal: NotionGoal, content: str | None = None) -> GoalRespo
         category=goal.category,
         progress=goal.progress,
         due_date=goal.due_date,
-        notion_url=goal.notion_url,
         content=content,
     )

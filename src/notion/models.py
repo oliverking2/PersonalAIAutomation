@@ -19,8 +19,6 @@ class NotionTask(BaseModel):
     priority: str | None = Field(None, description="Task priority level")
     effort_level: str | None = Field(None, description="Task effort level")
     task_group: str | None = Field(None, description="Work or Personal category")
-    assignee: str | None = Field(None, description="Assigned user name")
-    notion_url: str = Field(..., description="Notion page URL")
 
 
 class TaskFilter(BaseModel):
@@ -68,7 +66,6 @@ class NotionGoal(BaseModel):
     category: str | None = Field(None, description="Goal category")
     progress: float | None = Field(None, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
-    notion_url: str = Field(..., description="Notion page URL")
 
 
 class NotionReadingItem(BaseModel):
@@ -85,7 +82,6 @@ class NotionReadingItem(BaseModel):
     priority: str | None = Field(None, description="Reading priority level")
     category: str | None = Field(None, description="Reading category")
     item_url: str | None = Field(None, description="URL of the article/book")
-    notion_url: str = Field(..., description="Notion page URL")
 
 
 class NotionIdea(BaseModel):
@@ -99,4 +95,3 @@ class NotionIdea(BaseModel):
     idea: str = Field(..., min_length=1, description="Idea title")
     status: str | None = Field(None, description="Idea status")
     idea_group: str | None = Field(None, description="Idea group (Work/Personal)")
-    notion_url: str = Field(..., description="Notion page URL")

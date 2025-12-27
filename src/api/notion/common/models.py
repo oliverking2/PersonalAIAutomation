@@ -13,7 +13,6 @@ class PageResponse(BaseModel):
     status: str | None = Field(None, description="Task status")
     due_date: date | None = Field(None, description="Task due date")
     priority: str | None = Field(None, description="Task priority")
-    notion_url: str = Field(..., description="Notion page URL")
 
 
 class QueryResponse(BaseModel):

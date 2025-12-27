@@ -18,7 +18,6 @@ class ReadingItemResponse(BaseModel):
     priority: str | None = Field(None, description="Reading priority")
     category: str | None = Field(None, description="Reading category")
     item_url: str | None = Field(None, description="URL of the article/book")
-    notion_url: str = Field(..., description="Notion page URL")
     content: str | None = Field(None, description="Page content in markdown format")
 
 

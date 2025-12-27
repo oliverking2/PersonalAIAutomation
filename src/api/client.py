@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 import requests
 from requests.exceptions import RequestException
@@ -71,13 +71,16 @@ class InternalAPIClient:
         :returns: JSON response data.
         :raises InternalAPIClientError: If the request fails.
         """
-        return self._request("GET", path, params=params)
+        result = self._request("GET", path, params=params)
+        return cast(dict[str, Any], result)
 
-    def post(self, path: str, json: dict[str, Any] | None = None) -> dict[str, Any]:
+    def post(
+        self, path: str, json: dict[str, Any] | list[dict[str, Any]] | None = None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Make a POST request to the API.
 
         :param path: API endpoint path.
-        :param json: JSON request body.
+        :param json: JSON request body (dict or list of dicts).
         :returns: JSON response data.
         :raises InternalAPIClientError: If the request fails.
         """
@@ -91,21 +94,22 @@ class InternalAPIClient:
         :returns: JSON response data.
         :raises InternalAPIClientError: If the request fails.
         """
-        return self._request("PATCH", path, json=json)
+        result = self._request("PATCH", path, json=json)
+        return cast(dict[str, Any], result)
 
     def _request(
         self,
         method: str,
         path: str,
         params: dict[str, Any] | None = None,
-        json: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        json: dict[str, Any] | list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Make an HTTP request to the API.
 
         :param method: HTTP method.
         :param path: API endpoint path.
         :param params: Query parameters.
-        :param json: JSON request body.
+        :param json: JSON request body (dict or list of dicts).
         :returns: JSON response data.
         :raises InternalAPIClientError: If the request fails.
         """
@@ -124,7 +128,8 @@ class InternalAPIClient:
                 )
                 raise InternalAPIClientError(error_detail, status_code=response.status_code)
 
-            return dict(response.json())
+            result = response.json()
+            return list(result) if isinstance(result, list) else dict(result)
 
         except RequestException as e:
             logger.exception(f"API request error: {method} {path}")

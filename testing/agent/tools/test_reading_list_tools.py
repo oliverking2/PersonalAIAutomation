@@ -186,7 +186,7 @@ class TestReadingListToolHandlers(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-page", "title": "New Article"}
+        mock_client.post.return_value = [{"id": "new-page", "title": "New Article"}]
 
         tool = self.tool_dict["create_reading_item"]
         args = ReadingItemCreateRequest(title="New Article", item_type=ReadingType.ARTICLE)

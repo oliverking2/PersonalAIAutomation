@@ -171,22 +171,25 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json=build_reading_create_payload(
-                title="New Article",
-                status=DEFAULT_READING_STATUS,
-                priority=DEFAULT_PRIORITY,
-                category=DEFAULT_READING_CATEGORY,
-                item_url="https://example.com/article",
-            ),
+            json=[
+                build_reading_create_payload(
+                    title="New Article",
+                    status=DEFAULT_READING_STATUS,
+                    priority=DEFAULT_PRIORITY,
+                    category=DEFAULT_READING_CATEGORY,
+                    item_url="https://example.com/article",
+                )
+            ],
         )
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(data["id"], "reading-new")
-        self.assertEqual(data["title"], "New Article")
-        self.assertEqual(data["item_type"], DEFAULT_READING_TYPE)
-        self.assertEqual(data["priority"], DEFAULT_PRIORITY)
-        self.assertEqual(data["category"], DEFAULT_READING_CATEGORY)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], "reading-new")
+        self.assertEqual(data[0]["title"], "New Article")
+        self.assertEqual(data[0]["item_type"], DEFAULT_READING_TYPE)
+        self.assertEqual(data[0]["priority"], DEFAULT_PRIORITY)
+        self.assertEqual(data[0]["category"], DEFAULT_READING_CATEGORY)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_reading_item_minimal(self, mock_client_class: MagicMock) -> None:
@@ -209,7 +212,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json=build_reading_create_payload(title="Minimal"),
+            json=[build_reading_create_payload(title="Minimal")],
         )
 
         self.assertEqual(response.status_code, 201)
@@ -219,7 +222,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"item_type": DEFAULT_READING_TYPE},
+            json=[{"item_type": DEFAULT_READING_TYPE}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -232,7 +235,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"title": "Article"},
+            json=[{"title": "Article"}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -245,7 +248,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={"title": "Article", "item_type": DEFAULT_READING_TYPE, "status": "Invalid"},
+            json=[{"title": "Article", "item_type": DEFAULT_READING_TYPE, "status": "Invalid"}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -258,11 +261,13 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json={
-                "title": "Article",
-                "item_type": DEFAULT_READING_TYPE,
-                "category": "Invalid Category",
-            },
+            json=[
+                {
+                    "title": "Article",
+                    "item_type": DEFAULT_READING_TYPE,
+                    "category": "Invalid Category",
+                }
+            ],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -289,7 +294,7 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/reading-list",
             headers=self.auth_headers,
-            json=build_reading_create_payload(title="existing article"),
+            json=[build_reading_create_payload(title="existing article")],
         )
 
         self.assertEqual(response.status_code, 409)

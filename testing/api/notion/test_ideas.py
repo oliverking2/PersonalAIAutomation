@@ -166,18 +166,21 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json=build_idea_create_payload(
-                idea="New mobile app idea",
-                idea_group=DEFAULT_IDEA_GROUP,
-            ),
+            json=[
+                build_idea_create_payload(
+                    idea="New mobile app idea",
+                    idea_group=DEFAULT_IDEA_GROUP,
+                )
+            ],
         )
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(data["id"], "idea-new")
-        self.assertEqual(data["idea"], "New mobile app idea")
-        self.assertEqual(data["status"], DEFAULT_IDEA_STATUS)
-        self.assertEqual(data["idea_group"], DEFAULT_IDEA_GROUP)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], "idea-new")
+        self.assertEqual(data[0]["idea"], "New mobile app idea")
+        self.assertEqual(data[0]["status"], DEFAULT_IDEA_STATUS)
+        self.assertEqual(data[0]["idea_group"], DEFAULT_IDEA_GROUP)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_idea_minimal(self, mock_client_class: MagicMock) -> None:
@@ -198,7 +201,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json=build_idea_create_payload(idea="Minimal idea"),
+            json=[build_idea_create_payload(idea="Minimal idea")],
         )
 
         self.assertEqual(response.status_code, 201)
@@ -208,7 +211,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json={"idea_group": DEFAULT_IDEA_GROUP},
+            json=[{"idea_group": DEFAULT_IDEA_GROUP}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -221,7 +224,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json={"idea": "Test Idea", "idea_group": "Invalid"},
+            json=[{"idea": "Test Idea", "idea_group": "Invalid"}],
         )
 
         self.assertEqual(response.status_code, 422)
@@ -246,7 +249,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json=build_idea_create_payload(idea="existing idea"),
+            json=[build_idea_create_payload(idea="existing idea")],
         )
 
         self.assertEqual(response.status_code, 409)

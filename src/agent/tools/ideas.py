@@ -29,6 +29,7 @@ IDEAS_TOOL_CONFIG = CRUDToolConfig(
     domain_plural="ideas",
     endpoint_prefix="/notion/ideas",
     id_field="idea_id",
+    name_field="idea",
     query_model=IdeaQueryRequest,
     create_model=AgentIdeaCreateArgs,
     update_model=AgentIdeaUpdateArgs,

@@ -95,50 +95,54 @@ def get_reading_item(
 
 @router.post(
     "",
-    response_model=ReadingItemResponse,
+    response_model=list[ReadingItemResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Create reading item",
+    summary="Create reading items",
 )
-def create_reading_item(
-    request: ReadingItemCreateRequest,
+def create_reading_items(
+    requests: list[ReadingItemCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_reading_data_source_id),
-) -> ReadingItemResponse:
-    """Create a new item in the reading list."""
-    logger.debug("Creating reading item")
+) -> list[ReadingItemResponse]:
+    """Create one or more items in the reading list."""
+    logger.debug(f"Creating {len(requests)} reading items")
+    results: list[ReadingItemResponse] = []
 
-    check_duplicate_name(
-        client=client,
-        data_source_id=data_source_id,
-        name_property="Title",
-        complete_status="Completed",
-        new_name=request.title,
-    )
-
-    try:
-        properties = build_reading_properties(
-            title=request.title,
-            item_type=request.item_type,
-            status=request.status,
-            priority=request.priority,
-            category=request.category,
-            item_url=request.item_url,
-        )
-        data = client.create_page(
+    for request in requests:
+        check_duplicate_name(
+            client=client,
             data_source_id=data_source_id,
-            properties=properties,
+            name_property="Title",
+            complete_status="Completed",
+            new_name=request.title,
         )
-        item = parse_page_to_reading_item(data)
 
-        # Append content if provided
-        if request.content:
-            blocks = markdown_to_blocks(request.content)
-            client.append_page_content(item.id, blocks)
+        try:
+            properties = build_reading_properties(
+                title=request.title,
+                item_type=request.item_type,
+                status=request.status,
+                priority=request.priority,
+                category=request.category,
+                item_url=request.item_url,
+            )
+            data = client.create_page(
+                data_source_id=data_source_id,
+                properties=properties,
+            )
+            item = parse_page_to_reading_item(data)
 
-        return _reading_to_response(item, content=request.content)
-    except NotionClientError as e:
-        logger.exception(f"Failed to create reading item: {e}")
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            # Append content if provided
+            if request.content:
+                blocks = markdown_to_blocks(request.content)
+                client.append_page_content(item.id, blocks)
+
+            results.append(_reading_to_response(item, content=request.content))
+        except NotionClientError as e:
+            logger.exception(f"Failed to create reading item: {e}")
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+
+    return results
 
 
 @router.patch(
@@ -273,6 +277,5 @@ def _reading_to_response(
         priority=item.priority,
         category=item.category,
         item_url=item.item_url,
-        notion_url=item.notion_url,
         content=content,
     )

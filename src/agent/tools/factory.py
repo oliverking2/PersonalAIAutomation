@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, create_model
 
@@ -25,6 +25,14 @@ ContentBuilder = Callable[[BaseModel], str]
 logger = logging.getLogger(__name__)
 
 
+# Fields to include in LLM responses for each operation type
+# Only these fields are returned to reduce context size
+DEFAULT_QUERY_FIELDS: frozenset[str] = frozenset({"id", "status", "priority", "due_date"})
+DEFAULT_CREATE_FIELDS: frozenset[str] = frozenset({"id", "status"})
+DEFAULT_UPDATE_FIELDS: frozenset[str] = frozenset({"id", "status"})
+DEFAULT_GET_FIELDS: frozenset[str] = frozenset()  # Empty = return all fields
+
+
 @dataclass(frozen=True)
 class CRUDToolConfig:
     """Configuration for generating CRUD tools for a domain.
@@ -33,6 +41,7 @@ class CRUDToolConfig:
     :param domain_plural: Plural domain name (e.g., 'tasks', 'goals').
     :param endpoint_prefix: API endpoint prefix (e.g., '/notion/tasks').
     :param id_field: Name of the ID field for get/update (e.g., 'task_id').
+    :param name_field: Name field to always include in responses (e.g., 'task_name').
     :param query_model: Pydantic model for query arguments.
     :param create_model: Pydantic model for create arguments.
     :param update_model: Pydantic model for update arguments (without ID).
@@ -43,12 +52,16 @@ class CRUDToolConfig:
     :param create_description: Custom create tool description (optional).
     :param update_description: Custom update tool description (optional).
     :param content_builder: Function to build content from agent args (optional).
+    :param query_fields: Fields to include in query responses (plus name_field).
+    :param create_fields: Fields to include in create responses (plus name_field).
+    :param update_fields: Fields to include in update responses (plus name_field).
     """
 
     domain: str
     domain_plural: str
     endpoint_prefix: str
     id_field: str
+    name_field: str
     query_model: type[BaseModel]
     create_model: type[BaseModel]
     update_model: type[BaseModel] | None = None
@@ -59,6 +72,9 @@ class CRUDToolConfig:
     create_description: str | None = None
     update_description: str | None = None
     content_builder: ContentBuilder | None = None
+    query_fields: frozenset[str] = DEFAULT_QUERY_FIELDS
+    create_fields: frozenset[str] = DEFAULT_CREATE_FIELDS
+    update_fields: frozenset[str] = DEFAULT_UPDATE_FIELDS
 
 
 def _get_client() -> InternalAPIClient:
@@ -67,6 +83,27 @@ def _get_client() -> InternalAPIClient:
     :returns: Configured API client.
     """
     return InternalAPIClient()
+
+
+def _filter_response_fields(
+    item: dict[str, Any],
+    fields: frozenset[str],
+    name_field: str,
+) -> dict[str, Any]:
+    """Filter response to only include specified fields.
+
+    Always includes the name field for LLM context.
+
+    :param item: Full response item from API.
+    :param fields: Set of field names to include.
+    :param name_field: Name field to always include.
+    :returns: Filtered item with only specified fields.
+    """
+    if not fields:
+        return item  # Empty set = return all fields
+
+    include_fields = fields | {name_field}
+    return {k: v for k, v in item.items() if k in include_fields}
 
 
 def _format_enum_hints(enum_fields: dict[str, type[StrEnum]]) -> str:
@@ -130,13 +167,20 @@ def _create_query_tool(config: CRUDToolConfig) -> ToolDef:
         logger.debug(f"Querying {config.domain_plural}")
 
         with _get_client() as client:
-            response = client.post(
-                f"{config.endpoint_prefix}/query",
-                json=args.model_dump(mode="json", exclude_none=True),
+            response = cast(
+                dict[str, Any],
+                client.post(
+                    f"{config.endpoint_prefix}/query",
+                    json=args.model_dump(mode="json", exclude_none=True),
+                ),
             )
 
         items = response.get("results", [])
-        return {"items": items, "count": len(items)}
+        # Filter response fields for LLM context efficiency
+        filtered_items = [
+            _filter_response_fields(item, config.query_fields, config.name_field) for item in items
+        ]
+        return {"items": filtered_items, "count": len(filtered_items)}
 
     enum_hints = _format_enum_hints(config.enum_fields)
     description = config.query_description or (
@@ -207,10 +251,16 @@ def _create_create_tool(config: CRUDToolConfig) -> ToolDef:
             payload.pop("description", None)
             payload.pop("notes", None)
 
+        # API expects a list, so wrap single item
         with _get_client() as client:
-            response = client.post(config.endpoint_prefix, json=payload)
+            response = client.post(config.endpoint_prefix, json=[payload])
 
-        return {"item": response, "created": True}
+        # Response is a list, extract first item and filter fields
+        items = response if isinstance(response, list) else [response]
+        filtered_items = [
+            _filter_response_fields(item, config.create_fields, config.name_field) for item in items
+        ]
+        return {"item": filtered_items[0], "created": True}
 
     enum_hints = _format_enum_hints(config.enum_fields)
     description = config.create_description or f"Create a new {config.domain}. {enum_hints}"
@@ -256,7 +306,9 @@ def _create_update_tool(config: CRUDToolConfig) -> ToolDef:
         with _get_client() as client:
             response = client.patch(f"{config.endpoint_prefix}/{item_id}", json=payload)
 
-        return {"item": response, "updated": True}
+        # Filter response fields for LLM context efficiency
+        filtered_item = _filter_response_fields(response, config.update_fields, config.name_field)
+        return {"item": filtered_item, "updated": True}
 
     enum_hints = _format_enum_hints(config.enum_fields)
     description = config.update_description or (

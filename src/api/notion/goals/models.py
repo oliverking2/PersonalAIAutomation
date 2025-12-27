@@ -18,7 +18,6 @@ class GoalResponse(BaseModel):
     category: str | None = Field(None, description="Goal category")
     progress: float | None = Field(None, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
-    notion_url: str = Field(..., description="Notion page URL")
     content: str | None = Field(None, description="Page content in markdown format")
 
 

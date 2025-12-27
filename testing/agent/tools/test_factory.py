@@ -97,6 +97,7 @@ class TestCRUDToolConfig(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
@@ -106,6 +107,7 @@ class TestCRUDToolConfig(unittest.TestCase):
         self.assertEqual(config.domain_plural, "widgets")
         self.assertEqual(config.endpoint_prefix, "/api/widgets")
         self.assertEqual(config.id_field, "widget_id")
+        self.assertEqual(config.name_field, "name")
         self.assertEqual(config.enum_fields, {})
         self.assertEqual(config.tags, frozenset())
 
@@ -116,6 +118,7 @@ class TestCRUDToolConfig(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
@@ -139,6 +142,7 @@ class TestCreateCrudTools(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
@@ -207,6 +211,7 @@ class TestQueryToolGeneration(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
@@ -227,6 +232,7 @@ class TestQueryToolGeneration(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
@@ -264,6 +270,7 @@ class TestGetToolGeneration(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
@@ -303,6 +310,7 @@ class TestCreateToolGeneration(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
@@ -323,7 +331,7 @@ class TestCreateToolGeneration(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = {"id": "new-widget", "name": "New Widget"}
+        mock_client.post.return_value = [{"id": "new-widget", "name": "New Widget"}]
 
         tool = _create_create_tool(self.config)
         args = MockCreateRequest(name="New Widget")
@@ -332,9 +340,10 @@ class TestCreateToolGeneration(unittest.TestCase):
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/api/widgets")
-        self.assertEqual(
-            result, {"item": {"id": "new-widget", "name": "New Widget"}, "created": True}
-        )
+        # Response is filtered, only id, status, and name_field are included
+        self.assertEqual(result["item"]["id"], "new-widget")
+        self.assertEqual(result["item"]["name"], "New Widget")
+        self.assertTrue(result["created"])
 
 
 class TestUpdateToolGeneration(unittest.TestCase):
@@ -347,6 +356,7 @@ class TestUpdateToolGeneration(unittest.TestCase):
             domain_plural="widgets",
             endpoint_prefix="/api/widgets",
             id_field="widget_id",
+            name_field="name",
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,

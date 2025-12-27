@@ -2,6 +2,7 @@
 
 import logging
 from datetime import date, timedelta
+from typing import Any, cast
 
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
@@ -39,9 +40,12 @@ class TaskAlertProvider:
         items: list[AlertItem] = []
 
         # Get overdue tasks (due before today, not done)
-        overdue_response = self._client.post(
-            "/notion/tasks/query",
-            json={"due_before": today.isoformat(), "include_done": False},
+        overdue_response = cast(
+            dict[str, Any],
+            self._client.post(
+                "/notion/tasks/query",
+                json={"due_before": today.isoformat(), "include_done": False},
+            ),
         )
         overdue_tasks = overdue_response.get("results", [])
         for task in overdue_tasks:
@@ -50,43 +54,49 @@ class TaskAlertProvider:
             items.append(
                 AlertItem(
                     name=task.get("task_name", "Untitled"),
-                    url=task.get("notion_url"),
+                    url=None,
                     metadata={"section": "overdue", "days_overdue": str(days_overdue)},
                 )
             )
 
         # Get tasks due today
-        today_response = self._client.post(
-            "/notion/tasks/query",
-            json={"due_date": today.isoformat(), "include_done": False},
+        today_response = cast(
+            dict[str, Any],
+            self._client.post(
+                "/notion/tasks/query",
+                json={"due_date": today.isoformat(), "include_done": False},
+            ),
         )
         today_tasks = today_response.get("results", [])
         for task in today_tasks:
             items.append(
                 AlertItem(
                     name=task.get("task_name", "Untitled"),
-                    url=task.get("notion_url"),
+                    url=None,
                     metadata={"section": "due_today"},
                 )
             )
 
         # Get high priority tasks due this week
         week_end = today + timedelta(days=7)
-        high_priority_response = self._client.post(
-            "/notion/tasks/query",
-            json={
-                "due_after": today.isoformat(),
-                "due_before": week_end.isoformat(),
-                "priority": "High",
-                "include_done": False,
-            },
+        high_priority_response = cast(
+            dict[str, Any],
+            self._client.post(
+                "/notion/tasks/query",
+                json={
+                    "due_after": today.isoformat(),
+                    "due_before": week_end.isoformat(),
+                    "priority": "High",
+                    "include_done": False,
+                },
+            ),
         )
         high_priority_tasks = high_priority_response.get("results", [])
         for task in high_priority_tasks:
             items.append(
                 AlertItem(
                     name=task.get("task_name", "Untitled"),
-                    url=task.get("notion_url"),
+                    url=None,
                     metadata={
                         "section": "high_priority_week",
                         "due_date": task.get("due_date", ""),

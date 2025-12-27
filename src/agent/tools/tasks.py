@@ -32,6 +32,7 @@ TASK_TOOL_CONFIG = CRUDToolConfig(
     domain_plural="tasks",
     endpoint_prefix="/notion/tasks",
     id_field="task_id",
+    name_field="task_name",
     query_model=TaskQueryRequest,
     create_model=AgentTaskCreateArgs,
     update_model=AgentTaskUpdateArgs,
@@ -55,7 +56,7 @@ TASK_TOOL_CONFIG = CRUDToolConfig(
     get_description=(
         "Get details of a specific task by its ID. "
         "Returns task name, status, due date, priority, effort level, task group, "
-        "notion_url (link to Notion page), and page content (in markdown format)."
+        "and page content (in markdown format)."
     ),
     create_description=(
         f"Create a new task. Required: task_name, task_group ({_group_options}), due_date. "

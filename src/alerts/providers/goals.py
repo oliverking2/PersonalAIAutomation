@@ -2,6 +2,7 @@
 
 import logging
 from datetime import date
+from typing import Any, cast
 
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
@@ -37,9 +38,12 @@ class GoalAlertProvider:
         source_id = today.strftime("%Y-%m")
 
         # Get all non-done goals
-        response = self._client.post(
-            "/notion/goals/query",
-            json={"include_done": False, "limit": 100},
+        response = cast(
+            dict[str, Any],
+            self._client.post(
+                "/notion/goals/query",
+                json={"include_done": False, "limit": 100},
+            ),
         )
         goals = response.get("results", [])
 
@@ -56,7 +60,7 @@ class GoalAlertProvider:
             items.append(
                 AlertItem(
                     name=goal.get("goal_name", "Untitled"),
-                    url=goal.get("notion_url"),
+                    url=None,
                     metadata={
                         "progress": str(int(progress)),
                         "status": status,
