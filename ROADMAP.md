@@ -22,9 +22,6 @@
 - Standardise JSON validation when getting data from AI
 
 ## Telegram Agent
-- Multiple messages needing to be processed at once
-- Add in AI for 2-way chat
-- Add Notion tasks/goals/reading lists via the Telegram chat
 
 ## Other
 - Host application
@@ -46,15 +43,6 @@
 | Idea              | Description                                                                 | Complexity |
 |-------------------|-----------------------------------------------------------------------------|------------|
 | Recurring Tasks   | Template-based recurring task creation (weekly reviews, monthly goals)      | Low        |
-| Quick Capture     | Telegram command to quickly add thoughts/ideas to a dedicated Notion inbox  | Low        |
-
-🟣 AI Enhancements
-
-| Idea                  | Description                                                                      | Complexity |
-|-----------------------|----------------------------------------------------------------------------------|------------|
-| Conversation Memory   | Long-term memory across sessions (embeddings + vector search)                    | High       |
-| Multi-Model Routing   | Use Haiku for simple tasks, Sonnet for complex reasoning, Opus for planning      | Medium     |
-| Context Injection     | Automatically include relevant context (recent tasks, goals) in agent prompts    | Medium     |
 
 ⚪ Infrastructure & Ops
 
