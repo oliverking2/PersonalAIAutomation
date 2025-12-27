@@ -47,10 +47,10 @@ class CRUDToolConfig:
     :param update_model: Pydantic model for update arguments (without ID).
     :param enum_fields: Mapping of field names to enum types for descriptions.
     :param tags: Tags to apply to all tools in this domain.
-    :param query_description: Custom query tool description (optional).
-    :param get_description: Custom get tool description (optional).
-    :param create_description: Custom create tool description (optional).
-    :param update_description: Custom update tool description (optional).
+    :param query_description: Description for the query tool.
+    :param get_description: Description for the get tool.
+    :param create_description: Description for the create tool.
+    :param update_description: Description for the update tool.
     :param content_builder: Function to build content from agent args (optional).
     :param query_fields: Fields to include in query responses (plus name_field).
     :param create_fields: Fields to include in create responses (plus name_field).
@@ -64,13 +64,13 @@ class CRUDToolConfig:
     name_field: str
     query_model: type[BaseModel]
     create_model: type[BaseModel]
-    update_model: type[BaseModel] | None = None
+    update_model: type[BaseModel]
+    query_description: str
+    get_description: str
+    create_description: str
+    update_description: str
     enum_fields: dict[str, type[StrEnum]] = field(default_factory=dict)
     tags: frozenset[str] = field(default_factory=frozenset)
-    query_description: str | None = None
-    get_description: str | None = None
-    create_description: str | None = None
-    update_description: str | None = None
     content_builder: ContentBuilder | None = None
     query_fields: frozenset[str] = DEFAULT_QUERY_FIELDS
     create_fields: frozenset[str] = DEFAULT_CREATE_FIELDS
@@ -182,17 +182,9 @@ def _create_query_tool(config: CRUDToolConfig) -> ToolDef:
         ]
         return {"items": filtered_items, "count": len(filtered_items)}
 
-    enum_hints = _format_enum_hints(config.enum_fields)
-    description = config.query_description or (
-        f"Query {config.domain_plural} from the tracker. "
-        f"Use name_filter for fuzzy search by {config.domain} name. "
-        f"Response includes fuzzy_match_quality ('good' or 'weak') - "
-        f"ask for clarification if 'weak'. {enum_hints}"
-    )
-
     return ToolDef(
         name=f"query_{config.domain_plural}",
-        description=description.strip(),
+        description=config.query_description,
         tags=config.tags | {"query", "list"},
         risk_level=RiskLevel.SAFE,
         args_model=config.query_model,
@@ -217,13 +209,9 @@ def _create_get_tool(config: CRUDToolConfig) -> ToolDef:
 
         return {"item": response}
 
-    description = config.get_description or (
-        f"Get details of a specific {config.domain} by its ID."
-    )
-
     return ToolDef(
         name=f"get_{config.domain}",
-        description=description,
+        description=config.get_description,
         tags=config.tags | {"get", "item"},
         risk_level=RiskLevel.SAFE,
         args_model=get_args_model,
@@ -308,15 +296,9 @@ def _create_create_tool(config: CRUDToolConfig) -> ToolDef:
 
         return result
 
-    enum_hints = _format_enum_hints(config.enum_fields)
-    description = config.create_description or (
-        f"Create one or more {config.domain_plural}. "
-        f"Pass a list of items to create multiple at once. {enum_hints}"
-    )
-
     return ToolDef(
         name=f"create_{config.domain_plural}",
-        description=description.strip(),
+        description=config.create_description,
         tags=config.tags | {"create", "item"},
         risk_level=RiskLevel.SAFE,
         args_model=bulk_args_model,
@@ -359,14 +341,9 @@ def _create_update_tool(config: CRUDToolConfig) -> ToolDef:
         filtered_item = _filter_response_fields(response, config.update_fields, config.name_field)
         return {"item": filtered_item, "updated": True}
 
-    enum_hints = _format_enum_hints(config.enum_fields)
-    description = config.update_description or (
-        f"Update an existing {config.domain}. Requires the {config.id_field}. {enum_hints}"
-    )
-
     return ToolDef(
         name=f"update_{config.domain}",
-        description=description.strip(),
+        description=config.update_description,
         tags=config.tags | {"update", "item"},
         risk_level=RiskLevel.SENSITIVE,
         args_model=update_args_model,

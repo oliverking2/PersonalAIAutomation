@@ -101,6 +101,10 @@ class TestCRUDToolConfig(unittest.TestCase):
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
+            query_description="Query widgets.",
+            get_description="Get a widget.",
+            create_description="Create widgets.",
+            update_description="Update a widget.",
         )
 
         self.assertEqual(config.domain, "widget")
@@ -122,9 +126,12 @@ class TestCRUDToolConfig(unittest.TestCase):
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
+            query_description="Custom query description",
+            get_description="Get a widget.",
+            create_description="Create widgets.",
+            update_description="Update a widget.",
             enum_fields={"status": MockStatus},
             tags=frozenset({"widgets", "test"}),
-            query_description="Custom query description",
         )
 
         self.assertEqual(config.enum_fields, {"status": MockStatus})
@@ -146,6 +153,10 @@ class TestCreateCrudTools(unittest.TestCase):
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
+            query_description="Query widgets.",
+            get_description="Get a widget.",
+            create_description="Create widgets.",
+            update_description="Update a widget.",
             enum_fields={"status": MockStatus},
             tags=frozenset({"widgets"}),
         )
@@ -215,32 +226,18 @@ class TestQueryToolGeneration(unittest.TestCase):
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
+            query_description="Query widgets with fuzzy search.",
+            get_description="Get a widget by ID.",
+            create_description="Create widgets.",
+            update_description="Update a widget.",
             enum_fields={"status": MockStatus},
         )
 
-    def test_query_tool_description_default(self) -> None:
-        """Test query tool has default description."""
+    def test_query_tool_uses_provided_description(self) -> None:
+        """Test query tool uses the provided description."""
         tool = _create_query_tool(self.config)
 
-        self.assertIn("widgets", tool.description)
-        self.assertIn("fuzzy search", tool.description)
-
-    def test_query_tool_description_custom(self) -> None:
-        """Test query tool uses custom description when provided."""
-        config = CRUDToolConfig(
-            domain="widget",
-            domain_plural="widgets",
-            endpoint_prefix="/api/widgets",
-            id_field="widget_id",
-            name_field="name",
-            query_model=MockQueryRequest,
-            create_model=MockCreateRequest,
-            update_model=MockUpdateRequest,
-            query_description="Custom query description",
-        )
-        tool = _create_query_tool(config)
-
-        self.assertEqual(tool.description, "Custom query description")
+        self.assertEqual(tool.description, "Query widgets with fuzzy search.")
 
     @patch("src.agent.tools.factory._get_client")
     def test_query_tool_handler(self, mock_get_client: MagicMock) -> None:
@@ -274,14 +271,17 @@ class TestGetToolGeneration(unittest.TestCase):
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
+            query_description="Query widgets.",
+            get_description="Get a widget by ID.",
+            create_description="Create widgets.",
+            update_description="Update a widget.",
         )
 
-    def test_get_tool_description_default(self) -> None:
-        """Test get tool has default description."""
+    def test_get_tool_uses_provided_description(self) -> None:
+        """Test get tool uses the provided description."""
         tool = _create_get_tool(self.config)
 
-        self.assertIn("widget", tool.description)
-        self.assertIn("ID", tool.description)
+        self.assertEqual(tool.description, "Get a widget by ID.")
 
     @patch("src.agent.tools.factory._get_client")
     def test_get_tool_handler(self, mock_get_client: MagicMock) -> None:
@@ -314,16 +314,18 @@ class TestCreateToolGeneration(unittest.TestCase):
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
+            query_description="Query widgets.",
+            get_description="Get a widget.",
+            create_description="Create widgets.",
+            update_description="Update a widget.",
             enum_fields={"status": MockStatus},
         )
 
-    def test_create_tool_description_includes_enum_hints(self) -> None:
-        """Test create tool description includes enum hints."""
+    def test_create_tool_uses_provided_description(self) -> None:
+        """Test create tool uses the provided description."""
         tool = _create_create_tool(self.config)
 
-        self.assertIn("widget", tool.description)
-        # Should include enum hints
-        self.assertIn("status", tool.description)
+        self.assertEqual(tool.description, "Create widgets.")
 
     @patch("src.agent.tools.factory._get_client")
     def test_create_tool_handler(self, mock_get_client: MagicMock) -> None:
@@ -427,6 +429,10 @@ class TestUpdateToolGeneration(unittest.TestCase):
             query_model=MockQueryRequest,
             create_model=MockCreateRequest,
             update_model=MockUpdateRequest,
+            query_description="Query widgets.",
+            get_description="Get a widget.",
+            create_description="Create widgets.",
+            update_description="Update a widget.",
         )
 
     def test_update_tool_is_sensitive(self) -> None:
