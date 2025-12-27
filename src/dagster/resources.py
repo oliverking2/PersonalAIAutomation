@@ -3,7 +3,7 @@
 from pydantic import Field
 
 from dagster import ConfigurableResource
-from src.telegram import TelegramClient
+from src.telegram import SendMessageResult, TelegramClient
 
 
 class TelegramResource(ConfigurableResource[TelegramClient]):
@@ -19,6 +19,6 @@ class TelegramResource(ConfigurableResource[TelegramClient]):
             chat_id=self.chat_id,
         )
 
-    def send_message(self, text: str) -> bool:
+    def send_message(self, text: str) -> SendMessageResult:
         """Send a text message to the configured chat."""
         return self.get_client().send_message(text)

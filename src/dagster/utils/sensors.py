@@ -9,7 +9,7 @@ from dagster import (
     run_failure_sensor,
 )
 from src.telegram import TelegramClient
-from src.telegram.utils import _escape_md
+from src.telegram.utils.misc import _escape_md
 
 
 @run_failure_sensor(

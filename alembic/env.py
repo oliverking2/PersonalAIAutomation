@@ -11,6 +11,7 @@ from src.database.core import Base
 from src.database.agent_tracking.models import *  # noqa: F403
 from src.database.extraction_state.models import *  # noqa: F403
 from src.database.newsletters.models import *  # noqa: F403
+from src.database.telegram.models import *  # noqa: F403
 
 # Load environment variables
 load_dotenv()

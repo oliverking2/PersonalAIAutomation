@@ -23,7 +23,7 @@ This section provides a high-level overview of how the system works, intended as
 │                              INGRESS LAYER                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  Telegram Bot          │  FastAPI REST API       │  Dagster Schedules       │
-│  (future: 2-way chat)  │  (HTTP endpoints)       │  (cron-based triggers)   │
+│  (2-way chat, alerts)  │  (HTTP endpoints)       │  (cron-based triggers)   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -77,10 +77,11 @@ HTTP Request → FastAPI → Domain Client (Notion/etc) → External API
     → Response transformation → HTTP Response
 ```
 
-**3. Agent Request (Future: Telegram Chat)**
+**3. Agent Request (Telegram Chat)**
 ```
-User Message → ToolSelector (pick tools) → AgentRunner (reasoning loop)
-    → Tool Execution → Domain Client → External API
+User Message → PollingRunner → MessageHandler → SessionManager
+    → AgentRunner (ToolSelector + reasoning loop)
+    → Tool Execution → API → Domain Client → External API
     → AgentRunner (continue/finish) → Response to User
 ```
 
@@ -142,7 +143,7 @@ Existing PRDs are in `.claude/prds/` and follow a consistent structure with over
 1. Integration tests - currently all tests use mocking
 2. Structured logging - JSON format for production observability
 3. Centralised config validation - consider Pydantic Settings
-4. Two-way Telegram integration - currently one-way alerts only
+4. Telegram webhook mode - currently polling only (see `.claude/prds/` for Phase 2B)
 
 ## Setup
 
@@ -178,9 +179,13 @@ For Docker (used by init script to create databases/users):
 - `GLITCHTIP_DB_PASSWORD`: Password for `glitchtip` user (error tracking)
 
 #### Telegram
-Send newsletter alerts via Telegram bot:
+Send newsletter alerts and enable two-way chat via Telegram bot:
 - `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
-- `TELEGRAM_CHAT_ID`: Target chat ID for messages
+- `TELEGRAM_CHAT_ID`: Target chat ID for messages (used by newsletter alerts)
+- `TELEGRAM_MODE`: Transport mode - `polling` (default) or `webhook`
+- `TELEGRAM_POLL_TIMEOUT`: Long polling timeout in seconds (default: 30)
+- `TELEGRAM_SESSION_TIMEOUT_MINUTES`: Session inactivity timeout (default: 10)
+- `TELEGRAM_ALLOWED_CHAT_IDS`: Comma-separated list of allowed chat IDs for the bot
 
 Start the database with Docker:
 ```bash
@@ -206,6 +211,39 @@ Supported newsletters:
 
 ### Telegram Alerts
 Sends newsletter summaries to Telegram with article titles and links. Newsletters are tracked to prevent duplicate alerts.
+
+### Telegram Chat
+Two-way conversational interface for interacting with the AI agent via Telegram. Supports multi-turn conversations with session persistence.
+
+#### Running the Bot
+Start the polling bot:
+```bash
+poetry run python -m src.telegram.polling
+```
+
+#### Features
+- **Session Management**: Conversations persist for 10 minutes of inactivity (configurable)
+- **Agent Integration**: Messages are routed to the AI agent for tool-calling workflows
+- **HITL Confirmation**: Sensitive operations require user confirmation via natural language
+- **Chat Allowlist**: Restrict bot access to specific chat IDs
+
+#### Commands
+- `/newchat`: Reset the current session and start fresh
+
+#### Architecture
+The Telegram integration uses long polling to receive updates. Each chat is assigned a session that links to an `AgentConversation` for AI state management.
+
+```
+User Message → PollingRunner → MessageHandler
+    → SessionManager (get/create session)
+    → AgentRunner (reasoning loop)
+    → Response → TelegramClient.send_message()
+```
+
+Sessions are stored in PostgreSQL with the following tables:
+- `telegram_sessions`: Chat session state and links to agent conversations
+- `telegram_messages`: Audit log of all messages (user and assistant)
+- `telegram_polling_cursor`: Persisted update_id for reliable polling
 
 ### Scheduled Processing
 Newsletter processing and alerting runs automatically using Dagster for orchestration.
