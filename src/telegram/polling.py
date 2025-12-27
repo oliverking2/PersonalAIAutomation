@@ -12,7 +12,7 @@ from src.database.connection import get_session
 from src.database.telegram import get_or_create_polling_cursor, update_polling_cursor
 from src.telegram.client import TelegramClient, TelegramClientError
 from src.telegram.handler import MessageHandler, UnauthorisedChatError
-from src.telegram.models import TelegramUpdate
+from src.telegram.models import TelegramMessageInfo, TelegramUpdate
 from src.telegram.utils.config import TelegramConfig, get_telegram_settings
 from src.telegram.utils.session_manager import SessionManager
 
@@ -105,17 +105,86 @@ class PollingRunner:
                 updates = self._client.get_updates(offset=offset)
                 self._consecutive_errors = 0  # Reset on success
 
-                for update in updates:
-                    self._process_update(update)
-                    # Update offset after each successful processing
-                    offset = update.update_id + 1
+                if not updates:
+                    continue
 
-                    # Persist offset to database
-                    with get_session() as db_session:
-                        update_polling_cursor(db_session, update.update_id)
+                # Group updates by chat_id to process multiple messages together
+                grouped = self._group_updates_by_chat(updates)
+
+                for chat_id, chat_updates in grouped.items():
+                    self._process_chat_updates(chat_id, chat_updates)
+
+                # Update offset to highest update_id + 1
+                max_update_id = max(u.update_id for u in updates)
+                offset = max_update_id + 1
+
+                # Persist offset to database
+                with get_session() as db_session:
+                    update_polling_cursor(db_session, max_update_id)
 
             except TelegramClientError as e:
                 self._handle_polling_error(e)
+
+    def _group_updates_by_chat(
+        self,
+        updates: list[TelegramUpdate],
+    ) -> dict[str, list[TelegramUpdate]]:
+        """Group updates by chat ID.
+
+        Updates without messages or text are filtered out.
+
+        :param updates: List of updates from Telegram.
+        :returns: Dictionary mapping chat_id to list of updates.
+        """
+        grouped: dict[str, list[TelegramUpdate]] = {}
+
+        for update in updates:
+            if update.message is None or not update.message.text:
+                continue
+
+            chat_id = str(update.message.chat.id)
+            if chat_id not in grouped:
+                grouped[chat_id] = []
+            grouped[chat_id].append(update)
+
+        return grouped
+
+    def _process_chat_updates(
+        self,
+        chat_id: str,
+        updates: list[TelegramUpdate],
+    ) -> None:
+        """Process grouped updates for a single chat.
+
+        Combines multiple messages into one agent invocation.
+
+        :param chat_id: The chat ID.
+        :param updates: List of updates for this chat.
+        """
+        # Combine message texts if multiple messages
+        messages = [u.message.text for u in updates if u.message and u.message.text]
+        combined_text = "\n".join(messages)
+
+        # Use the first update's message_id for tracking
+        first_message_id = updates[0].message.message_id if updates[0].message else 0
+
+        if len(messages) > 1:
+            logger.info(
+                f"Grouped {len(messages)} messages for chat_id={chat_id}: {combined_text[:50]}..."
+            )
+
+        # Create a synthetic update with combined text for the handler
+        synthetic_update = TelegramUpdate(
+            update_id=updates[-1].update_id,
+            message=TelegramMessageInfo(
+                message_id=first_message_id,
+                date=updates[0].message.date if updates[0].message else 0,
+                chat=updates[0].message.chat if updates[0].message else None,  # type: ignore[arg-type]
+                text=combined_text,
+            ),
+        )
+
+        self._process_update(synthetic_update)
 
     def _process_update(self, update: TelegramUpdate) -> None:
         """Process a single update.

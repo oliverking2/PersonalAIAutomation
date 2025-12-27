@@ -247,6 +247,21 @@ When adding new configuration:
   - the relevant identifier(s)
   - the expected shape/state
 
+## Code Comments
+- Add comments to explain **why**, not **what** - the code shows what, comments explain reasoning.
+- Only add comments for non-obvious logic: complex algorithms, business rules, workarounds, or edge cases.
+- Avoid commenting self-explanatory code - if the code is clear, no comment is needed.
+- Keep comments concise and up-to-date with the code they describe.
+- Use inline comments sparingly; prefer a brief comment above the block when needed.
+- Good comment examples:
+  - `# Group messages by chat to avoid multiple agent calls for rapid-fire messages`
+  - `# Telegram API requires offset to be one greater than the last update_id`
+  - `# Retry with backoff - Notion rate limits at 3 requests/second`
+- Bad comment examples (avoid these):
+  - `# Increment counter` (obvious from code)
+  - `# Loop through items` (obvious from code)
+  - `# Set x to 5` (obvious from code)
+
 ## Enums
 - Use `StrEnum` for any parameter or field with a defined set of valid string values.
 - Never use string literals where an enum exists (e.g., use `CallType.CHAT` not `"chat"`).
@@ -344,11 +359,6 @@ When adding new configuration:
 - Format: `make format`
 - Types: `make types`
 - Tests with coverage: `make coverage`
-
-## Git
-- Write clear, imperative commit messages.
-- Keep commits atomic and focused.
-- Pre-commit hooks run automatically on commit.
 
 ## Self-Check Before Final Output
 - Confirm imports are correct and minimal.

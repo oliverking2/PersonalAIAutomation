@@ -4,9 +4,6 @@
 - Idea Tracker - ensure there is a decent description of the idea
 
 ## Orchestration
-- Notion
-  - Goals reminders each month 
-  - Daily updates of tasks due or overdue to Telegram
 
 ## Email Summaries - Read Emails then push summary to Telegram
 - TLDR Newsletter
@@ -21,9 +18,7 @@
 
 ## API
 
-
 ## AI
-- Integrate with AWS Bedrock for models
 - Add in AI for summarising news articles
 - Standardise JSON validation when getting data from AI
 
@@ -31,8 +26,6 @@
 - Multiple messages needing to be processed at once
 - Add in AI for 2-way chat
 - Add Notion tasks/goals/reading lists via the Telegram chat
-  - needs to title case names and add descriptions if needed
-  - force a better/clearer task definition if it is vague
 
 ## Other
 - Host application
