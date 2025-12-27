@@ -4,9 +4,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import check_duplicate_name, filter_by_fuzzy_name
 from src.api.notion.dependencies import get_notion_client, get_task_data_source_id
 from src.api.notion.tasks.models import (
+    TaskBulkCreateResponse,
     TaskCreateRequest,
     TaskQueryRequest,
     TaskQueryResponse,
@@ -95,7 +97,7 @@ def get_task(
 
 @router.post(
     "",
-    response_model=list[TaskResponse],
+    response_model=TaskBulkCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create tasks",
 )
@@ -103,21 +105,26 @@ def create_tasks(
     requests: list[TaskCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_task_data_source_id),
-) -> list[TaskResponse]:
-    """Create one or more tasks in the task tracker."""
+) -> TaskBulkCreateResponse:
+    """Create one or more tasks in the task tracker.
+
+    Processes all items and returns both successes and failures.
+    Partial success is possible - some items may be created while others fail.
+    """
     logger.debug(f"Creating {len(requests)} tasks")
-    results: list[TaskResponse] = []
+    created: list[TaskResponse] = []
+    failed: list[BulkCreateFailure] = []
 
     for request in requests:
-        check_duplicate_name(
-            client=client,
-            data_source_id=data_source_id,
-            name_property="Task name",
-            complete_status="Done",
-            new_name=request.task_name,
-        )
-
         try:
+            check_duplicate_name(
+                client=client,
+                data_source_id=data_source_id,
+                name_property="Task name",
+                complete_status="Done",
+                new_name=request.task_name,
+            )
+
             properties = build_task_properties(
                 task_name=request.task_name,
                 status=request.status,
@@ -137,12 +144,13 @@ def create_tasks(
                 blocks = markdown_to_blocks(request.content)
                 client.append_page_content(task.id, blocks)
 
-            results.append(_task_to_response(task, content=request.content))
-        except NotionClientError as e:
-            logger.exception(f"Failed to create task: {e}")
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            created.append(_task_to_response(task, content=request.content))
+        except (NotionClientError, HTTPException) as e:
+            error_msg = e.detail if isinstance(e, HTTPException) else str(e)
+            logger.warning(f"Failed to create task '{request.task_name}': {error_msg}")
+            failed.append(BulkCreateFailure(name=request.task_name, error=error_msg))
 
-    return results
+    return TaskBulkCreateResponse(created=created, failed=failed)
 
 
 @router.patch(

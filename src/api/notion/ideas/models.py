@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import FuzzyMatchQuality
 from src.notion.enums import IdeaGroup, IdeaStatus
 
@@ -70,4 +71,17 @@ class IdeaQueryResponse(BaseModel):
             "Quality of fuzzy name match: None=unfiltered, "
             "'good'=best match score >= 60, 'weak'=no matches above threshold"
         ),
+    )
+
+
+class IdeaBulkCreateResponse(BaseModel):
+    """Response model for bulk idea creation with partial success support."""
+
+    created: list[IdeaResponse] = Field(
+        default_factory=list,
+        description="Successfully created ideas",
+    )
+    failed: list[BulkCreateFailure] = Field(
+        default_factory=list,
+        description="Ideas that failed to create with error details",
     )

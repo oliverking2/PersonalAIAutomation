@@ -148,10 +148,11 @@ class TestCreateTaskEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["id"], "task-new")
-        self.assertEqual(data[0]["task_name"], "New Task")
-        self.assertEqual(data[0]["priority"], DEFAULT_PRIORITY)
+        self.assertEqual(len(data["created"]), 1)
+        self.assertEqual(len(data["failed"]), 0)
+        self.assertEqual(data["created"][0]["id"], "task-new")
+        self.assertEqual(data["created"][0]["task_name"], "New Task")
+        self.assertEqual(data["created"][0]["priority"], DEFAULT_PRIORITY)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_task_minimal(self, mock_client_class: MagicMock) -> None:
@@ -222,8 +223,8 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         self.assertIn("invalid value 'InvalidPriority'", detail)
 
     @patch("src.api.notion.dependencies.NotionClient")
-    def test_create_task_duplicate_name_returns_409(self, mock_client_class: MagicMock) -> None:
-        """Test that duplicate task name returns 409 Conflict."""
+    def test_create_task_duplicate_name_returns_failure(self, mock_client_class: MagicMock) -> None:
+        """Test that duplicate task name is reported in failures."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = [
             {
@@ -241,8 +242,12 @@ class TestCreateTaskEndpoint(unittest.TestCase):
             json=[build_task_create_payload(task_name="existing task")],
         )
 
-        self.assertEqual(response.status_code, 409)
-        self.assertIn("already exists", response.json()["detail"])
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["created"]), 0)
+        self.assertEqual(len(data["failed"]), 1)
+        self.assertEqual(data["failed"][0]["name"], "existing task")
+        self.assertIn("already exists", data["failed"][0]["error"])
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_task_no_duplicate_succeeds(self, mock_client_class: MagicMock) -> None:
@@ -270,6 +275,9 @@ class TestCreateTaskEndpoint(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["created"]), 1)
+        self.assertEqual(len(data["failed"]), 0)
 
 
 class TestUpdateTaskEndpoint(unittest.TestCase):

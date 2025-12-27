@@ -4,9 +4,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import check_duplicate_name, filter_by_fuzzy_name
 from src.api.notion.dependencies import get_ideas_data_source_id, get_notion_client
 from src.api.notion.ideas.models import (
+    IdeaBulkCreateResponse,
     IdeaCreateRequest,
     IdeaQueryRequest,
     IdeaQueryResponse,
@@ -93,7 +95,7 @@ def get_idea(
 
 @router.post(
     "",
-    response_model=list[IdeaResponse],
+    response_model=IdeaBulkCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create ideas",
 )
@@ -101,22 +103,26 @@ def create_ideas(
     requests: list[IdeaCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_ideas_data_source_id),
-) -> list[IdeaResponse]:
-    """Create one or more ideas in the ideas data source."""
+) -> IdeaBulkCreateResponse:
+    """Create one or more ideas in the ideas data source.
+
+    Processes all items and returns both successes and failures.
+    Partial success is possible - some items may be created while others fail.
+    """
     logger.debug(f"Creating {len(requests)} ideas")
-    results: list[IdeaResponse] = []
+    created: list[IdeaResponse] = []
+    failed: list[BulkCreateFailure] = []
 
     for request in requests:
-        # Check for duplicate names (exclude archived ideas)
-        check_duplicate_name(
-            client=client,
-            data_source_id=data_source_id,
-            name_property="Idea",
-            complete_status=IdeaStatus.DONE.value,
-            new_name=request.idea,
-        )
-
         try:
+            check_duplicate_name(
+                client=client,
+                data_source_id=data_source_id,
+                name_property="Idea",
+                complete_status=IdeaStatus.DONE.value,
+                new_name=request.idea,
+            )
+
             properties = build_idea_properties(
                 idea=request.idea,
                 status=request.status,
@@ -133,12 +139,13 @@ def create_ideas(
                 blocks = markdown_to_blocks(request.content)
                 client.append_page_content(idea.id, blocks)
 
-            results.append(_idea_to_response(idea, content=request.content))
-        except NotionClientError as e:
-            logger.exception(f"Failed to create idea: {e}")
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            created.append(_idea_to_response(idea, content=request.content))
+        except (NotionClientError, HTTPException) as e:
+            error_msg = e.detail if isinstance(e, HTTPException) else str(e)
+            logger.warning(f"Failed to create idea '{request.idea}': {error_msg}")
+            failed.append(BulkCreateFailure(name=request.idea, error=error_msg))
 
-    return results
+    return IdeaBulkCreateResponse(created=created, failed=failed)
 
 
 @router.patch(

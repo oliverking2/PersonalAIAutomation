@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import FuzzyMatchQuality
 from src.notion.enums import Priority, ReadingCategory, ReadingStatus, ReadingType
 
@@ -106,4 +107,17 @@ class ReadingQueryResponse(BaseModel):
     excluded_completed: bool = Field(
         False,
         description="True if completed items were excluded from results",
+    )
+
+
+class ReadingBulkCreateResponse(BaseModel):
+    """Response model for bulk reading item creation with partial success support."""
+
+    created: list[ReadingItemResponse] = Field(
+        default_factory=list,
+        description="Successfully created reading items",
+    )
+    failed: list[BulkCreateFailure] = Field(
+        default_factory=list,
+        description="Reading items that failed to create with error details",
     )

@@ -24,7 +24,7 @@ class TestIdeasToolDefinitions(unittest.TestCase):
             {
                 "query_ideas",
                 "get_idea",
-                "create_idea",
+                "create_ideas",
                 "update_idea",
             },
         )
@@ -36,7 +36,7 @@ class TestIdeasToolDefinitions(unittest.TestCase):
 
         self.assertEqual(tool_dict["query_ideas"].risk_level, RiskLevel.SAFE)
         self.assertEqual(tool_dict["get_idea"].risk_level, RiskLevel.SAFE)
-        self.assertEqual(tool_dict["create_idea"].risk_level, RiskLevel.SAFE)
+        self.assertEqual(tool_dict["create_ideas"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
         """Test that update tool is marked as sensitive."""
@@ -177,13 +177,17 @@ class TestIdeasToolHandlers(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "new-idea", "idea": "New Idea"}]
+        mock_client.post.return_value = {
+            "created": [{"id": "new-idea", "idea": "New Idea"}],
+            "failed": [],
+        }
 
-        tool = self.tool_dict["create_idea"]
-        args = AgentIdeaCreateArgs(
+        tool = self.tool_dict["create_ideas"]
+        item = AgentIdeaCreateArgs(
             idea="New Idea",
             notes="Some details about this idea",
         )
+        args = tool.args_model(items=[item])
         result = tool.handler(args)
 
         mock_client.post.assert_called_once()
@@ -192,7 +196,8 @@ class TestIdeasToolHandlers(unittest.TestCase):
         # Content should be built from notes, payload is now a list
         payload = call_args[1]["json"]
         self.assertIn("content", payload[0])
-        self.assertTrue(result["created"])
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
 
     @patch("src.agent.tools.factory._get_client")
     def test_update_handler(self, mock_get_client: MagicMock) -> None:

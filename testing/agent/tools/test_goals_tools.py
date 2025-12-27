@@ -25,7 +25,7 @@ class TestGoalsToolDefinitions(unittest.TestCase):
             {
                 "query_goals",
                 "get_goal",
-                "create_goal",
+                "create_goals",
                 "update_goal",
             },
         )
@@ -37,7 +37,7 @@ class TestGoalsToolDefinitions(unittest.TestCase):
 
         self.assertEqual(tool_dict["query_goals"].risk_level, RiskLevel.SAFE)
         self.assertEqual(tool_dict["get_goal"].risk_level, RiskLevel.SAFE)
-        self.assertEqual(tool_dict["create_goal"].risk_level, RiskLevel.SAFE)
+        self.assertEqual(tool_dict["create_goals"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
         """Test that update tool is marked as sensitive."""
@@ -197,16 +197,21 @@ class TestGoalToolHandlers(unittest.TestCase):
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         goal_name = "Run a half marathon by June"
-        mock_client.post.return_value = [{"id": "new-goal", "goal_name": goal_name}]
+        mock_client.post.return_value = {
+            "created": [{"id": "new-goal", "goal_name": goal_name}],
+            "failed": [],
+        }
 
-        tool = self.tool_dict["create_goal"]
-        args = AgentGoalCreateArgs(goal_name=goal_name)
+        tool = self.tool_dict["create_goals"]
+        item = AgentGoalCreateArgs(goal_name=goal_name)
+        args = tool.args_model(items=[item])
         result = tool.handler(args)
 
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/notion/goals")
-        self.assertTrue(result["created"])
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
 
     @patch("src.agent.tools.factory._get_client")
     def test_update_handler(self, mock_get_client: MagicMock) -> None:

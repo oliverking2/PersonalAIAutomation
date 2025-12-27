@@ -231,46 +231,95 @@ def _create_get_tool(config: CRUDToolConfig) -> ToolDef:
     )
 
 
+def _create_bulk_create_args_model(config: CRUDToolConfig) -> type[BaseModel]:
+    """Create a Pydantic model for bulk create arguments.
+
+    Wraps the single-item create model in a list to enable bulk creation.
+
+    :param config: Domain configuration.
+    :returns: Pydantic model class with items list.
+    """
+    return create_model(
+        f"Create{config.domain_plural.title()}Args",
+        items=(
+            list[config.create_model],  # type: ignore[name-defined]
+            Field(
+                ...,
+                min_length=1,
+                description=f"List of {config.domain_plural} to create (1 or more items)",
+            ),
+        ),
+    )
+
+
 def _create_create_tool(config: CRUDToolConfig) -> ToolDef:
     """Generate create tool for a domain.
 
+    Supports bulk creation - the LLM can create multiple items in one call.
+    The API handles partial success/failure and returns created items and failures.
+
     :param config: Domain configuration.
-    :returns: ToolDef for creating a new item.
+    :returns: ToolDef for creating new items.
     """
+    bulk_args_model = _create_bulk_create_args_model(config)
 
     def create_handler(args: BaseModel) -> dict[str, Any]:
-        logger.debug(f"Creating {config.domain}")
+        items_to_create: list[BaseModel] = getattr(args, "items")
+        logger.debug(f"Creating {len(items_to_create)} {config.domain_plural}")
 
-        # Build API payload
-        payload = args.model_dump(mode="json", exclude_none=True)
+        # Build payload for all items
+        payloads: list[dict[str, Any]] = []
+        for item in items_to_create:
+            payload = item.model_dump(mode="json", exclude_none=True)
 
-        # If content builder is configured, build content from structured inputs
-        if config.content_builder:
-            payload["content"] = config.content_builder(args)
-            # Remove structured input fields that aren't in the API model
-            payload.pop("description", None)
-            payload.pop("notes", None)
+            # If content builder is configured, build content from structured inputs
+            if config.content_builder:
+                payload["content"] = config.content_builder(item)
+                # Remove structured input fields that aren't in the API model
+                payload.pop("description", None)
+                payload.pop("notes", None)
 
-        # API expects a list, so wrap single item
+            payloads.append(payload)
+
+        # Send all items to API - API handles partial success/failure
         with _get_client() as client:
-            response = client.post(config.endpoint_prefix, json=[payload])
+            response = cast(
+                dict[str, Any],
+                client.post(config.endpoint_prefix, json=payloads),
+            )
 
-        # Response is a list, extract first item and filter fields
-        items = response if isinstance(response, list) else [response]
+        # Filter response fields for LLM context efficiency
+        created_items = response.get("created", [])
         filtered_items = [
-            _filter_response_fields(item, config.create_fields, config.name_field) for item in items
+            _filter_response_fields(item, config.create_fields, config.name_field)
+            for item in created_items
         ]
-        return {"item": filtered_items[0], "created": True}
+
+        # Build response with counts and items/failures
+        result: dict[str, Any] = {
+            "created": len(filtered_items),
+            "failed": len(response.get("failed", [])),
+        }
+
+        if filtered_items:
+            result["items"] = filtered_items
+        if response.get("failed"):
+            result["failures"] = response["failed"]
+
+        return result
 
     enum_hints = _format_enum_hints(config.enum_fields)
-    description = config.create_description or f"Create a new {config.domain}. {enum_hints}"
+    description = config.create_description or (
+        f"Create one or more {config.domain_plural}. "
+        f"Pass a list of items to create multiple at once. {enum_hints}"
+    )
 
     return ToolDef(
-        name=f"create_{config.domain}",
+        name=f"create_{config.domain_plural}",
         description=description.strip(),
         tags=config.tags | {"create", "item"},
         risk_level=RiskLevel.SAFE,
-        args_model=config.create_model,
+        args_model=bulk_args_model,
         handler=create_handler,
     )
 

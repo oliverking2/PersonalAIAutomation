@@ -4,9 +4,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import check_duplicate_name, filter_by_fuzzy_name
 from src.api.notion.dependencies import get_goals_data_source_id, get_notion_client
 from src.api.notion.goals.models import (
+    GoalBulkCreateResponse,
     GoalCreateRequest,
     GoalQueryRequest,
     GoalQueryResponse,
@@ -95,7 +97,7 @@ def get_goal(
 
 @router.post(
     "",
-    response_model=list[GoalResponse],
+    response_model=GoalBulkCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create goals",
 )
@@ -103,21 +105,26 @@ def create_goals(
     requests: list[GoalCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_goals_data_source_id),
-) -> list[GoalResponse]:
-    """Create one or more goals in the goals tracker."""
+) -> GoalBulkCreateResponse:
+    """Create one or more goals in the goals tracker.
+
+    Processes all items and returns both successes and failures.
+    Partial success is possible - some items may be created while others fail.
+    """
     logger.debug(f"Creating {len(requests)} goals")
-    results: list[GoalResponse] = []
+    created: list[GoalResponse] = []
+    failed: list[BulkCreateFailure] = []
 
     for request in requests:
-        check_duplicate_name(
-            client=client,
-            data_source_id=data_source_id,
-            name_property="Goal name",
-            complete_status="Done",
-            new_name=request.goal_name,
-        )
-
         try:
+            check_duplicate_name(
+                client=client,
+                data_source_id=data_source_id,
+                name_property="Goal name",
+                complete_status="Done",
+                new_name=request.goal_name,
+            )
+
             properties = build_goal_properties(
                 goal_name=request.goal_name,
                 status=request.status,
@@ -137,12 +144,13 @@ def create_goals(
                 blocks = markdown_to_blocks(request.content)
                 client.append_page_content(goal.id, blocks)
 
-            results.append(_goal_to_response(goal, content=request.content))
-        except NotionClientError as e:
-            logger.exception(f"Failed to create goal: {e}")
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            created.append(_goal_to_response(goal, content=request.content))
+        except (NotionClientError, HTTPException) as e:
+            error_msg = e.detail if isinstance(e, HTTPException) else str(e)
+            logger.warning(f"Failed to create goal '{request.goal_name}': {error_msg}")
+            failed.append(BulkCreateFailure(name=request.goal_name, error=error_msg))
 
-    return results
+    return GoalBulkCreateResponse(created=created, failed=failed)
 
 
 @router.patch(

@@ -184,12 +184,13 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["id"], "reading-new")
-        self.assertEqual(data[0]["title"], "New Article")
-        self.assertEqual(data[0]["item_type"], DEFAULT_READING_TYPE)
-        self.assertEqual(data[0]["priority"], DEFAULT_PRIORITY)
-        self.assertEqual(data[0]["category"], DEFAULT_READING_CATEGORY)
+        self.assertEqual(len(data["created"]), 1)
+        self.assertEqual(len(data["failed"]), 0)
+        self.assertEqual(data["created"][0]["id"], "reading-new")
+        self.assertEqual(data["created"][0]["title"], "New Article")
+        self.assertEqual(data["created"][0]["item_type"], DEFAULT_READING_TYPE)
+        self.assertEqual(data["created"][0]["priority"], DEFAULT_PRIORITY)
+        self.assertEqual(data["created"][0]["category"], DEFAULT_READING_CATEGORY)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_reading_item_minimal(self, mock_client_class: MagicMock) -> None:
@@ -276,10 +277,10 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
         self.assertIn("invalid value 'Invalid Category'", detail)
 
     @patch("src.api.notion.dependencies.NotionClient")
-    def test_create_reading_item_duplicate_title_returns_409(
+    def test_create_reading_item_duplicate_title_returns_failure(
         self, mock_client_class: MagicMock
     ) -> None:
-        """Test that duplicate title returns 409 Conflict."""
+        """Test that duplicate title is reported in failures."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = [
             {
@@ -297,8 +298,12 @@ class TestCreateReadingItemEndpoint(unittest.TestCase):
             json=[build_reading_create_payload(title="existing article")],
         )
 
-        self.assertEqual(response.status_code, 409)
-        self.assertIn("already exists", response.json()["detail"])
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["created"]), 0)
+        self.assertEqual(len(data["failed"]), 1)
+        self.assertEqual(data["failed"][0]["name"], "existing article")
+        self.assertIn("already exists", data["failed"][0]["error"])
 
 
 class TestUpdateReadingItemEndpoint(unittest.TestCase):

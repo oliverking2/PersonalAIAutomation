@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.agent.enums import RiskLevel
+from src.agent.tools.models import AgentReadingItemCreateArgs
 from src.agent.tools.reading_list import READING_LIST_TOOL_CONFIG, get_reading_list_tools
 from src.api.notion.reading_list.models import ReadingItemCreateRequest, ReadingQueryRequest
 from src.notion.enums import Priority, ReadingCategory, ReadingStatus, ReadingType
@@ -23,7 +24,7 @@ class TestReadingListToolDefinitions(unittest.TestCase):
             {
                 "query_reading_list",
                 "get_reading_item",
-                "create_reading_item",
+                "create_reading_list",
                 "update_reading_item",
             },
         )
@@ -35,7 +36,7 @@ class TestReadingListToolDefinitions(unittest.TestCase):
 
         self.assertEqual(tool_dict["query_reading_list"].risk_level, RiskLevel.SAFE)
         self.assertEqual(tool_dict["get_reading_item"].risk_level, RiskLevel.SAFE)
-        self.assertEqual(tool_dict["create_reading_item"].risk_level, RiskLevel.SAFE)
+        self.assertEqual(tool_dict["create_reading_list"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
         """Test that update tool is marked as sensitive."""
@@ -186,16 +187,21 @@ class TestReadingListToolHandlers(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "new-page", "title": "New Article"}]
+        mock_client.post.return_value = {
+            "created": [{"id": "new-page", "title": "New Article"}],
+            "failed": [],
+        }
 
-        tool = self.tool_dict["create_reading_item"]
-        args = ReadingItemCreateRequest(title="New Article", item_type=ReadingType.ARTICLE)
+        tool = self.tool_dict["create_reading_list"]
+        item = AgentReadingItemCreateArgs(title="New Article", item_type=ReadingType.ARTICLE)
+        args = tool.args_model(items=[item])
         result = tool.handler(args)
 
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/notion/reading-list")
-        self.assertTrue(result["created"])
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
 
     @patch("src.agent.tools.factory._get_client")
     def test_update_handler(self, mock_get_client: MagicMock) -> None:

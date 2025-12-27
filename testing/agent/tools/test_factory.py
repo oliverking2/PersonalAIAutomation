@@ -166,7 +166,7 @@ class TestCreateCrudTools(unittest.TestCase):
             {
                 "query_widgets",
                 "get_widget",
-                "create_widget",
+                "create_widgets",
                 "update_widget",
             },
         )
@@ -178,7 +178,7 @@ class TestCreateCrudTools(unittest.TestCase):
 
         self.assertEqual(tool_dict["query_widgets"].risk_level, RiskLevel.SAFE)
         self.assertEqual(tool_dict["get_widget"].risk_level, RiskLevel.SAFE)
-        self.assertEqual(tool_dict["create_widget"].risk_level, RiskLevel.SAFE)
+        self.assertEqual(tool_dict["create_widgets"].risk_level, RiskLevel.SAFE)
         self.assertEqual(tool_dict["update_widget"].risk_level, RiskLevel.SENSITIVE)
 
     def test_tool_tags(self) -> None:
@@ -194,8 +194,8 @@ class TestCreateCrudTools(unittest.TestCase):
         self.assertIn("widgets", tool_dict["get_widget"].tags)
         self.assertIn("get", tool_dict["get_widget"].tags)
 
-        self.assertIn("widgets", tool_dict["create_widget"].tags)
-        self.assertIn("create", tool_dict["create_widget"].tags)
+        self.assertIn("widgets", tool_dict["create_widgets"].tags)
+        self.assertIn("create", tool_dict["create_widgets"].tags)
 
         self.assertIn("widgets", tool_dict["update_widget"].tags)
         self.assertIn("update", tool_dict["update_widget"].tags)
@@ -331,19 +331,86 @@ class TestCreateToolGeneration(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "new-widget", "name": "New Widget"}]
+        mock_client.post.return_value = {
+            "created": [{"id": "new-widget", "name": "New Widget"}],
+            "failed": [],
+        }
 
         tool = _create_create_tool(self.config)
-        args = MockCreateRequest(name="New Widget")
+        # Create args using the bulk args model with items list
+        item = MockCreateRequest(name="New Widget")
+        args = tool.args_model(items=[item])
         result = tool.handler(args)
 
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/api/widgets")
-        # Response is filtered, only id, status, and name_field are included
-        self.assertEqual(result["item"]["id"], "new-widget")
-        self.assertEqual(result["item"]["name"], "New Widget")
-        self.assertTrue(result["created"])
+        # Response includes items list and counts
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["id"], "new-widget")
+        self.assertEqual(result["items"][0]["name"], "New Widget")
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
+
+    @patch("src.agent.tools.factory._get_client")
+    def test_create_tool_handler_bulk(self, mock_get_client: MagicMock) -> None:
+        """Test create tool handler supports bulk creation."""
+        mock_client = MagicMock()
+        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = {
+            "created": [
+                {"id": "widget-1", "name": "Widget 1"},
+                {"id": "widget-2", "name": "Widget 2"},
+            ],
+            "failed": [],
+        }
+
+        tool = _create_create_tool(self.config)
+        # Create multiple items in one call
+        items = [
+            MockCreateRequest(name="Widget 1"),
+            MockCreateRequest(name="Widget 2"),
+        ]
+        args = tool.args_model(items=items)
+        result = tool.handler(args)
+
+        # All items are sent in a single request
+        self.assertEqual(mock_client.post.call_count, 1)
+        # Response includes all created items
+        self.assertEqual(len(result["items"]), 2)
+        self.assertEqual(result["created"], 2)
+        self.assertEqual(result["failed"], 0)
+
+    @patch("src.agent.tools.factory._get_client")
+    def test_create_tool_handler_partial_failure(self, mock_get_client: MagicMock) -> None:
+        """Test create tool handler handles partial failures from API."""
+        mock_client = MagicMock()
+        mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
+        # API returns partial success response
+        mock_client.post.return_value = {
+            "created": [{"id": "widget-1", "name": "Widget 1"}],
+            "failed": [{"name": "Widget 2", "error": "Validation error: duplicate name"}],
+        }
+
+        tool = _create_create_tool(self.config)
+        items = [
+            MockCreateRequest(name="Widget 1"),
+            MockCreateRequest(name="Widget 2"),
+        ]
+        args = tool.args_model(items=items)
+        result = tool.handler(args)
+
+        # Should have partial success
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["name"], "Widget 1")
+        # Should have failure details
+        self.assertEqual(len(result["failures"]), 1)
+        self.assertEqual(result["failures"][0]["name"], "Widget 2")
+        self.assertIn("Validation error", result["failures"][0]["error"])
 
 
 class TestUpdateToolGeneration(unittest.TestCase):

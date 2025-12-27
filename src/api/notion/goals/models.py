@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import FuzzyMatchQuality
 from src.notion.enums import GoalCategory, GoalStatus, Priority
 
@@ -96,4 +97,17 @@ class GoalQueryResponse(BaseModel):
     excluded_done: bool = Field(
         False,
         description="True if completed goals were excluded from results",
+    )
+
+
+class GoalBulkCreateResponse(BaseModel):
+    """Response model for bulk goal creation with partial success support."""
+
+    created: list[GoalResponse] = Field(
+        default_factory=list,
+        description="Successfully created goals",
+    )
+    failed: list[BulkCreateFailure] = Field(
+        default_factory=list,
+        description="Goals that failed to create with error details",
     )

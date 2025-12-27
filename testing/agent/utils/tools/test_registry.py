@@ -243,7 +243,7 @@ class TestCreateDefaultRegistry(unittest.TestCase):
 
         self.assertIn("query_reading_list", registry)
         self.assertIn("get_reading_item", registry)
-        self.assertIn("create_reading_item", registry)
+        self.assertIn("create_reading_list", registry)
         self.assertIn("update_reading_item", registry)
 
     def test_contains_goals_tools(self) -> None:
@@ -252,7 +252,7 @@ class TestCreateDefaultRegistry(unittest.TestCase):
 
         self.assertIn("query_goals", registry)
         self.assertIn("get_goal", registry)
-        self.assertIn("create_goal", registry)
+        self.assertIn("create_goals", registry)
         self.assertIn("update_goal", registry)
 
     def test_contains_tasks_tools(self) -> None:
@@ -261,7 +261,7 @@ class TestCreateDefaultRegistry(unittest.TestCase):
 
         self.assertIn("query_tasks", registry)
         self.assertIn("get_task", registry)
-        self.assertIn("create_task", registry)
+        self.assertIn("create_tasks", registry)
         self.assertIn("update_task", registry)
 
     def test_contains_ideas_tools(self) -> None:
@@ -270,7 +270,7 @@ class TestCreateDefaultRegistry(unittest.TestCase):
 
         self.assertIn("query_ideas", registry)
         self.assertIn("get_idea", registry)
-        self.assertIn("create_idea", registry)
+        self.assertIn("create_ideas", registry)
         self.assertIn("update_idea", registry)
 
     def test_tools_can_be_retrieved(self) -> None:

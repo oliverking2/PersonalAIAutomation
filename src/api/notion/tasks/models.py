@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import FuzzyMatchQuality
 from src.notion.enums import EffortLevel, Priority, TaskGroup, TaskStatus
 
@@ -106,4 +107,17 @@ class TaskQueryResponse(BaseModel):
     excluded_done: bool = Field(
         False,
         description="True if completed tasks were excluded from results",
+    )
+
+
+class TaskBulkCreateResponse(BaseModel):
+    """Response model for bulk task creation with partial success support."""
+
+    created: list[TaskResponse] = Field(
+        default_factory=list,
+        description="Successfully created tasks",
+    )
+    failed: list[BulkCreateFailure] = Field(
+        default_factory=list,
+        description="Tasks that failed to create with error details",
     )

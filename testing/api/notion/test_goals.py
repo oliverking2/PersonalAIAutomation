@@ -149,11 +149,12 @@ class TestCreateGoalEndpoint(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["id"], "goal-new")
-        self.assertEqual(data[0]["goal_name"], "New Goal")
-        self.assertEqual(data[0]["priority"], DEFAULT_PRIORITY)
-        self.assertEqual(data[0]["progress"], 25)
+        self.assertEqual(len(data["created"]), 1)
+        self.assertEqual(len(data["failed"]), 0)
+        self.assertEqual(data["created"][0]["id"], "goal-new")
+        self.assertEqual(data["created"][0]["goal_name"], "New Goal")
+        self.assertEqual(data["created"][0]["priority"], DEFAULT_PRIORITY)
+        self.assertEqual(data["created"][0]["progress"], 25)
 
     @patch("src.api.notion.dependencies.NotionClient")
     def test_create_goal_minimal(self, mock_client_class: MagicMock) -> None:
@@ -219,8 +220,8 @@ class TestCreateGoalEndpoint(unittest.TestCase):
         self.assertIn("progress", detail)
 
     @patch("src.api.notion.dependencies.NotionClient")
-    def test_create_goal_duplicate_name_returns_409(self, mock_client_class: MagicMock) -> None:
-        """Test that duplicate goal name returns 409 Conflict."""
+    def test_create_goal_duplicate_name_returns_failure(self, mock_client_class: MagicMock) -> None:
+        """Test that duplicate goal name is reported in failures."""
         mock_client = MagicMock()
         mock_client.query_all_data_source.return_value = [
             {
@@ -238,8 +239,12 @@ class TestCreateGoalEndpoint(unittest.TestCase):
             json=[build_goal_create_payload(goal_name="existing goal")],
         )
 
-        self.assertEqual(response.status_code, 409)
-        self.assertIn("already exists", response.json()["detail"])
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(len(data["created"]), 0)
+        self.assertEqual(len(data["failed"]), 1)
+        self.assertEqual(data["failed"][0]["name"], "existing goal")
+        self.assertIn("already exists", data["failed"][0]["error"])
 
 
 class TestUpdateGoalEndpoint(unittest.TestCase):

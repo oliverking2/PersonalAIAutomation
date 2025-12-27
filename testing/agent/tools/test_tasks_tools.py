@@ -25,7 +25,7 @@ class TestTasksToolDefinitions(unittest.TestCase):
             {
                 "query_tasks",
                 "get_task",
-                "create_task",
+                "create_tasks",
                 "update_task",
             },
         )
@@ -37,7 +37,7 @@ class TestTasksToolDefinitions(unittest.TestCase):
 
         self.assertEqual(tool_dict["query_tasks"].risk_level, RiskLevel.SAFE)
         self.assertEqual(tool_dict["get_task"].risk_level, RiskLevel.SAFE)
-        self.assertEqual(tool_dict["create_task"].risk_level, RiskLevel.SAFE)
+        self.assertEqual(tool_dict["create_tasks"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
         """Test that update tool is marked as sensitive."""
@@ -217,20 +217,25 @@ class TestTaskToolHandlers(unittest.TestCase):
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
         task_name = "Fix login bug"
-        mock_client.post.return_value = [{"id": "new-task", "task_name": task_name}]
+        mock_client.post.return_value = {
+            "created": [{"id": "new-task", "task_name": task_name}],
+            "failed": [],
+        }
 
-        tool = self.tool_dict["create_task"]
-        args = AgentTaskCreateArgs(
+        tool = self.tool_dict["create_tasks"]
+        item = AgentTaskCreateArgs(
             task_name=task_name,
             due_date=date(2025, 6, 1),
             task_group=TaskGroup.PERSONAL,
         )
+        args = tool.args_model(items=[item])
         result = tool.handler(args)
 
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/notion/tasks")
-        self.assertTrue(result["created"])
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
 
     @patch("src.agent.tools.factory._get_client")
     def test_update_handler(self, mock_get_client: MagicMock) -> None:

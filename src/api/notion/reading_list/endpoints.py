@@ -4,9 +4,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from src.api.notion.common.models import BulkCreateFailure
 from src.api.notion.common.utils import check_duplicate_name, filter_by_fuzzy_name
 from src.api.notion.dependencies import get_notion_client, get_reading_data_source_id
 from src.api.notion.reading_list.models import (
+    ReadingBulkCreateResponse,
     ReadingItemCreateRequest,
     ReadingItemResponse,
     ReadingItemUpdateRequest,
@@ -95,7 +97,7 @@ def get_reading_item(
 
 @router.post(
     "",
-    response_model=list[ReadingItemResponse],
+    response_model=ReadingBulkCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create reading items",
 )
@@ -103,21 +105,26 @@ def create_reading_items(
     requests: list[ReadingItemCreateRequest],
     client: NotionClient = Depends(get_notion_client),
     data_source_id: str = Depends(get_reading_data_source_id),
-) -> list[ReadingItemResponse]:
-    """Create one or more items in the reading list."""
+) -> ReadingBulkCreateResponse:
+    """Create one or more items in the reading list.
+
+    Processes all items and returns both successes and failures.
+    Partial success is possible - some items may be created while others fail.
+    """
     logger.debug(f"Creating {len(requests)} reading items")
-    results: list[ReadingItemResponse] = []
+    created: list[ReadingItemResponse] = []
+    failed: list[BulkCreateFailure] = []
 
     for request in requests:
-        check_duplicate_name(
-            client=client,
-            data_source_id=data_source_id,
-            name_property="Title",
-            complete_status="Completed",
-            new_name=request.title,
-        )
-
         try:
+            check_duplicate_name(
+                client=client,
+                data_source_id=data_source_id,
+                name_property="Title",
+                complete_status="Completed",
+                new_name=request.title,
+            )
+
             properties = build_reading_properties(
                 title=request.title,
                 item_type=request.item_type,
@@ -137,12 +144,13 @@ def create_reading_items(
                 blocks = markdown_to_blocks(request.content)
                 client.append_page_content(item.id, blocks)
 
-            results.append(_reading_to_response(item, content=request.content))
-        except NotionClientError as e:
-            logger.exception(f"Failed to create reading item: {e}")
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+            created.append(_reading_to_response(item, content=request.content))
+        except (NotionClientError, HTTPException) as e:
+            error_msg = e.detail if isinstance(e, HTTPException) else str(e)
+            logger.warning(f"Failed to create reading item '{request.title}': {error_msg}")
+            failed.append(BulkCreateFailure(name=request.title, error=error_msg))
 
-    return results
+    return ReadingBulkCreateResponse(created=created, failed=failed)
 
 
 @router.patch(

@@ -25,7 +25,7 @@ class TestTaskContentBuilding(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test fixtures."""
         self.tools = create_crud_tools(TASK_TOOL_CONFIG)
-        self.create_tool = next(t for t in self.tools if t.name == "create_task")
+        self.create_tool = next(t for t in self.tools if t.name == "create_tasks")
 
     @patch("src.agent.tools.factory._get_client")
     def test_creates_task_successfully(self, mock_get_client: MagicMock) -> None:
@@ -33,18 +33,23 @@ class TestTaskContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "task-123", "task_name": "Test"}]
+        mock_client.post.return_value = {
+            "created": [{"id": "task-123", "task_name": "Test"}],
+            "failed": [],
+        }
 
-        args = AgentTaskCreateArgs(
+        item = AgentTaskCreateArgs(
             task_name="Fix login bug",
             description="Check for common vulnerabilities in the auth module",
             notes="Focus on OWASP top 10",
             due_date=date(2025, 1, 15),
             task_group="Work",
         )
+        args = self.create_tool.args_model(items=[item])
         result = self.create_tool.handler(args)
 
-        self.assertTrue(result["created"])
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
         mock_client.post.assert_called_once()
 
     @patch("src.agent.tools.factory._get_client")
@@ -53,18 +58,19 @@ class TestTaskContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "task-123"}]
+        mock_client.post.return_value = {"created": [{"id": "task-123"}], "failed": []}
 
-        args = AgentTaskCreateArgs(
+        item = AgentTaskCreateArgs(
             task_name="Review Q4 budget proposal from finance",
             description="Review the quarterly budget numbers",
             notes="Check against last year's figures",
             due_date=date(2025, 1, 15),
             task_group="Work",
         )
+        args = self.create_tool.args_model(items=[item])
         self.create_tool.handler(args)
 
-        # Check the payload sent to API (factory wraps in a list)
+        # Check the payload sent to API (items list)
         call_args = mock_client.post.call_args
         payload = call_args[1]["json"][0]
 
@@ -88,16 +94,17 @@ class TestTaskContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "task-123"}]
+        mock_client.post.return_value = {"created": [{"id": "task-123"}], "failed": []}
 
-        args = AgentTaskCreateArgs(
+        item = AgentTaskCreateArgs(
             task_name="Review Q4 budget proposal from finance",
             due_date=date(2025, 1, 15),
             task_group="Work",
         )
+        args = self.create_tool.args_model(items=[item])
         self.create_tool.handler(args)
 
-        # Check the payload sent to API (factory wraps in a list)
+        # Check the payload sent to API (items list)
         call_args = mock_client.post.call_args
         payload = call_args[1]["json"][0]
 
@@ -114,7 +121,7 @@ class TestReadingListContentBuilding(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test fixtures."""
         self.tools = create_crud_tools(READING_LIST_TOOL_CONFIG)
-        self.create_tool = next(t for t in self.tools if t.name == "create_reading_item")
+        self.create_tool = next(t for t in self.tools if t.name == "create_reading_list")
 
     @patch("src.agent.tools.factory._get_client")
     def test_creates_reading_item_successfully(self, mock_get_client: MagicMock) -> None:
@@ -122,16 +129,18 @@ class TestReadingListContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "item-123"}]
+        mock_client.post.return_value = {"created": [{"id": "item-123"}], "failed": []}
 
-        args = AgentReadingItemCreateArgs(
+        item = AgentReadingItemCreateArgs(
             title="Clean Code",
             item_type=ReadingType.BOOK,
             notes="Recommended by colleague",
         )
+        args = self.create_tool.args_model(items=[item])
         result = self.create_tool.handler(args)
 
-        self.assertTrue(result["created"])
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
 
     @patch("src.agent.tools.factory._get_client")
     def test_reading_item_content_includes_notes(self, mock_get_client: MagicMock) -> None:
@@ -139,16 +148,17 @@ class TestReadingListContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "item-123"}]
+        mock_client.post.return_value = {"created": [{"id": "item-123"}], "failed": []}
 
-        args = AgentReadingItemCreateArgs(
+        item = AgentReadingItemCreateArgs(
             title="Clean Code",
             item_type=ReadingType.BOOK,
             notes="Recommended by colleague",
         )
+        args = self.create_tool.args_model(items=[item])
         self.create_tool.handler(args)
 
-        # Check the payload sent to API (factory wraps in a list)
+        # Check the payload sent to API (items list)
         call_args = mock_client.post.call_args
         payload = call_args[1]["json"][0]
 
@@ -163,7 +173,7 @@ class TestGoalContentBuilding(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test fixtures."""
         self.tools = create_crud_tools(GOAL_TOOL_CONFIG)
-        self.create_tool = next(t for t in self.tools if t.name == "create_goal")
+        self.create_tool = next(t for t in self.tools if t.name == "create_goals")
 
     @patch("src.agent.tools.factory._get_client")
     def test_creates_goal_successfully(self, mock_get_client: MagicMock) -> None:
@@ -171,15 +181,17 @@ class TestGoalContentBuilding(unittest.TestCase):
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = [{"id": "goal-123"}]
+        mock_client.post.return_value = {"created": [{"id": "goal-123"}], "failed": []}
 
-        args = AgentGoalCreateArgs(
+        item = AgentGoalCreateArgs(
             goal_name="Run a half marathon by June 2025",
             description="Train for and complete a half marathon",
         )
+        args = self.create_tool.args_model(items=[item])
         result = self.create_tool.handler(args)
 
-        self.assertTrue(result["created"])
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["failed"], 0)
 
 
 if __name__ == "__main__":

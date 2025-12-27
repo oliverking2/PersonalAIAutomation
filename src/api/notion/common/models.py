@@ -22,3 +22,10 @@ class QueryResponse(BaseModel):
         default_factory=list,
         description="List of all pages matching the query",
     )
+
+
+class BulkCreateFailure(BaseModel):
+    """Details of a failed item in bulk creation."""
+
+    name: str = Field(..., description="Name/title of the item that failed")
+    error: str = Field(..., description="Error message describing why creation failed")
