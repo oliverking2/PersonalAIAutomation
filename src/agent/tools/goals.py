@@ -11,11 +11,12 @@ from src.agent.tools.factory import CRUDToolConfig, create_crud_tools
 from src.agent.tools.models import AgentGoalCreateArgs, AgentGoalUpdateArgs
 from src.agent.utils.templates import build_goal_content
 from src.api.notion.goals.models import GoalQueryRequest
-from src.notion.enums import GoalStatus, Priority
+from src.notion.enums import GoalCategory, GoalStatus, Priority
 
 # Build descriptions with enum options
 _status_options = ", ".join(GoalStatus)
 _priority_options = ", ".join(Priority)
+_category_options = ", ".join(GoalCategory)
 
 
 def _build_goal_content(args: BaseModel) -> str:
@@ -36,6 +37,7 @@ GOAL_TOOL_CONFIG = CRUDToolConfig(
     enum_fields={
         "status": GoalStatus,
         "priority": Priority,
+        "category": GoalCategory,
     },
     tags=frozenset({"goals"}),
     content_builder=_build_goal_content,
@@ -43,7 +45,8 @@ GOAL_TOOL_CONFIG = CRUDToolConfig(
         f"Query goals from the goals tracker. Use name_filter for fuzzy search "
         f"by goal name (e.g. 'fitness' matches 'Improve fitness'). "
         f"By default excludes completed goals; set include_done=true to include them. "
-        f"Can also filter by status ({_status_options}) and priority ({_priority_options}). "
+        f"Can filter by status ({_status_options}), priority ({_priority_options}), "
+        f"or category ({_category_options}). "
         f"Response includes fuzzy_match_quality ('good' or 'weak') - ask for clarification if 'weak'. "
         f"Does NOT return page content; use get_goal to retrieve a goal's content."
     ),
@@ -60,12 +63,12 @@ GOAL_TOOL_CONFIG = CRUDToolConfig(
         f"If vague, ask the user for more details. "
         f"Title case the goal name. "
         f"Optional: description, notes, status ({_status_options}), "
-        f"priority ({_priority_options}), progress (0-100), due_date."
+        f"priority ({_priority_options}), category ({_category_options}), progress (0-100), due_date."
     ),
     update_description=(
         f"Update an existing goal. Requires the goal_id. "
         f"Can update goal name, status ({_status_options}), "
-        f"priority ({_priority_options}), progress, or due date. "
+        f"priority ({_priority_options}), category ({_category_options}), progress, or due date. "
         f"Use description/notes to update page content; omit to keep existing."
     ),
 )

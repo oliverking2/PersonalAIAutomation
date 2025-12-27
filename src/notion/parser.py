@@ -46,6 +46,7 @@ GOAL_FIELDS: dict[str, TaskField] = {
     "goal_name": TaskField("Goal name", FieldType.TITLE),
     "status": TaskField("Status", FieldType.STATUS),
     "priority": TaskField("Priority", FieldType.SELECT),
+    "category": TaskField("Category", FieldType.SELECT),
     "progress": TaskField("Progress", FieldType.NUMBER),
     "due_date": TaskField("Due date", FieldType.DATE),
 }
@@ -100,6 +101,7 @@ def parse_page_to_goal(page: dict[str, Any]) -> NotionGoal:
         goal_name=_extract_title(properties.get("Goal name", {})),
         status=_extract_status(properties.get("Status", {})),
         priority=_extract_select(properties.get("Priority", {})),
+        category=_extract_select(properties.get("Category", {})),
         progress=_extract_number(properties.get("Progress", {})),
         due_date=_extract_date(properties.get("Due date", {})),
         notion_url=page.get("url", ""),

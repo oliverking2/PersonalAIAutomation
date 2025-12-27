@@ -120,6 +120,7 @@ def create_goal(
             goal_name=request.goal_name,
             status=request.status,
             priority=request.priority,
+            category=request.category,
             progress=request.progress,
             due_date=request.due_date,
         )
@@ -169,6 +170,7 @@ def update_goal(
             goal_name=request.goal_name,
             status=request.status,
             priority=request.priority,
+            category=request.category,
             progress=request.progress,
             due_date=request.due_date,
         )
@@ -225,6 +227,9 @@ def _build_goal_filter(request: GoalQueryRequest) -> dict[str, object] | None:
     if request.priority:
         conditions.append({"property": "Priority", "select": {"equals": request.priority.value}})
 
+    if request.category:
+        conditions.append({"property": "Category", "select": {"equals": request.category.value}})
+
     if request.due_before:
         conditions.append(
             {"property": "Due date", "date": {"before": request.due_before.isoformat()}}
@@ -254,6 +259,7 @@ def _goal_to_response(goal: NotionGoal, content: str | None = None) -> GoalRespo
         goal_name=goal.goal_name,
         status=goal.status,
         priority=goal.priority,
+        category=goal.category,
         progress=goal.progress,
         due_date=goal.due_date,
         notion_url=goal.notion_url,

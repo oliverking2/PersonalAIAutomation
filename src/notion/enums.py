@@ -43,6 +43,14 @@ class GoalStatus(StrEnum):
     DONE = "Done"
 
 
+class GoalCategory(StrEnum):
+    """Valid category values for goals."""
+
+    RUNNING = "Running"
+    PERSONAL_DEVELOPMENT = "Personal Development"
+    OTHER = "Other"
+
+
 class ReadingStatus(StrEnum):
     """Valid status values for reading list items."""
 

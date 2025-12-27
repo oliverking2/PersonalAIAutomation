@@ -5,7 +5,7 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 from src.api.notion.common.utils import FuzzyMatchQuality
-from src.notion.enums import GoalStatus, Priority
+from src.notion.enums import GoalCategory, GoalStatus, Priority
 
 
 class GoalResponse(BaseModel):
@@ -15,6 +15,7 @@ class GoalResponse(BaseModel):
     goal_name: str = Field(..., description="Goal title")
     status: str | None = Field(None, description="Goal status")
     priority: str | None = Field(None, description="Goal priority")
+    category: str | None = Field(None, description="Goal category")
     progress: float | None = Field(None, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
     notion_url: str = Field(..., description="Notion page URL")
@@ -30,6 +31,9 @@ class GoalCreateRequest(BaseModel):
         description=f"Goal status (default: {GoalStatus.NOT_STARTED}) ({', '.join(GoalStatus)})",
     )
     priority: Priority | None = Field(None, description=f"Goal priority ({', '.join(Priority)})")
+    category: GoalCategory | None = Field(
+        None, description=f"Goal category ({', '.join(GoalCategory)})"
+    )
     progress: float | None = Field(None, ge=0, le=100, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
     content: str | None = Field(None, description="Markdown content for the goal page body")
@@ -41,6 +45,9 @@ class GoalUpdateRequest(BaseModel):
     goal_name: str | None = Field(None, min_length=1, description="Goal title")
     status: GoalStatus | None = Field(None, description=f"Goal status ({', '.join(GoalStatus)})")
     priority: Priority | None = Field(None, description=f"Goal priority ({', '.join(Priority)})")
+    category: GoalCategory | None = Field(
+        None, description=f"Goal category ({', '.join(GoalCategory)})"
+    )
     progress: float | None = Field(None, ge=0, le=100, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
     content: str | None = Field(
@@ -62,6 +69,9 @@ class GoalQueryRequest(BaseModel):
     )
     priority: Priority | None = Field(
         None, description=f"Filter by priority ({', '.join(Priority)})"
+    )
+    category: GoalCategory | None = Field(
+        None, description=f"Filter by category ({', '.join(GoalCategory)})"
     )
     due_before: date | None = Field(
         None, description="Filter goals due before this date (exclusive)"

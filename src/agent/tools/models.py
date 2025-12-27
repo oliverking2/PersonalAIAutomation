@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from src.notion.enums import (
     EffortLevel,
+    GoalCategory,
     GoalStatus,
     IdeaGroup,
     IdeaStatus,
@@ -81,6 +82,10 @@ class AgentGoalCreateArgs(BaseModel):
     priority: Priority | None = Field(
         default=Priority.LOW,
         description=f"Goal priority (default: {Priority.LOW})",
+    )
+    category: GoalCategory | None = Field(
+        None,
+        description=f"Goal category ({', '.join(GoalCategory)})",
     )
     progress: int | None = Field(
         default=0,
@@ -182,6 +187,10 @@ class AgentGoalUpdateArgs(BaseModel):
     priority: Priority | None = Field(
         None,
         description=f"Goal priority ({', '.join(Priority)})",
+    )
+    category: GoalCategory | None = Field(
+        None,
+        description=f"Goal category ({', '.join(GoalCategory)})",
     )
     progress: int | None = Field(
         None,

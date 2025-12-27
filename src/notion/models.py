@@ -65,6 +65,7 @@ class NotionGoal(BaseModel):
     goal_name: str = Field(..., min_length=1, description="Goal title")
     status: str | None = Field(None, description="Goal status")
     priority: str | None = Field(None, description="Goal priority level")
+    category: str | None = Field(None, description="Goal category")
     progress: float | None = Field(None, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
     notion_url: str = Field(..., description="Notion page URL")
