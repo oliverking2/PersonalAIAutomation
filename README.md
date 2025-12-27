@@ -262,7 +262,7 @@ Two-way conversational interface for interacting with the AI agent via Telegram.
 #### Running the Bot
 Start the polling bot:
 ```bash
-poetry run python -m src.telegram.polling
+poetry run python -m src.telegram
 ```
 
 #### Features
