@@ -581,9 +581,46 @@ class AgentRunner:
                 state.steps_taken += 1
             elif stop_reason == "end_turn":
                 return self._build_final_result(response, state, "end_turn", conv_state)
+            elif stop_reason == "max_tokens":
+                return self._handle_max_tokens(state, conv_state)
             else:
                 logger.warning(f"Unexpected stop reason: {stop_reason}")
                 return self._build_final_result(response, state, stop_reason, conv_state)
+
+    def _handle_max_tokens(
+        self,
+        state: _RunState,
+        conv_state: ConversationState | None,
+    ) -> AgentRunResult:
+        """Handle when the LLM response was truncated due to max_tokens limit.
+
+        This occurs when the model tries to generate more content (typically
+        multiple tool calls) than the max_tokens limit allows. Rather than
+        returning a partial/misleading response, we inform the user clearly.
+
+        :param state: Current run state.
+        :param conv_state: Conversation state for context.
+        :returns: AgentRunResult with error message.
+        """
+        logger.warning(
+            f"Response truncated due to max_tokens limit: "
+            f"max_tokens={self._config.max_tokens}, steps={state.steps_taken}"
+        )
+
+        error_message = (
+            "Your request requires more processing than I can handle in one go. "
+            "Please try breaking it into smaller parts (e.g., add 3-4 items at a time)."
+        )
+
+        # Don't save partial state - the conversation is in an inconsistent state
+        # The user should retry with a simpler request
+
+        return AgentRunResult(
+            response=error_message,
+            tool_calls=state.tool_calls,
+            steps_taken=state.steps_taken,
+            stop_reason="max_tokens",
+        )
 
     def _call_llm(
         self,
@@ -600,6 +637,7 @@ class AgentRunner:
                 model_id=self._config.chat_model,
                 system_prompt=formatted_prompt,
                 tool_config=tool_config,
+                max_tokens=self._config.max_tokens,
                 cache_system_prompt=True,
             )
         except BedrockClientError:

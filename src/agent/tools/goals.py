@@ -50,7 +50,7 @@ GOAL_TOOL_CONFIG = CRUDToolConfig(
     get_description=(
         "Get details of a specific goal by its ID. "
         "Returns goal name, status, priority, progress, due date, "
-        "and page content (in markdown format)."
+        "notion_url (link to Notion page), and page content (in markdown format)."
     ),
     create_description=(
         f"Create a new goal. Required: goal_name. "

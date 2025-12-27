@@ -20,14 +20,17 @@ MIN_KEYWORD_LENGTH = 3
 # Number of retries for AI selection before falling back
 DEFAULT_MAX_RETRIES = 3
 
-TOOL_SELECTION_SYSTEM_PROMPT = """You are a tool selector. Given a user request and a list of available tools, select the most relevant tools that should be exposed to handle the request.
+TOOL_SELECTION_SYSTEM_PROMPT = """You are a tool selector. Given a user request and a list of available tools, select which tool types should be made available to handle the request.
+
+IMPORTANT: You are selecting which TYPES of tools to expose, not how many times they will be called. The agent can call any selected tool multiple times. For example, if the user wants to add 10 reading items, just select "create_reading_item" once - the agent will call it 10 times as needed.
 
 Rules:
 1. Select only tools that are directly relevant to the user's intent
-2. Prefer SAFE tools over SENSITIVE tools unless the user clearly wants to modify data
-3. Order tools by relevance (most relevant first)
-4. Select at most {max_tools} tools
-5. If no tools are relevant, return an empty list
+2. Each tool should appear at most ONCE in your list (no duplicates)
+3. Prefer SAFE tools over SENSITIVE tools unless the user clearly wants to modify data
+4. Order tools by relevance (most relevant first)
+5. Select at most {max_tools} different tool types
+6. If no tools are relevant, return an empty list
 
 Available tools:
 {tool_descriptions}
@@ -127,8 +130,11 @@ class ToolSelector:
             tool_names = data.get("tool_names", [])
             reasoning = data.get("reasoning", "")
 
-            # Filter to only valid tools and respect max limit
-            valid_tools = [name for name in tool_names if name in available_tools][: self.max_tools]
+            # Filter to only valid tools, deduplicate, and respect max limit
+            # Using dict.fromkeys() preserves order while removing duplicates
+            valid_tools = list(
+                dict.fromkeys(name for name in tool_names if name in available_tools)
+            )[: self.max_tools]
 
             return ToolSelectionResult(
                 tool_names=valid_tools,

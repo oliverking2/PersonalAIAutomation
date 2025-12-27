@@ -40,7 +40,7 @@ def _page_to_response(task: NotionTask) -> PageResponse:
         status=task.status,
         due_date=task.due_date,
         priority=task.priority,
-        url=task.url,
+        notion_url=task.notion_url,
     )
 
 

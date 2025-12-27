@@ -55,7 +55,7 @@ TASK_TOOL_CONFIG = CRUDToolConfig(
     get_description=(
         "Get details of a specific task by its ID. "
         "Returns task name, status, due date, priority, effort level, task group, "
-        "and page content (in markdown format)."
+        "notion_url (link to Notion page), and page content (in markdown format)."
     ),
     create_description=(
         f"Create a new task. Required: task_name, task_group ({_group_options}), due_date. "

@@ -20,7 +20,7 @@ class NotionTask(BaseModel):
     effort_level: str | None = Field(None, description="Task effort level")
     task_group: str | None = Field(None, description="Work or Personal category")
     assignee: str | None = Field(None, description="Assigned user name")
-    url: str = Field(..., description="Notion page URL")
+    notion_url: str = Field(..., description="Notion page URL")
 
 
 class TaskFilter(BaseModel):
@@ -67,7 +67,7 @@ class NotionGoal(BaseModel):
     priority: str | None = Field(None, description="Goal priority level")
     progress: float | None = Field(None, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
-    url: str = Field(..., description="Notion page URL")
+    notion_url: str = Field(..., description="Notion page URL")
 
 
 class NotionReadingItem(BaseModel):
@@ -84,4 +84,17 @@ class NotionReadingItem(BaseModel):
     category: str | None = Field(None, description="Reading category")
     item_url: str | None = Field(None, description="URL of the article/book")
     read_date: date | None = Field(None, description="Date read")
-    url: str = Field(..., description="Notion page URL")
+    notion_url: str = Field(..., description="Notion page URL")
+
+
+class NotionIdea(BaseModel):
+    """An idea from Notion with parsed properties.
+
+    Represents a page from the ideas data source
+    with idea-specific properties extracted and normalised.
+    """
+
+    id: str = Field(..., min_length=1, description="Notion page ID")
+    idea: str = Field(..., min_length=1, description="Idea title")
+    idea_group: str | None = Field(None, description="Idea group (Work/Personal)")
+    notion_url: str = Field(..., description="Notion page URL")

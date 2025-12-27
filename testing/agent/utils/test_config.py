@@ -71,6 +71,7 @@ class TestAgentConfig(unittest.TestCase):
         self.assertEqual(config.max_steps, 5)
         self.assertEqual(config.selector_model, "haiku")
         self.assertEqual(config.chat_model, "sonnet")
+        self.assertEqual(config.max_tokens, 4096)
         self.assertEqual(config.window_size, 15)
         self.assertEqual(config.batch_threshold, 5)
         self.assertEqual(config.max_classification_retries, 2)
@@ -81,6 +82,7 @@ class TestAgentConfig(unittest.TestCase):
             max_steps=10,
             selector_model="sonnet",
             chat_model="opus",
+            max_tokens=8192,
             window_size=20,
             batch_threshold=10,
             max_classification_retries=5,
@@ -89,6 +91,7 @@ class TestAgentConfig(unittest.TestCase):
         self.assertEqual(config.max_steps, 10)
         self.assertEqual(config.selector_model, "sonnet")
         self.assertEqual(config.chat_model, "opus")
+        self.assertEqual(config.max_tokens, 8192)
         self.assertEqual(config.window_size, 20)
         self.assertEqual(config.batch_threshold, 10)
         self.assertEqual(config.max_classification_retries, 5)
@@ -133,6 +136,7 @@ class TestDefaultAgentConfig(unittest.TestCase):
         self.assertEqual(DEFAULT_AGENT_CONFIG.max_steps, 5)
         self.assertEqual(DEFAULT_AGENT_CONFIG.selector_model, "haiku")
         self.assertEqual(DEFAULT_AGENT_CONFIG.chat_model, "sonnet")
+        self.assertEqual(DEFAULT_AGENT_CONFIG.max_tokens, 4096)
         self.assertEqual(DEFAULT_AGENT_CONFIG.window_size, 15)
         self.assertEqual(DEFAULT_AGENT_CONFIG.batch_threshold, 5)
         self.assertEqual(DEFAULT_AGENT_CONFIG.max_classification_retries, 2)

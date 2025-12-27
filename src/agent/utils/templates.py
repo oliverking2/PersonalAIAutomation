@@ -61,3 +61,19 @@ def build_reading_item_content(notes: str | None = None) -> str:
 
     lines.extend(["", "---", f"Added via AI Agent on {date.today()}"])
     return "\n".join(lines)
+
+
+def build_idea_content(notes: str | None = None) -> str:
+    """Build markdown content for an idea page.
+
+    :param notes: Details, context, or elaboration on the idea.
+    :returns: Formatted markdown string.
+    """
+    lines = ["## Details"]
+    if notes:
+        lines.append(notes)
+    else:
+        lines.append("(Add details here)")
+
+    lines.extend(["", "---", f"Captured via AI Agent on {date.today()}"])
+    return "\n".join(lines)

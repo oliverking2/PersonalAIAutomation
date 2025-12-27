@@ -49,6 +49,8 @@ class AgentConfig:
     :param max_steps: Maximum number of tool execution steps per run.
     :param selector_model: Default model alias for tool selection.
     :param chat_model: Default model alias for chat/tool execution.
+    :param max_tokens: Maximum tokens in LLM response. Higher values allow more
+        tool calls per response (each tool call requires ~100-200 tokens).
     :param window_size: Number of recent messages to keep in full (sliding window).
     :param batch_threshold: Messages above window before summarisation triggers.
     :param max_classification_retries: Maximum retries for confirmation classification.
@@ -60,6 +62,7 @@ class AgentConfig:
     max_steps: int = 5
     selector_model: str = "haiku"
     chat_model: str = "sonnet"
+    max_tokens: int = 4096
 
     # Context management
     window_size: int = 15

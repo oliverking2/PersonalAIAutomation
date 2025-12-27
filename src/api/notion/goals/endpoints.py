@@ -246,6 +246,6 @@ def _goal_to_response(goal: NotionGoal, content: str | None = None) -> GoalRespo
         priority=goal.priority,
         progress=goal.progress,
         due_date=goal.due_date,
-        url=goal.url,
+        notion_url=goal.notion_url,
         content=content,
     )

@@ -19,7 +19,7 @@ class TaskResponse(BaseModel):
     effort_level: str | None = Field(None, description="Task effort level")
     task_group: str | None = Field(None, description="Work or Personal category")
     assignee: str | None = Field(None, description="Assigned user name")
-    url: str = Field(..., description="Notion page URL")
+    notion_url: str = Field(..., description="Notion page URL")
     content: str | None = Field(None, description="Page content in markdown format")
 
 

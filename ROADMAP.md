@@ -1,7 +1,6 @@
 # Roadmap
 
 ## Notion
-- Idea Tracker - ensure there is a decent description of the idea
 
 ## Orchestration
 

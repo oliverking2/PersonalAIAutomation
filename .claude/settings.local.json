@@ -14,7 +14,8 @@
       "Bash(poetry run python:*)",
       "Bash(make check:*)",
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "Bash(tree:*)"
     ]
   }
 }

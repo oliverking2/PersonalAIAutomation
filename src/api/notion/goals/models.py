@@ -17,7 +17,7 @@ class GoalResponse(BaseModel):
     priority: str | None = Field(None, description="Goal priority")
     progress: float | None = Field(None, description="Goal progress (0-100)")
     due_date: date | None = Field(None, description="Goal due date")
-    url: str = Field(..., description="Notion page URL")
+    notion_url: str = Field(..., description="Notion page URL")
     content: str | None = Field(None, description="Page content in markdown format")
 
 

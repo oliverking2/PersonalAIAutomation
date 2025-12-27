@@ -9,7 +9,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Any
 
-from src.notion.models import NotionGoal, NotionReadingItem, NotionTask, TaskFilter
+from src.notion.models import NotionGoal, NotionIdea, NotionReadingItem, NotionTask, TaskFilter
 
 
 class FieldType(StrEnum):
@@ -59,6 +59,11 @@ READING_FIELDS: dict[str, TaskField] = {
     "read_date": TaskField("Read Date", FieldType.DATE),
 }
 
+IDEA_FIELDS: dict[str, TaskField] = {
+    "idea": TaskField("Idea", FieldType.TITLE),
+    "idea_group": TaskField("Idea Group", FieldType.SELECT),
+}
+
 
 def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
     """Parse a Notion page response into a NotionTask model.
@@ -77,7 +82,7 @@ def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
         effort_level=_extract_select(properties.get("Effort level", {})),
         task_group=_extract_select(properties.get("Task Group", {})),
         assignee=_extract_people(properties.get("Assignee", {})),
-        url=page.get("url", ""),
+        notion_url=page.get("url", ""),
     )
 
 
@@ -96,7 +101,7 @@ def parse_page_to_goal(page: dict[str, Any]) -> NotionGoal:
         priority=_extract_select(properties.get("Priority", {})),
         progress=_extract_number(properties.get("Progress", {})),
         due_date=_extract_date(properties.get("Due date", {})),
-        url=page.get("url", ""),
+        notion_url=page.get("url", ""),
     )
 
 
@@ -116,7 +121,23 @@ def parse_page_to_reading_item(page: dict[str, Any]) -> NotionReadingItem:
         category=_extract_select(properties.get("Category", {})),
         item_url=_extract_url(properties.get("URL", {})),
         read_date=_extract_date(properties.get("Read Date", {})),
-        url=page.get("url", ""),
+        notion_url=page.get("url", ""),
+    )
+
+
+def parse_page_to_idea(page: dict[str, Any]) -> NotionIdea:
+    """Parse a Notion page response into a NotionIdea model.
+
+    :param page: Raw page object from Notion API response.
+    :returns: Parsed NotionIdea with extracted properties.
+    """
+    properties = page.get("properties", {})
+
+    return NotionIdea(
+        id=page["id"],
+        idea=_extract_title(properties.get("Idea", {})),
+        idea_group=_extract_select(properties.get("Idea Group", {})),
+        notion_url=page.get("url", ""),
     )
 
 
@@ -296,3 +317,13 @@ def build_reading_properties(**kwargs: Any) -> dict[str, Any]:
     :raises ValueError: If an unknown field name is provided.
     """
     return _build_properties(READING_FIELDS, **kwargs)
+
+
+def build_idea_properties(**kwargs: Any) -> dict[str, Any]:
+    """Build idea properties payload from keyword arguments.
+
+    :param kwargs: Field name to value mappings.
+    :returns: Combined properties object for the Notion API.
+    :raises ValueError: If an unknown field name is provided.
+    """
+    return _build_properties(IDEA_FIELDS, **kwargs)

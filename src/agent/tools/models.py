@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from src.notion.enums import (
     EffortLevel,
     GoalStatus,
+    IdeaGroup,
     Priority,
     ReadingCategory,
     ReadingStatus,
@@ -100,7 +101,7 @@ class AgentReadingItemCreateArgs(BaseModel):
         None,
         description="Why this was added or initial thoughts",
     )
-    url: str | None = Field(None, description="URL of the article, book, or resource")
+    item_url: str | None = Field(None, description="URL of the article, book, or resource to read")
     status: ReadingStatus | None = Field(
         default=ReadingStatus.TO_READ,
         description=f"Reading status (default: {ReadingStatus.TO_READ})",
@@ -198,7 +199,7 @@ class AgentReadingItemUpdateArgs(BaseModel):
         None,
         description="Notes or thoughts about this item",
     )
-    url: str | None = Field(None, description="URL of the article, book, or resource")
+    item_url: str | None = Field(None, description="URL of the article, book, or resource to read")
     status: ReadingStatus | None = Field(
         None,
         description=f"Reading status ({', '.join(ReadingStatus)})",
@@ -212,3 +213,44 @@ class AgentReadingItemUpdateArgs(BaseModel):
         description=f"Content category ({', '.join(ReadingCategory)})",
     )
     read_date: date | None = Field(None, description="Date when item was read")
+
+
+class AgentIdeaCreateArgs(BaseModel):
+    """Agent arguments for creating an idea.
+
+    Uses notes instead of raw content.
+    The tool handler builds formatted content from this field.
+    """
+
+    idea: str = Field(
+        ...,
+        min_length=1,
+        description="Descriptive idea title (should convey the core concept)",
+    )
+    notes: str = Field(
+        ...,
+        min_length=1,
+        description="Details, context, and elaboration on the idea (required)",
+    )
+    idea_group: IdeaGroup | None = Field(
+        None,
+        description=f"Idea group ({', '.join(IdeaGroup)})",
+    )
+
+
+class AgentIdeaUpdateArgs(BaseModel):
+    """Agent arguments for updating an idea.
+
+    Uses notes instead of raw content.
+    If provided, the tool handler builds formatted content from this field.
+    """
+
+    idea: str | None = Field(None, min_length=1, description="Idea title or summary")
+    notes: str | None = Field(
+        None,
+        description="Additional details, context, or elaboration on the idea",
+    )
+    idea_group: IdeaGroup | None = Field(
+        None,
+        description=f"Idea group ({', '.join(IdeaGroup)})",
+    )

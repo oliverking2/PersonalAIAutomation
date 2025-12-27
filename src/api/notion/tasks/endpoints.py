@@ -260,6 +260,6 @@ def _task_to_response(task: NotionTask, content: str | None = None) -> TaskRespo
         effort_level=task.effort_level,
         task_group=task.task_group,
         assignee=task.assignee,
-        url=task.url,
+        notion_url=task.notion_url,
         content=content,
     )

@@ -234,8 +234,8 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         """Test that create_default_registry creates a populated registry."""
         registry = create_default_registry()
 
-        # Should have 12 tools: 4 reading + 4 goals + 4 tasks
-        self.assertEqual(len(registry), 12)
+        # Should have 16 tools: 4 reading + 4 goals + 4 tasks + 4 ideas
+        self.assertEqual(len(registry), 16)
 
     def test_contains_reading_list_tools(self) -> None:
         """Test that registry contains reading list tools."""
@@ -264,6 +264,15 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         self.assertIn("create_task", registry)
         self.assertIn("update_task", registry)
 
+    def test_contains_ideas_tools(self) -> None:
+        """Test that registry contains ideas tools."""
+        registry = create_default_registry()
+
+        self.assertIn("query_ideas", registry)
+        self.assertIn("get_idea", registry)
+        self.assertIn("create_idea", registry)
+        self.assertIn("update_idea", registry)
+
     def test_tools_can_be_retrieved(self) -> None:
         """Test that tools can be retrieved from the registry."""
         registry = create_default_registry()
@@ -280,10 +289,12 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         reading_tools = registry.filter_by_tags({"reading"})
         goals_tools = registry.filter_by_tags({"goals"})
         tasks_tools = registry.filter_by_tags({"tasks"})
+        ideas_tools = registry.filter_by_tags({"ideas"})
 
         self.assertEqual(len(reading_tools), 4)
         self.assertEqual(len(goals_tools), 4)
         self.assertEqual(len(tasks_tools), 4)
+        self.assertEqual(len(ideas_tools), 4)
 
 
 if __name__ == "__main__":

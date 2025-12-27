@@ -58,3 +58,10 @@ class ReadingCategory(StrEnum):
     DATA_SCIENCE = "Data Science"
     DATA_ENGINEERING = "Data Engineering"
     AI = "AI"
+
+
+class IdeaGroup(StrEnum):
+    """Valid group values for ideas."""
+
+    WORK = "Work"
+    PERSONAL = "Personal"

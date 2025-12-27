@@ -51,3 +51,8 @@ def get_goals_data_source_id() -> str:
 def get_reading_data_source_id() -> str:
     """Get the configured reading list data source ID from environment."""
     return _get_env_or_error("NOTION_READING_LIST_DATA_SOURCE_ID")
+
+
+def get_ideas_data_source_id() -> str:
+    """Get the configured ideas data source ID from environment."""
+    return _get_env_or_error("NOTION_IDEAS_DATA_SOURCE_ID")

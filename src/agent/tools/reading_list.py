@@ -51,8 +51,8 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
     ),
     get_description=(
         "Get details of a specific reading list item by its ID. "
-        "Returns title, status, priority, category, URL, read date, "
-        "and page content (in markdown format)."
+        "Returns title, status, priority, category, item_url (article/resource link), "
+        "notion_url (link to Notion page), read date, and page content (in markdown format)."
     ),
     create_description=(
         f"Create a new reading list item. Required: title. "
@@ -60,13 +60,13 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
         f"Too vague: 'Article', 'Book', 'Blog post'. "
         f"Better: 'Clean Code by Robert Martin', 'React hooks tutorial', 'NYT article on AI'. "
         f"If vague, ask the user for the title or URL. "
-        f"Optional: notes, url, status ({_status_options}), "
+        f"Optional: notes, item_url (article/resource URL), status ({_status_options}), "
         f"priority ({_priority_options}), category ({_category_options})."
     ),
     update_description=(
         f"Update an existing reading list item. Requires the item_id. "
         f"Can update title, status ({_status_options}), priority ({_priority_options}), "
-        f"category ({_category_options}), URL, or read date. "
+        f"category ({_category_options}), item_url, or read date. "
         f"Use notes to update page content; omit to keep existing."
     ),
 )

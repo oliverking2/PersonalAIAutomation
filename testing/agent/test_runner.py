@@ -108,7 +108,7 @@ class TestAgentRunner(unittest.TestCase):
 
     def test_init_with_custom_values(self) -> None:
         """Test initialisation with custom values."""
-        custom_config = AgentConfig(max_steps=10)
+        custom_config = AgentConfig(max_steps=10, max_tokens=8192)
         runner = AgentRunner(
             registry=self.registry,
             client=self.mock_client,
@@ -119,6 +119,7 @@ class TestAgentRunner(unittest.TestCase):
 
         self.assertEqual(runner.system_prompt, "Custom prompt")
         self.assertEqual(runner._config.max_steps, 10)
+        self.assertEqual(runner._config.max_tokens, 8192)
         self.assertFalse(runner.require_confirmation)
 
     @patch("src.agent.runner.complete_agent_run")
@@ -530,6 +531,85 @@ class TestAgentRunner(unittest.TestCase):
         self.assertEqual(len(result.tool_calls), 1)
         self.assertTrue(result.tool_calls[0].is_error)
         self.assertIn("Unknown tool", result.tool_calls[0].output["error"])
+
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_handles_max_tokens_stop_reason(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
+        """Test that max_tokens stop reason returns user-friendly error."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        self.mock_client.create_user_message.return_value = {
+            "role": "user",
+            "content": [{"text": "Add 20 reading items"}],
+        }
+
+        # Model response is truncated due to max_tokens
+        truncated_response = {
+            "output": {
+                "message": {"content": [{"text": "I'll add all these reading items for you..."}]}
+            },
+            "stopReason": "max_tokens",
+        }
+
+        self.mock_client.converse.return_value = truncated_response
+        self.mock_client.get_stop_reason.return_value = "max_tokens"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        result = runner.run("Add 20 reading items", self.mock_session, tool_names=["safe_tool"])
+
+        self.assertEqual(result.stop_reason, "max_tokens")
+        self.assertIn("breaking it into smaller parts", result.response)
+        self.assertEqual(result.tool_calls, [])
+        self.assertEqual(result.steps_taken, 0)
+
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_passes_max_tokens_to_converse(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+    ) -> None:
+        """Test that max_tokens config is passed to converse call."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        self.mock_client.create_user_message.return_value = {
+            "role": "user",
+            "content": [{"text": "Hello"}],
+        }
+        self.mock_client.converse.return_value = {
+            "output": {"message": {"content": [{"text": "Hi there!"}]}},
+            "stopReason": "end_turn",
+        }
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = "Hi there!"
+
+        custom_config = AgentConfig(max_tokens=8192)
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+            config=custom_config,
+        )
+
+        runner.run("Hello", self.mock_session, tool_names=["safe_tool"])
+
+        # Verify converse was called with max_tokens from config
+        self.mock_client.converse.assert_called()
+        call_kwargs = self.mock_client.converse.call_args.kwargs
+        self.assertEqual(call_kwargs["max_tokens"], 8192)
 
     @patch("src.agent.runner.save_conversation_state")
     @patch("src.agent.runner.complete_agent_run")

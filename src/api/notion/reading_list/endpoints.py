@@ -254,6 +254,6 @@ def _reading_to_response(
         category=item.category,
         item_url=item.item_url,
         read_date=item.read_date,
-        url=item.url,
+        notion_url=item.notion_url,
         content=content,
     )

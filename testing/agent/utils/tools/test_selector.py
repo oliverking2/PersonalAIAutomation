@@ -120,6 +120,32 @@ class TestToolSelector(unittest.TestCase):
 
         self.assertEqual(len(result.tool_names), 5)
 
+    def test_select_deduplicates_tool_names(self) -> None:
+        """Test that duplicate tool names are removed while preserving order."""
+        self.mock_client.create_user_message.return_value = {
+            "role": "user",
+            "content": [{"text": "test"}],
+        }
+        self.mock_client.converse.return_value = {"output": {"message": {}}}
+        # LLM mistakenly returns the same tool multiple times
+        self.mock_client.parse_text_response.return_value = json.dumps(
+            {
+                "tool_names": [
+                    "query_items",
+                    "query_items",
+                    "query_items",
+                    "delete_item",
+                    "query_items",
+                ],
+                "reasoning": "User wants to query multiple items",
+            }
+        )
+
+        result = self.selector.select("Add 10 items to my reading list")
+
+        # Should deduplicate to unique tools only
+        self.assertEqual(result.tool_names, ["query_items", "delete_item"])
+
     def test_select_handles_markdown_code_block(self) -> None:
         """Test parsing response wrapped in markdown code block."""
         self.mock_client.create_user_message.return_value = {
