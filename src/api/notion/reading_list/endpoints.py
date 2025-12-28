@@ -1,6 +1,7 @@
 """Notion API endpoints for managing reading list."""
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -42,7 +43,11 @@ def query_reading(
     By default, completed items are excluded unless include_completed=True.
     If name_filter is provided, results are fuzzy-matched and limited to top 5.
     """
-    logger.debug("Querying reading list")
+    start = time.perf_counter()
+    logger.info(
+        f"Query reading list: name_filter={request.name_filter!r}, status={request.status}, "
+        f"category={request.category}, include_completed={request.include_completed}"
+    )
     try:
         filter_ = _build_reading_filter(request)
         # Default sort by last edited time descending (latest first)
@@ -60,13 +65,22 @@ def query_reading(
             limit=request.limit if not request.name_filter else 5,
         )
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Query reading list complete: found={len(pages_data)}, "
+            f"returned={len(filtered_items)}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return ReadingQueryResponse(
             results=filtered_items,
             fuzzy_match_quality=fuzzy_quality,
             excluded_completed=not request.include_completed,
         )
     except NotionClientError as e:
-        logger.exception(f"Failed to query reading list: {e}")
+        logger.exception(
+            f"Failed to query reading list: name_filter={request.name_filter!r}, "
+            f"status={request.status}, error={e}"
+        )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -80,7 +94,8 @@ def get_reading_item(
     client: NotionClient = Depends(get_notion_client),
 ) -> ReadingItemResponse:
     """Retrieve a single reading item."""
-    logger.debug(f"Retrieving reading item: {item_id}")
+    start = time.perf_counter()
+    logger.info(f"Get reading item: id={item_id}")
     try:
         data = client.get_page(item_id)
         item = parse_page_to_reading_item(data)
@@ -89,9 +104,15 @@ def get_reading_item(
         blocks = client.get_page_content(item_id)
         content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Get reading item complete: id={item_id}, title={item.title!r}, "
+            f"has_content={content is not None}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _reading_to_response(item, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to retrieve reading item: {e}")
+        logger.exception(f"Failed to get reading item: id={item_id}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -111,11 +132,12 @@ def create_reading_items(
     Processes all items and returns both successes and failures.
     Partial success is possible - some items may be created while others fail.
     """
-    logger.debug(f"Creating {len(requests)} reading items")
+    start = time.perf_counter()
+    logger.info(f"Create reading items: count={len(requests)}")
     created: list[ReadingItemResponse] = []
     failed: list[BulkCreateFailure] = []
 
-    for request in requests:
+    for i, request in enumerate(requests):
         try:
             check_duplicate_name(
                 client=client,
@@ -145,10 +167,20 @@ def create_reading_items(
                 client.append_page_content(item.id, blocks)
 
             created.append(_reading_to_response(item, content=request.content))
+            logger.debug(f"Create reading items [{i + 1}/{len(requests)}]: created id={item.id}")
         except (NotionClientError, HTTPException) as e:
             error_msg = e.detail if isinstance(e, HTTPException) else str(e)
-            logger.warning(f"Failed to create reading item '{request.title}': {error_msg}")
+            logger.warning(
+                f"Create reading items [{i + 1}/{len(requests)}]: "
+                f"failed title={request.title!r}, error={error_msg}"
+            )
             failed.append(BulkCreateFailure(name=request.title, error=error_msg))
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        f"Create reading items complete: succeeded={len(created)}, "
+        f"failed={len(failed)}, elapsed={elapsed_ms:.0f}ms"
+    )
 
     return ReadingBulkCreateResponse(created=created, failed=failed)
 
@@ -165,7 +197,9 @@ def update_reading_item(
     data_source_id: str = Depends(get_reading_data_source_id),
 ) -> ReadingItemResponse:
     """Update a reading item's properties."""
-    logger.debug(f"Updating reading item: {item_id}")
+    start = time.perf_counter()
+    fields = list(request.model_dump(exclude_unset=True).keys())
+    logger.info(f"Update reading item: id={item_id}, fields={fields}")
 
     if request.title is not None:
         check_duplicate_name(
@@ -213,9 +247,15 @@ def update_reading_item(
             blocks = client.get_page_content(item_id)
             content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Update reading item complete: id={item_id}, title={item.title!r}, "
+            f"elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _reading_to_response(item, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to update reading item: {e}")
+        logger.exception(f"Failed to update reading item: id={item_id}, fields={fields}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 

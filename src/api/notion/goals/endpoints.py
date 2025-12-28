@@ -1,6 +1,7 @@
 """Notion API endpoints for managing goals."""
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -42,7 +43,11 @@ def query_goals(
     By default, completed (Done) goals are excluded unless include_done=True.
     If name_filter is provided, results are fuzzy-matched and limited to top 5.
     """
-    logger.debug("Querying goals")
+    start = time.perf_counter()
+    logger.info(
+        f"Query goals: name_filter={request.name_filter!r}, status={request.status}, "
+        f"priority={request.priority}, include_done={request.include_done}"
+    )
     try:
         filter_ = _build_goal_filter(request)
         # Default sort by last edited time descending (latest first)
@@ -60,13 +65,22 @@ def query_goals(
             limit=request.limit if not request.name_filter else 5,
         )
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Query goals complete: found={len(pages_data)}, "
+            f"returned={len(filtered_goals)}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return GoalQueryResponse(
             results=filtered_goals,
             fuzzy_match_quality=fuzzy_quality,
             excluded_done=not request.include_done,
         )
     except NotionClientError as e:
-        logger.exception(f"Failed to query goals: {e}")
+        logger.exception(
+            f"Failed to query goals: name_filter={request.name_filter!r}, "
+            f"status={request.status}, error={e}"
+        )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -80,7 +94,8 @@ def get_goal(
     client: NotionClient = Depends(get_notion_client),
 ) -> GoalResponse:
     """Retrieve a single goal."""
-    logger.debug(f"Retrieving goal: {goal_id}")
+    start = time.perf_counter()
+    logger.info(f"Get goal: id={goal_id}")
     try:
         data = client.get_page(goal_id)
         goal = parse_page_to_goal(data)
@@ -89,9 +104,15 @@ def get_goal(
         blocks = client.get_page_content(goal_id)
         content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Get goal complete: id={goal_id}, name={goal.goal_name!r}, "
+            f"has_content={content is not None}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _goal_to_response(goal, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to retrieve goal: {e}")
+        logger.exception(f"Failed to get goal: id={goal_id}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -111,11 +132,12 @@ def create_goals(
     Processes all items and returns both successes and failures.
     Partial success is possible - some items may be created while others fail.
     """
-    logger.debug(f"Creating {len(requests)} goals")
+    start = time.perf_counter()
+    logger.info(f"Create goals: count={len(requests)}")
     created: list[GoalResponse] = []
     failed: list[BulkCreateFailure] = []
 
-    for request in requests:
+    for i, request in enumerate(requests):
         try:
             check_duplicate_name(
                 client=client,
@@ -145,10 +167,20 @@ def create_goals(
                 client.append_page_content(goal.id, blocks)
 
             created.append(_goal_to_response(goal, content=request.content))
+            logger.debug(f"Create goals [{i + 1}/{len(requests)}]: created id={goal.id}")
         except (NotionClientError, HTTPException) as e:
             error_msg = e.detail if isinstance(e, HTTPException) else str(e)
-            logger.warning(f"Failed to create goal '{request.goal_name}': {error_msg}")
+            logger.warning(
+                f"Create goals [{i + 1}/{len(requests)}]: "
+                f"failed name={request.goal_name!r}, error={error_msg}"
+            )
             failed.append(BulkCreateFailure(name=request.goal_name, error=error_msg))
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        f"Create goals complete: succeeded={len(created)}, "
+        f"failed={len(failed)}, elapsed={elapsed_ms:.0f}ms"
+    )
 
     return GoalBulkCreateResponse(created=created, failed=failed)
 
@@ -165,7 +197,9 @@ def update_goal(
     data_source_id: str = Depends(get_goals_data_source_id),
 ) -> GoalResponse:
     """Update a goal's properties."""
-    logger.debug(f"Updating goal: {goal_id}")
+    start = time.perf_counter()
+    fields = list(request.model_dump(exclude_unset=True).keys())
+    logger.info(f"Update goal: id={goal_id}, fields={fields}")
 
     if request.goal_name is not None:
         check_duplicate_name(
@@ -213,9 +247,15 @@ def update_goal(
             blocks = client.get_page_content(goal_id)
             content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Update goal complete: id={goal_id}, name={goal.goal_name!r}, "
+            f"elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _goal_to_response(goal, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to update goal: {e}")
+        logger.exception(f"Failed to update goal: id={goal_id}, fields={fields}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 

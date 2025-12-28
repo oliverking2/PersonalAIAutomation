@@ -1,6 +1,7 @@
 """Notion API endpoints for managing ideas."""
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -41,7 +42,11 @@ def query_ideas(
 
     If name_filter is provided, results are fuzzy-matched and limited to top 5.
     """
-    logger.debug("Querying ideas")
+    start = time.perf_counter()
+    logger.info(
+        f"Query ideas: name_filter={request.name_filter!r}, status={request.status}, "
+        f"idea_group={request.idea_group}, include_done={request.include_done}"
+    )
     try:
         filter_ = _build_idea_filter(request)
         # Default sort by last edited time descending (latest first)
@@ -59,12 +64,21 @@ def query_ideas(
             limit=request.limit if not request.name_filter else 5,
         )
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Query ideas complete: found={len(pages_data)}, "
+            f"returned={len(filtered_items)}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return IdeaQueryResponse(
             results=filtered_items,
             fuzzy_match_quality=fuzzy_quality,
         )
     except NotionClientError as e:
-        logger.exception(f"Failed to query ideas: {e}")
+        logger.exception(
+            f"Failed to query ideas: name_filter={request.name_filter!r}, "
+            f"status={request.status}, error={e}"
+        )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -78,7 +92,8 @@ def get_idea(
     client: NotionClient = Depends(get_notion_client),
 ) -> IdeaResponse:
     """Retrieve a single idea with its content."""
-    logger.debug(f"Retrieving idea: {idea_id}")
+    start = time.perf_counter()
+    logger.info(f"Get idea: id={idea_id}")
     try:
         data = client.get_page(idea_id)
         idea = parse_page_to_idea(data)
@@ -87,9 +102,15 @@ def get_idea(
         blocks = client.get_page_content(idea_id)
         content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Get idea complete: id={idea_id}, name={idea.idea!r}, "
+            f"has_content={content is not None}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _idea_to_response(idea, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to retrieve idea: {e}")
+        logger.exception(f"Failed to get idea: id={idea_id}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -109,11 +130,12 @@ def create_ideas(
     Processes all items and returns both successes and failures.
     Partial success is possible - some items may be created while others fail.
     """
-    logger.debug(f"Creating {len(requests)} ideas")
+    start = time.perf_counter()
+    logger.info(f"Create ideas: count={len(requests)}")
     created: list[IdeaResponse] = []
     failed: list[BulkCreateFailure] = []
 
-    for request in requests:
+    for i, request in enumerate(requests):
         try:
             check_duplicate_name(
                 client=client,
@@ -140,10 +162,20 @@ def create_ideas(
                 client.append_page_content(idea.id, blocks)
 
             created.append(_idea_to_response(idea, content=request.content))
+            logger.debug(f"Create ideas [{i + 1}/{len(requests)}]: created id={idea.id}")
         except (NotionClientError, HTTPException) as e:
             error_msg = e.detail if isinstance(e, HTTPException) else str(e)
-            logger.warning(f"Failed to create idea '{request.idea}': {error_msg}")
+            logger.warning(
+                f"Create ideas [{i + 1}/{len(requests)}]: "
+                f"failed name={request.idea!r}, error={error_msg}"
+            )
             failed.append(BulkCreateFailure(name=request.idea, error=error_msg))
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        f"Create ideas complete: succeeded={len(created)}, "
+        f"failed={len(failed)}, elapsed={elapsed_ms:.0f}ms"
+    )
 
     return IdeaBulkCreateResponse(created=created, failed=failed)
 
@@ -160,7 +192,9 @@ def update_idea(
     data_source_id: str = Depends(get_ideas_data_source_id),
 ) -> IdeaResponse:
     """Update an idea's properties and/or content."""
-    logger.debug(f"Updating idea: {idea_id}")
+    start = time.perf_counter()
+    fields = list(request.model_dump(exclude_unset=True).keys())
+    logger.info(f"Update idea: id={idea_id}, fields={fields}")
 
     if request.idea is not None:
         check_duplicate_name(
@@ -205,9 +239,14 @@ def update_idea(
             blocks = client.get_page_content(idea_id)
             content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Update idea complete: id={idea_id}, name={idea.idea!r}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _idea_to_response(idea, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to update idea: {e}")
+        logger.exception(f"Failed to update idea: id={idea_id}, fields={fields}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 

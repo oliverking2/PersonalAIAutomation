@@ -1,6 +1,7 @@
 """Notion API endpoints for managing databases, data sources, pages, and tasks."""
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -42,7 +43,11 @@ def query_tasks(
     By default, completed (Done) tasks are excluded unless include_done=True.
     If name_filter is provided, results are fuzzy-matched and limited to top 5.
     """
-    logger.debug("Querying tasks")
+    start = time.perf_counter()
+    logger.info(
+        f"Query tasks: name_filter={request.name_filter!r}, status={request.status}, "
+        f"priority={request.priority}, include_done={request.include_done}"
+    )
     try:
         filter_ = _build_task_filter(request)
         # Default sort by last edited time descending (latest first)
@@ -60,13 +65,22 @@ def query_tasks(
             limit=request.limit if not request.name_filter else 5,
         )
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Query tasks complete: found={len(pages_data)}, "
+            f"returned={len(filtered_tasks)}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return TaskQueryResponse(
             results=filtered_tasks,
             fuzzy_match_quality=fuzzy_quality,
             excluded_done=not request.include_done,
         )
     except NotionClientError as e:
-        logger.exception(f"Failed to query tasks: {e}")
+        logger.exception(
+            f"Failed to query tasks: name_filter={request.name_filter!r}, "
+            f"status={request.status}, error={e}"
+        )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -80,7 +94,8 @@ def get_task(
     client: NotionClient = Depends(get_notion_client),
 ) -> TaskResponse:
     """Retrieve a single task."""
-    logger.debug(f"Retrieving task: {task_id}")
+    start = time.perf_counter()
+    logger.info(f"Get task: id={task_id}")
     try:
         data = client.get_page(task_id)
         task = parse_page_to_task(data)
@@ -89,9 +104,15 @@ def get_task(
         blocks = client.get_page_content(task_id)
         content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Get task complete: id={task_id}, name={task.task_name!r}, "
+            f"has_content={content is not None}, elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _task_to_response(task, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to retrieve task: {e}")
+        logger.exception(f"Failed to get task: id={task_id}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 
@@ -111,11 +132,12 @@ def create_tasks(
     Processes all items and returns both successes and failures.
     Partial success is possible - some items may be created while others fail.
     """
-    logger.debug(f"Creating {len(requests)} tasks")
+    start = time.perf_counter()
+    logger.info(f"Create tasks: count={len(requests)}")
     created: list[TaskResponse] = []
     failed: list[BulkCreateFailure] = []
 
-    for request in requests:
+    for i, request in enumerate(requests):
         try:
             check_duplicate_name(
                 client=client,
@@ -145,10 +167,20 @@ def create_tasks(
                 client.append_page_content(task.id, blocks)
 
             created.append(_task_to_response(task, content=request.content))
+            logger.debug(f"Create tasks [{i + 1}/{len(requests)}]: created id={task.id}")
         except (NotionClientError, HTTPException) as e:
             error_msg = e.detail if isinstance(e, HTTPException) else str(e)
-            logger.warning(f"Failed to create task '{request.task_name}': {error_msg}")
+            logger.warning(
+                f"Create tasks [{i + 1}/{len(requests)}]: "
+                f"failed name={request.task_name!r}, error={error_msg}"
+            )
             failed.append(BulkCreateFailure(name=request.task_name, error=error_msg))
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        f"Create tasks complete: succeeded={len(created)}, "
+        f"failed={len(failed)}, elapsed={elapsed_ms:.0f}ms"
+    )
 
     return TaskBulkCreateResponse(created=created, failed=failed)
 
@@ -165,7 +197,9 @@ def update_task(
     data_source_id: str = Depends(get_task_data_source_id),
 ) -> TaskResponse:
     """Update a task's properties."""
-    logger.debug(f"Updating task: {task_id}")
+    start = time.perf_counter()
+    fields = list(request.model_dump(exclude_unset=True).keys())
+    logger.info(f"Update task: id={task_id}, fields={fields}")
 
     if request.task_name is not None:
         check_duplicate_name(
@@ -213,9 +247,15 @@ def update_task(
             blocks = client.get_page_content(task_id)
             content = blocks_to_markdown(blocks) if blocks else None
 
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            f"Update task complete: id={task_id}, name={task.task_name!r}, "
+            f"elapsed={elapsed_ms:.0f}ms"
+        )
+
         return _task_to_response(task, content=content)
     except NotionClientError as e:
-        logger.exception(f"Failed to update task: {e}")
+        logger.exception(f"Failed to update task: id={task_id}, fields={fields}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
 
 

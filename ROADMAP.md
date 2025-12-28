@@ -69,13 +69,6 @@ End-to-end conversation flow testing.
 
 ### Misc Improvements
 
-#### PRD22: API Logging Improvements
-Improve logging across the API module for better debugging and monitoring.
-- Log request parameters and response counts
-- Add timing for slow operations
-- Bulk operation progress and summaries
-- Enhanced error context
-
 - Alert ops need to send a message to the Errors bot rather than silently failing
 
 ### Agent Improvements
@@ -124,6 +117,7 @@ Improve logging across the API module for better debugging and monitoring.
 
 | PRD    | Description                                        | Date       |
 |--------|----------------------------------------------------|------------|
+| PRD22  | API Logging Improvements                           | 2024-12-28 |
 | PRD17  | Tool Execution Timeout                             | 2024-12-28 |
 | PRD01  | AI Agent Tool Registry                             | 2024-12    |
 | PRD03  | Telegram Integration with Session Management       | 2024-12 |

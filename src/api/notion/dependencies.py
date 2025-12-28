@@ -12,8 +12,11 @@ logger = logging.getLogger(__name__)
 
 def get_notion_client() -> NotionClient:
     """Create a NotionClient instance."""
+    logger.debug("Initialising Notion client")
     try:
-        return NotionClient()
+        client = NotionClient()
+        logger.debug("Notion client initialised successfully")
+        return client
     except ValueError as e:
         logger.error(f"Failed to initialise Notion client: {e}")
         raise HTTPException(
