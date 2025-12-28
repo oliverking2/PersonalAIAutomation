@@ -63,7 +63,7 @@ services:
     env_file: .env
     environment:
       - DATABASE_HOST=postgres
-      - AGENT_API_BASE_URL=http://api:8000
+      - API_BASE_URL=http://api:8000
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +85,7 @@ services:
       - DAGSTER_HOME=/app
       - DAGSTER_POSTGRES_URL=postgresql://dagster:${DAGSTER_DB_PASSWORD}@postgres:5432/dagster
       - DATABASE_HOST=postgres
+      - API_BASE_URL=http://api:8000
     depends_on:
       postgres:
         condition: service_healthy

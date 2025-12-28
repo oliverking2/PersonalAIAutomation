@@ -44,12 +44,12 @@ class InternalAPIClient:
     ) -> None:
         """Initialise the API client.
 
-        :param base_url: Base URL for API. Defaults to AGENT_API_BASE_URL env var.
+        :param base_url: Base URL for API. Defaults to API_BASE_URL env var.
         :param api_token: API authentication token. Defaults to API_AUTH_TOKEN env var.
         :param timeout: Request timeout in seconds.
         :raises ValueError: If base_url or api_token is not configured.
         """
-        self.base_url = base_url or os.environ.get("AGENT_API_BASE_URL", "http://localhost:8000")
+        self.base_url = base_url or os.environ.get("API_BASE_URL", "http://localhost:8000")
         self.api_token = api_token or os.environ.get("API_AUTH_TOKEN")
 
         if not self.api_token:

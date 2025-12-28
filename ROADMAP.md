@@ -61,6 +61,7 @@ End-to-end conversation flow testing.
 ### Misc Improvements
 
 - Alert ops need to send a message to the Errors bot rather than silently failing
+- Fix API Port and API_BASE_URL config to standardise
 
 ### Agent Improvements
 

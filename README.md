@@ -431,7 +431,7 @@ Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely
 - `AWS_REGION`: AWS region for Bedrock (default: eu-west-2)
 - `AGENT_SELECTOR_MODEL`: Model for tool selection - haiku, sonnet, or opus (default: haiku)
 - `AGENT_CHAT_MODEL`: Model for chat/tool execution - haiku, sonnet, or opus (default: sonnet)
-- `AGENT_API_BASE_URL`: Base URL for internal API (default: http://localhost:8000)
+- `API_BASE_URL`: Base URL for internal API (default: http://localhost:8000)
 - `API_AUTH_TOKEN`: Bearer token for API authentication (shared with REST API)
 
 #### Tool Risk Levels
