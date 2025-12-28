@@ -20,12 +20,6 @@ Validate Bedrock responses upfront instead of returning empty strings.
 
 ### Features
 
-#### PRD02: AI Article Summaries
-Use Bedrock to generate ~100 char summaries for newsletter articles.
-- Batch processing with Claude Haiku
-- Cache summaries in database
-- Fallback to truncation on failure
-
 #### PRD05: Substack & Medium Integration
 Extend newsletter extraction to more sources.
 - Substack parser (multiple feeds: Joe Reis, DataExpert.io, etc.)
@@ -49,9 +43,6 @@ Forward error alerts to Telegram.
 - Webhook endpoint at `/webhooks/glitchtip`
 - Error formatting and rate limiting
 - Severity filtering
-
-#### Recurring Tasks
-Template-based recurring task creation (weekly reviews, monthly goals).
 
 ### Infrastructure
 
@@ -120,17 +111,17 @@ End-to-end conversation flow testing.
 | PRD22  | API Logging Improvements                           | 2024-12-28 |
 | PRD17  | Tool Execution Timeout                             | 2024-12-28 |
 | PRD01  | AI Agent Tool Registry                             | 2024-12    |
-| PRD03  | Telegram Integration with Session Management       | 2024-12 |
-| PRD081 | Prompt Caching                                     | 2024-12 |
-| PRD082 | Context Management (sliding window, summarisation) | 2024-12 |
-| PRD09  | Conversation Token & Cost Tracking                 | 2024-12 |
-| PRD10  | Agent Internal Tool Selection                      | 2024-12 |
-| PRD12  | Fuzzy Name Search                                  | 2024-12 |
-| PRD13  | Notion Page Content Templates                      | 2024-12 |
-| PRD14  | Agent Notion Descriptive Name Validation           | 2024-12 |
-| PRD16  | Agent Config Centralisation                        | 2024-12 |
-| PRD19  | CRUD Tool Factory                                  | 2024-12 |
-| PRD20  | Unified Alert System (supersedes PRD04 & PRD15)    | 2024-12 |
+| PRD03  | Telegram Integration with Session Management       | 2024-12    |
+| PRD081 | Prompt Caching                                     | 2024-12    |
+| PRD082 | Context Management (sliding window, summarisation) | 2024-12    |
+| PRD09  | Conversation Token & Cost Tracking                 | 2024-12    |
+| PRD10  | Agent Internal Tool Selection                      | 2024-12    |
+| PRD12  | Fuzzy Name Search                                  | 2024-12    |
+| PRD13  | Notion Page Content Templates                      | 2024-12    |
+| PRD14  | Agent Notion Descriptive Name Validation           | 2024-12    |
+| PRD16  | Agent Config Centralisation                        | 2024-12    |
+| PRD19  | CRUD Tool Factory                                  | 2024-12    |
+| PRD20  | Unified Alert System (supersedes PRD04 & PRD15)    | 2024-12    |
 
 ### Agent Roadmap Items
 
