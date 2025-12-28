@@ -67,3 +67,17 @@ class ToolExecutionError(AgentError):
         self.tool_name = tool_name
         self.error = error
         super().__init__(f"Tool '{tool_name}' execution failed: {error}")
+
+
+class ToolTimeoutError(AgentError):
+    """Raised when tool execution exceeds configured timeout."""
+
+    def __init__(self, tool_name: str, timeout_seconds: float) -> None:
+        """Initialise ToolTimeoutError.
+
+        :param tool_name: Name of the tool that timed out.
+        :param timeout_seconds: The timeout value that was exceeded.
+        """
+        self.tool_name = tool_name
+        self.timeout_seconds = timeout_seconds
+        super().__init__(f"Tool '{tool_name}' exceeded {timeout_seconds}s timeout")

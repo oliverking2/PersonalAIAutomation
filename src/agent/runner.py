@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import uuid
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from src.agent.exceptions import (
     BedrockClientError,
     MaxStepsExceededError,
     ToolExecutionError,
+    ToolTimeoutError,
 )
 from src.agent.models import (
     AgentRunResult,
@@ -134,9 +136,13 @@ class AgentRunner:
         self.require_confirmation = require_confirmation
         self._config = config
 
+        # Executor for tool timeout handling (single worker for sequential execution)
+        self._tool_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
         logger.debug(
             f"Agent configured: selector={self._config.selector_model}, "
-            f"chat={self._config.chat_model}, max_steps={self._config.max_steps}"
+            f"chat={self._config.chat_model}, max_steps={self._config.max_steps}, "
+            f"tool_timeout={self._config.tool_timeout_seconds}s"
         )
 
         # Create internal tool selector
@@ -500,6 +506,14 @@ class AgentRunner:
         try:
             tool_result = self._execute_tool(tool, input_args)
             is_error = False
+        except ToolTimeoutError as e:
+            logger.warning(f"Tool execution timed out: {e}")
+            tool_result = {
+                "error": str(e),
+                "error_type": "timeout",
+                "suggestion": "The operation took too long. Try a simpler query or different approach.",
+            }
+            is_error = True
         except ToolExecutionError as e:
             logger.warning(f"Tool execution failed: {e}")
             tool_result = {"error": e.error}
@@ -885,21 +899,36 @@ class AgentRunner:
         )
 
     def _execute_tool(self, tool: ToolDef, input_args: dict[str, Any]) -> dict[str, Any]:
-        """Execute a tool with the given arguments.
+        """Execute a tool with the given arguments and timeout protection.
+
+        Uses ThreadPoolExecutor to wrap tool execution with a configurable
+        timeout, preventing hung tools from blocking the agent indefinitely.
 
         :param tool: Tool definition to execute.
         :param input_args: Arguments for the tool.
         :returns: Tool execution result.
+        :raises ToolTimeoutError: If execution exceeds configured timeout.
         :raises ToolExecutionError: If execution fails.
         """
         try:
             validated_args = tool.args_model(**input_args)
-            result = tool.handler(validated_args)
-            logger.debug(f"Tool executed successfully: tool={tool.name}")
-            return result
         except ValidationError as e:
             logger.warning(f"Tool argument validation failed: tool={tool.name}, error={e}")
             raise ToolExecutionError(tool.name, f"Invalid arguments: {e}") from e
+
+        # Submit handler to executor with timeout
+        future = self._tool_executor.submit(tool.handler, validated_args)
+        try:
+            result = future.result(timeout=self._config.tool_timeout_seconds)
+            logger.debug(f"Tool executed successfully: tool={tool.name}")
+            return result
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            logger.warning(
+                f"Tool execution timed out: tool={tool.name}, "
+                f"timeout={self._config.tool_timeout_seconds}s"
+            )
+            raise ToolTimeoutError(tool.name, self._config.tool_timeout_seconds)
         except Exception as e:
             logger.exception(f"Tool execution failed: tool={tool.name}")
             raise ToolExecutionError(tool.name, str(e)) from e

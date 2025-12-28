@@ -1,6 +1,6 @@
 # PRD17: Tool Execution Timeout
 
-**Status: PROPOSED**
+**Status: IMPLEMENTED**
 
 **Roadmap Reference**: AGENT-001 (Critical Priority)
 

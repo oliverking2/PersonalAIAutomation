@@ -1,5 +1,6 @@
 """Tests for AgentRunner."""
 
+import time
 import unittest
 import uuid
 from typing import Any
@@ -8,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from pydantic import BaseModel
 
 from src.agent.enums import RiskLevel
-from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError
+from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError, ToolTimeoutError
 from src.agent.models import ToolDef
 from src.agent.runner import DEFAULT_SYSTEM_PROMPT, AgentRunner
 from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
@@ -1207,6 +1208,112 @@ class TestMessageDuplicationPrevention(unittest.TestCase):
         mock_save_state.assert_called_once()
         saved_state = mock_save_state.call_args[0][2]
         self.assertEqual(len(saved_state.messages), 4)
+
+
+class TestToolTimeout(unittest.TestCase):
+    """Tests for tool execution timeout."""
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.registry = ToolRegistry()
+        self.mock_client = MagicMock()
+
+    def test_tool_times_out_after_configured_seconds(self) -> None:
+        """Test that tool execution respects timeout."""
+
+        def slow_handler(args: DummyArgs) -> dict[str, Any]:
+            time.sleep(5)  # Sleep longer than timeout
+            return {"result": "done"}
+
+        slow_tool = ToolDef(
+            name="slow_tool",
+            description="A slow tool",
+            tags=frozenset({"test"}),
+            risk_level=RiskLevel.SAFE,
+            args_model=DummyArgs,
+            handler=slow_handler,
+        )
+        self.registry.register(slow_tool)
+
+        config = AgentConfig(tool_timeout_seconds=0.5)
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+            config=config,
+        )
+
+        with self.assertRaises(ToolTimeoutError) as ctx:
+            runner._execute_tool(slow_tool, {"value": "test"})
+
+        self.assertEqual(ctx.exception.tool_name, "slow_tool")
+        self.assertEqual(ctx.exception.timeout_seconds, 0.5)
+
+    def test_fast_tool_completes_without_timeout(self) -> None:
+        """Test that fast tools complete normally."""
+
+        def fast_handler(args: DummyArgs) -> dict[str, Any]:
+            return {"result": args.value}
+
+        fast_tool = ToolDef(
+            name="fast_tool",
+            description="A fast tool",
+            tags=frozenset({"test"}),
+            risk_level=RiskLevel.SAFE,
+            args_model=DummyArgs,
+            handler=fast_handler,
+        )
+        self.registry.register(fast_tool)
+
+        config = AgentConfig(tool_timeout_seconds=5.0)
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+            config=config,
+        )
+
+        result = runner._execute_tool(fast_tool, {"value": "hello"})
+
+        self.assertEqual(result, {"result": "hello"})
+
+    def test_timeout_error_returned_to_llm_with_suggestion(self) -> None:
+        """Test that timeout produces error tool result with helpful message."""
+
+        def slow_handler(args: DummyArgs) -> dict[str, Any]:
+            time.sleep(5)
+            return {"result": "done"}
+
+        slow_tool = ToolDef(
+            name="slow_tool",
+            description="A slow tool",
+            tags=frozenset({"test"}),
+            risk_level=RiskLevel.SAFE,
+            args_model=DummyArgs,
+            handler=slow_handler,
+        )
+        self.registry.register(slow_tool)
+
+        config = AgentConfig(tool_timeout_seconds=0.5)
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+            config=config,
+        )
+
+        tool_result, tool_call = runner._execute_and_create_tool_call(
+            slow_tool,
+            "test-id",
+            {"value": "test"},
+        )
+
+        self.assertTrue(tool_call.is_error)
+        self.assertIn("error", tool_result)
+        self.assertEqual(tool_result["error_type"], "timeout")
+        self.assertIn("suggestion", tool_result)
+        self.assertIn("took too long", tool_result["suggestion"])
+
+    def test_config_default_timeout(self) -> None:
+        """Test that default config has 30 second timeout."""
+        self.assertEqual(DEFAULT_AGENT_CONFIG.tool_timeout_seconds, 30.0)
 
 
 if __name__ == "__main__":

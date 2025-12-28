@@ -51,6 +51,8 @@ class AgentConfig:
     :param chat_model: Default model alias for chat/tool execution.
     :param max_tokens: Maximum tokens in LLM response. Higher values allow more
         tool calls per response (each tool call requires ~100-200 tokens).
+    :param tool_timeout_seconds: Maximum seconds for a single tool execution.
+        Prevents hung tools from blocking the agent indefinitely.
     :param window_size: Number of recent messages to keep in full (sliding window).
     :param batch_threshold: Messages above window before summarisation triggers.
     :param max_classification_retries: Maximum retries for confirmation classification.
@@ -63,6 +65,7 @@ class AgentConfig:
     selector_model: str = "haiku"
     chat_model: str = "sonnet"
     max_tokens: int = 4096
+    tool_timeout_seconds: float = 30.0
 
     # Context management
     window_size: int = 15

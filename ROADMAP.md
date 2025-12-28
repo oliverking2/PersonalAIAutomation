@@ -81,7 +81,6 @@ End-to-end conversation flow testing.
 ### Misc Improvements
 - Add better logging to the Notion API
 - Alert ops need to send a message to the Errors bot rather than silently failing
-- ~~TLDR Links need to be the full URL but ideally the visible version is shortened~~ (Fixed: Telegram entities now extracted to preserve full URLs)
 
 ### Agent Improvements
 
@@ -108,11 +107,10 @@ End-to-end conversation flow testing.
 
 ### Technical Debt
 
-| ID     | Location            | Issue                                                        |
-|--------|---------------------|--------------------------------------------------------------|
-| TD-001 | telegram/client.py  | Remove environment variable fallback                         |
-| TD-002 | telegram/service.py | ~~Decouple from newsletter-specific logic~~ (fixed by PRD20) |
-| TD-003 | telegram/handler.py | Inject agent runner instead of lazy init                     |
+| ID     | Location            | Issue                                    |
+|--------|---------------------|------------------------------------------|
+| TD-001 | telegram/client.py  | Remove environment variable fallback     |
+| TD-003 | telegram/handler.py | Inject agent runner instead of lazy init |
 
 ---
 
@@ -124,7 +122,6 @@ End-to-end conversation flow testing.
 | Tool usage analytics        | Track tool success rates, latencies, usage patterns      |
 | Smart reminders             | AI-powered prioritisation of what to highlight           |
 | Snooze reminders            | Allow user to snooze via Telegram reply                  |
-| Voice message transcription | Transcribe voice messages before processing              |
 | Progress trends             | Show goal progress trends over time                      |
 | Running Integration         | Integrate with Strava/Garmin to track running activities |
 ---
