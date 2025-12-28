@@ -7,6 +7,7 @@ from src.alerts.formatters.formatters import (
     format_reading_alert,
     format_task_alert,
 )
+from src.alerts.formatters.summariser import summarise_description
 
 __all__ = [
     "format_alert",
@@ -14,4 +15,5 @@ __all__ = [
     "format_newsletter_alert",
     "format_reading_alert",
     "format_task_alert",
+    "summarise_description",
 ]

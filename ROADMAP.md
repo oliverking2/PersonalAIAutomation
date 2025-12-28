@@ -6,14 +6,6 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ## Up Next
 
-### PRD17: Tool Execution Timeout
-**Priority**: Critical (AGENT-001)
-
-Add configurable timeout to prevent agent hangs when tools block indefinitely.
-- Wrap execution with `ThreadPoolExecutor`
-- Default 30s timeout, configurable via `AgentConfig`
-- Return actionable error to LLM on timeout
-
 ### PRD18: Bedrock toolUseId Validation
 **Priority**: Critical (AGENT-002)
 
@@ -58,9 +50,6 @@ Forward error alerts to Telegram.
 - Error formatting and rate limiting
 - Severity filtering
 
-#### URL to Reading List
-Send URL via Telegram, AI extracts title/category and adds to reading list.
-
 #### Recurring Tasks
 Template-based recurring task creation (weekly reviews, monthly goals).
 
@@ -79,7 +68,14 @@ End-to-end conversation flow testing.
 - Conversation simulator helper
 
 ### Misc Improvements
-- Add better logging to the Notion API
+
+#### PRD22: API Logging Improvements
+Improve logging across the API module for better debugging and monitoring.
+- Log request parameters and response counts
+- Add timing for slow operations
+- Bulk operation progress and summaries
+- Enhanced error context
+
 - Alert ops need to send a message to the Errors bot rather than silently failing
 
 ### Agent Improvements
@@ -102,8 +98,6 @@ End-to-end conversation flow testing.
 | TELE-003 | Graceful long-poll timeout handling                     | Medium   |
 | TELE-009 | Integration test suite                                  | Medium   |
 | TELE-004 | Connection pooling with requests.Session                | Low      |
-| TELE-006 | Rich message formatting (inline keyboards, code blocks) | Low      |
-| TELE-008 | Message editing for progressive updates                 | Low      |
 
 ### Technical Debt
 
@@ -121,8 +115,6 @@ End-to-end conversation flow testing.
 | Async tool execution        | Convert tool handlers to async for parallel execution    |
 | Tool usage analytics        | Track tool success rates, latencies, usage patterns      |
 | Smart reminders             | AI-powered prioritisation of what to highlight           |
-| Snooze reminders            | Allow user to snooze via Telegram reply                  |
-| Progress trends             | Show goal progress trends over time                      |
 | Running Integration         | Integrate with Strava/Garmin to track running activities |
 ---
 
@@ -130,9 +122,10 @@ End-to-end conversation flow testing.
 
 ### PRDs
 
-| PRD    | Description                                        | Date    |
-|--------|----------------------------------------------------|---------|
-| PRD01  | AI Agent Tool Registry                             | 2024-12 |
+| PRD    | Description                                        | Date       |
+|--------|----------------------------------------------------|------------|
+| PRD17  | Tool Execution Timeout                             | 2024-12-28 |
+| PRD01  | AI Agent Tool Registry                             | 2024-12    |
 | PRD03  | Telegram Integration with Session Management       | 2024-12 |
 | PRD081 | Prompt Caching                                     | 2024-12 |
 | PRD082 | Context Management (sliding window, summarisation) | 2024-12 |
@@ -149,6 +142,7 @@ End-to-end conversation flow testing.
 
 | ID        | Description                                   | Date       |
 |-----------|-----------------------------------------------|------------|
+| AGENT-001 | Tool execution timeout (via PRD17)            | 2024-12-28 |
 | AGENT-003 | CRUD tool factory (via PRD19)                 | 2024-12    |
 | AGENT-008 | Validate classification response with retries | 2024-12-25 |
 | AGENT-012 | Tool re-selection on each turn                | 2024-12-25 |

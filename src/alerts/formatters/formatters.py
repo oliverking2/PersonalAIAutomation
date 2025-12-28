@@ -3,6 +3,7 @@
 from urllib.parse import urlparse
 
 from src.alerts.enums import AlertType
+from src.alerts.formatters.summariser import summarise_description
 from src.alerts.models import AlertData
 
 
@@ -18,7 +19,7 @@ def format_newsletter_alert(alert: AlertData) -> str:
         lines.append(f"<b>{item.name}</b>")
         description = item.metadata.get("description", "")
         if description:
-            lines.append(description[:150])
+            lines.append(summarise_description(description, max_length=150))
         if item.url:
             domain = urlparse(item.url).netloc
             lines.append(f'<a href="{item.url}">{domain}</a>')

@@ -1,6 +1,7 @@
 """Tests for alert formatters."""
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 from src.alerts.enums import AlertType
 from src.alerts.formatters import (
@@ -44,9 +45,11 @@ class TestFormatNewsletterAlert(unittest.TestCase):
         self.assertIn('<a href="https://example.com/gpt5">example.com</a>', result)
         self.assertIn("<b>Claude Gets Smarter</b>", result)
 
-    def test_truncates_long_descriptions(self) -> None:
-        """Test that long descriptions are truncated."""
+    @patch("src.alerts.formatters.formatters.summarise_description")
+    def test_summarises_long_descriptions(self, mock_summarise: MagicMock) -> None:
+        """Test that long descriptions are summarised."""
         long_desc = "x" * 200
+        mock_summarise.return_value = "Summarised content"
         alert = AlertData(
             alert_type=AlertType.NEWSLETTER,
             source_id="xyz",
@@ -60,8 +63,8 @@ class TestFormatNewsletterAlert(unittest.TestCase):
 
         result = format_newsletter_alert(alert)
 
-        self.assertIn("x" * 150, result)
-        self.assertNotIn("x" * 151, result)
+        mock_summarise.assert_called_once_with(long_desc, max_length=150)
+        self.assertIn("Summarised content", result)
 
 
 class TestFormatTaskAlert(unittest.TestCase):
