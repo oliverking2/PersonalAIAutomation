@@ -6,14 +6,33 @@ import json
 import logging
 import os
 import time
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import boto3
 from botocore.exceptions import ClientError
 
 from src.agent.enums import CallType
-from src.agent.exceptions import BedrockClientError
+from src.agent.exceptions import BedrockClientError, BedrockResponseError
 from src.agent.utils.call_tracking import get_tracking_context
+
+
+class ToolUseBlock:
+    """Validated tool use block from Bedrock response."""
+
+    __slots__ = ("id", "input", "name")
+
+    def __init__(self, id: str, name: str, input: dict[str, Any]) -> None:
+        """Initialise ToolUseBlock.
+
+        :param id: Unique tool use ID from Bedrock.
+        :param name: Name of the tool to invoke.
+        :param input: Input arguments for the tool.
+        """
+        self.id = id
+        self.name = name
+        self.input = input
+
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime import BedrockRuntimeClient
@@ -166,29 +185,73 @@ class BedrockClient:
                 f"Bedrock API call failed: {error_code} - {error_message}"
             ) from e
 
-    def parse_tool_use(self, response: dict[str, Any]) -> list[dict[str, Any]]:
-        """Extract tool use blocks from a Converse response.
+    def parse_tool_use(self, response: dict[str, Any]) -> list[ToolUseBlock]:
+        """Extract and validate tool use blocks from a Converse response.
 
         :param response: Converse API response.
-        :returns: List of tool use dictionaries with 'toolUseId', 'name', 'input'.
+        :returns: List of validated ToolUseBlock objects.
+        :raises BedrockResponseError: If response structure is invalid or required fields missing.
         """
-        tool_uses: list[dict[str, Any]] = []
-        output = response.get("output", {})
-        message = output.get("message", {})
-        content: list[ContentBlockTypeDef] = message.get("content", [])
+        content = self._extract_content(response)
 
+        tool_uses: list[ToolUseBlock] = []
         for block in content:
             if "toolUse" in block:
-                tool_use = block["toolUse"]
-                tool_uses.append(
-                    {
-                        "toolUseId": tool_use.get("toolUseId", ""),
-                        "name": tool_use.get("name", ""),
-                        "input": tool_use.get("input", {}),
-                    }
-                )
+                tool_uses.append(self._validate_tool_use_block(block["toolUse"]))
 
         return tool_uses
+
+    def _extract_content(self, response: dict[str, Any]) -> list[ContentBlockTypeDef]:
+        """Extract content list from Bedrock response.
+
+        :param response: Raw Bedrock API response.
+        :returns: List of content blocks.
+        :raises BedrockResponseError: If content path is invalid.
+        """
+        try:
+            output = response["output"]
+            message = output["message"]
+            content = message["content"]
+            if not isinstance(content, list):
+                raise BedrockResponseError(
+                    "Bedrock response 'content' is not a list",
+                    response=response,
+                )
+            return content
+        except KeyError as e:
+            raise BedrockResponseError(
+                f"Bedrock response missing expected path: {e}",
+                response=response,
+            ) from e
+
+    def _validate_tool_use_block(self, block: Mapping[str, Any]) -> ToolUseBlock:
+        """Validate and extract tool use block fields.
+
+        :param block: Raw tool use block from response.
+        :returns: Validated ToolUseBlock.
+        :raises BedrockResponseError: If required fields are missing.
+        """
+        tool_use_id = block.get("toolUseId")
+        if not tool_use_id:
+            raise BedrockResponseError(
+                "Bedrock response missing required 'toolUseId' field",
+                response=dict(block),
+                field="toolUseId",
+            )
+
+        name = block.get("name")
+        if not name:
+            raise BedrockResponseError(
+                "Bedrock response missing required 'name' field",
+                response=dict(block),
+                field="name",
+            )
+
+        return ToolUseBlock(
+            id=tool_use_id,
+            name=name,
+            input=dict(block.get("input", {})),
+        )
 
     def parse_text_response(self, response: dict[str, Any]) -> str:
         """Extract text content from a Converse response.

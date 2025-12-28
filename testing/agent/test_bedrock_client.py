@@ -10,9 +10,10 @@ from src.agent.bedrock_client import (
     MODEL_ALIASES,
     VALID_MODEL_OPTIONS,
     BedrockClient,
+    ToolUseBlock,
     resolve_model_id,
 )
-from src.agent.exceptions import BedrockClientError
+from src.agent.exceptions import BedrockClientError, BedrockResponseError
 
 
 class TestResolveModelId(unittest.TestCase):
@@ -225,9 +226,10 @@ class TestBedrockClient(unittest.TestCase):
         tool_uses = client.parse_tool_use(response)
 
         self.assertEqual(len(tool_uses), 1)
-        self.assertEqual(tool_uses[0]["toolUseId"], "tool-1")
-        self.assertEqual(tool_uses[0]["name"], "search")
-        self.assertEqual(tool_uses[0]["input"], {"query": "test"})
+        self.assertIsInstance(tool_uses[0], ToolUseBlock)
+        self.assertEqual(tool_uses[0].id, "tool-1")
+        self.assertEqual(tool_uses[0].name, "search")
+        self.assertEqual(tool_uses[0].input, {"query": "test"})
 
     @patch("src.agent.bedrock_client.boto3.client")
     def test_parse_tool_use_empty(self, mock_boto_client: MagicMock) -> None:
@@ -238,6 +240,142 @@ class TestBedrockClient(unittest.TestCase):
         tool_uses = client.parse_tool_use(response)
 
         self.assertEqual(len(tool_uses), 0)
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_missing_tool_use_id(self, mock_boto_client: MagicMock) -> None:
+        """Test that missing toolUseId raises BedrockResponseError."""
+        client = BedrockClient()
+        response = {
+            "output": {
+                "message": {
+                    "content": [{"toolUse": {"name": "search", "input": {"query": "test"}}}]
+                }
+            }
+        }
+
+        with self.assertRaises(BedrockResponseError) as ctx:
+            client.parse_tool_use(response)
+
+        self.assertIn("toolUseId", str(ctx.exception))
+        self.assertEqual(ctx.exception.field, "toolUseId")
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_null_tool_use_id(self, mock_boto_client: MagicMock) -> None:
+        """Test that null toolUseId raises BedrockResponseError."""
+        client = BedrockClient()
+        response = {
+            "output": {
+                "message": {
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": None,
+                                "name": "search",
+                                "input": {"query": "test"},
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+
+        with self.assertRaises(BedrockResponseError) as ctx:
+            client.parse_tool_use(response)
+
+        self.assertIn("toolUseId", str(ctx.exception))
+        self.assertEqual(ctx.exception.field, "toolUseId")
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_empty_tool_use_id(self, mock_boto_client: MagicMock) -> None:
+        """Test that empty string toolUseId raises BedrockResponseError."""
+        client = BedrockClient()
+        response = {
+            "output": {
+                "message": {
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": "",
+                                "name": "search",
+                                "input": {"query": "test"},
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+
+        with self.assertRaises(BedrockResponseError) as ctx:
+            client.parse_tool_use(response)
+
+        self.assertIn("toolUseId", str(ctx.exception))
+        self.assertEqual(ctx.exception.field, "toolUseId")
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_missing_name(self, mock_boto_client: MagicMock) -> None:
+        """Test that missing name raises BedrockResponseError."""
+        client = BedrockClient()
+        response = {
+            "output": {
+                "message": {
+                    "content": [{"toolUse": {"toolUseId": "tool-1", "input": {"query": "test"}}}]
+                }
+            }
+        }
+
+        with self.assertRaises(BedrockResponseError) as ctx:
+            client.parse_tool_use(response)
+
+        self.assertIn("name", str(ctx.exception))
+        self.assertEqual(ctx.exception.field, "name")
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_missing_output(self, mock_boto_client: MagicMock) -> None:
+        """Test that missing output key raises BedrockResponseError."""
+        client = BedrockClient()
+        response: dict[str, Any] = {}
+
+        with self.assertRaises(BedrockResponseError) as ctx:
+            client.parse_tool_use(response)
+
+        self.assertIn("missing expected path", str(ctx.exception))
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_missing_message(self, mock_boto_client: MagicMock) -> None:
+        """Test that missing message key raises BedrockResponseError."""
+        client = BedrockClient()
+        response = {"output": {}}
+
+        with self.assertRaises(BedrockResponseError) as ctx:
+            client.parse_tool_use(response)
+
+        self.assertIn("missing expected path", str(ctx.exception))
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_content_not_list(self, mock_boto_client: MagicMock) -> None:
+        """Test that non-list content raises BedrockResponseError."""
+        client = BedrockClient()
+        response = {"output": {"message": {"content": "not a list"}}}
+
+        with self.assertRaises(BedrockResponseError) as ctx:
+            client.parse_tool_use(response)
+
+        self.assertIn("not a list", str(ctx.exception))
+
+    @patch("src.agent.bedrock_client.boto3.client")
+    def test_parse_tool_use_default_empty_input(self, mock_boto_client: MagicMock) -> None:
+        """Test that missing input defaults to empty dict."""
+        client = BedrockClient()
+        response = {
+            "output": {
+                "message": {"content": [{"toolUse": {"toolUseId": "tool-1", "name": "search"}}]}
+            }
+        }
+
+        tool_uses = client.parse_tool_use(response)
+
+        self.assertEqual(len(tool_uses), 1)
+        self.assertEqual(tool_uses[0].input, {})
 
     @patch("src.agent.bedrock_client.boto3.client")
     def test_parse_text_response(self, mock_boto_client: MagicMock) -> None:

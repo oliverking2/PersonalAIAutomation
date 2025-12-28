@@ -6,13 +6,7 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ## Up Next
 
-### PRD18: Bedrock toolUseId Validation
-**Priority**: Critical (AGENT-002)
-
-Validate Bedrock responses upfront instead of returning empty strings.
-- Raise `BedrockResponseError` when required fields missing
-- Clear error messages identifying problem field
-- Prevents confusing downstream failures
+No items in progress.
 
 ---
 
@@ -109,6 +103,7 @@ End-to-end conversation flow testing.
 
 | PRD    | Description                                        | Date       |
 |--------|----------------------------------------------------|------------|
+| PRD18  | Bedrock toolUseId Validation                       | 2025-12-28 |
 | PRD22  | API Logging Improvements                           | 2024-12-28 |
 | PRD17  | Tool Execution Timeout                             | 2024-12-28 |
 | PRD01  | AI Agent Tool Registry                             | 2024-12    |
@@ -128,6 +123,7 @@ End-to-end conversation flow testing.
 
 | ID        | Description                                   | Date       |
 |-----------|-----------------------------------------------|------------|
+| AGENT-002 | Bedrock toolUseId validation (via PRD18)      | 2025-12-28 |
 | AGENT-001 | Tool execution timeout (via PRD17)            | 2024-12-28 |
 | AGENT-003 | CRUD tool factory (via PRD19)                 | 2024-12    |
 | AGENT-008 | Validate classification response with retries | 2024-12-25 |

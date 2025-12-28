@@ -11,10 +11,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
-from src.agent.bedrock_client import BedrockClient
+from src.agent.bedrock_client import BedrockClient, ToolUseBlock
 from src.agent.enums import ConfirmationType, RiskLevel
 from src.agent.exceptions import (
     BedrockClientError,
+    BedrockResponseError,
     MaxStepsExceededError,
     ToolExecutionError,
     ToolTimeoutError,
@@ -677,7 +678,17 @@ class AgentRunner:
 
         :returns: AgentRunResult if the run should stop, None to continue.
         """
-        tool_uses = self.client.parse_tool_use(response)
+        try:
+            tool_uses = self.client.parse_tool_use(response)
+        except BedrockResponseError as e:
+            logger.error(f"Invalid Bedrock response: {e}")
+            return AgentRunResult(
+                response=f"Received invalid response from AI: {e}",
+                tool_calls=state.tool_calls,
+                steps_taken=state.steps_taken,
+                stop_reason="error",
+            )
+
         if not tool_uses:
             logger.warning("stop_reason is tool_use but no tool uses found")
             return AgentRunResult(
@@ -691,9 +702,9 @@ class AgentRunner:
         contexts: list[_ToolUseContext] = []
         for tool_use in tool_uses:
             ctx = _ToolUseContext(
-                tool_use_id=tool_use["toolUseId"],
-                tool_name=tool_use["name"],
-                input_args=tool_use["input"],
+                tool_use_id=tool_use.id,
+                tool_name=tool_use.name,
+                input_args=tool_use.input,
             )
             contexts.append(ctx)
             logger.info(f"Tool use requested: tool={ctx.tool_name}, id={ctx.tool_use_id}")
@@ -759,7 +770,7 @@ class AgentRunner:
 
     def _handle_unknown_tool(
         self,
-        tool_uses: list[dict[str, Any]],
+        tool_uses: list[ToolUseBlock],
         state: _RunState,
         response: dict[str, Any],
     ) -> None:
@@ -781,9 +792,9 @@ class AgentRunner:
         # Collect all error results
         tool_result_contents: list[dict[str, Any]] = []
         for tool_use in tool_uses:
-            tool_use_id = tool_use["toolUseId"]
-            tool_name = tool_use["name"]
-            input_args = tool_use["input"]
+            tool_use_id = tool_use.id
+            tool_name = tool_use.name
+            input_args = tool_use.input
 
             if tool_name not in state.tools:
                 logger.error(f"LLM requested unknown tool: {tool_name}")

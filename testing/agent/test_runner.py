@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
 
+from src.agent.bedrock_client import ToolUseBlock
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError, ToolTimeoutError
 from src.agent.models import ToolDef
@@ -204,7 +205,7 @@ class TestAgentRunner(unittest.TestCase):
         self.mock_client.converse.side_effect = [tool_response, final_response]
         self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-123", "name": "safe_tool", "input": {"value": "test"}}
+            ToolUseBlock(id="tool-123", name="safe_tool", input={"value": "test"})
         ]
         self.mock_client.create_tool_result_message.return_value = {
             "role": "user",
@@ -268,7 +269,7 @@ class TestAgentRunner(unittest.TestCase):
         self.mock_client.converse.return_value = tool_response
         self.mock_client.get_stop_reason.return_value = "tool_use"
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-456", "name": "sensitive_tool", "input": {"value": "update"}}
+            ToolUseBlock(id="tool-456", name="sensitive_tool", input={"value": "update"})
         ]
 
         runner = AgentRunner(
@@ -329,7 +330,7 @@ class TestAgentRunner(unittest.TestCase):
         self.mock_client.converse.side_effect = [tool_response, final_response]
         self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-456", "name": "sensitive_tool", "input": {"value": "update"}}
+            ToolUseBlock(id="tool-456", name="sensitive_tool", input={"value": "update"})
         ]
         self.mock_client.create_tool_result_message.return_value = {
             "role": "user",
@@ -388,7 +389,7 @@ class TestAgentRunner(unittest.TestCase):
         self.mock_client.converse.return_value = tool_response
         self.mock_client.get_stop_reason.return_value = "tool_use"
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-x", "name": "safe_tool", "input": {"value": "test"}}
+            ToolUseBlock(id="tool-x", name="safe_tool", input={"value": "test"})
         ]
         self.mock_client.create_tool_result_message.return_value = {
             "role": "user",
@@ -451,7 +452,7 @@ class TestAgentRunner(unittest.TestCase):
         self.mock_client.converse.side_effect = [tool_response, final_response]
         self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-err", "name": "error_tool", "input": {"value": "test"}}
+            ToolUseBlock(id="tool-err", name="error_tool", input={"value": "test"})
         ]
         self.mock_client.create_tool_result_message.return_value = {
             "role": "user",
@@ -514,7 +515,7 @@ class TestAgentRunner(unittest.TestCase):
         self.mock_client.converse.side_effect = [tool_response, final_response]
         self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-unknown", "name": "nonexistent_tool", "input": {"value": "test"}}
+            ToolUseBlock(id="tool-unknown", name="nonexistent_tool", input={"value": "test"})
         ]
         self.mock_client.create_tool_result_message.return_value = {
             "role": "user",
@@ -665,8 +666,8 @@ class TestAgentRunner(unittest.TestCase):
         self.mock_client.converse.side_effect = [tool_response, final_response]
         self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "tool-1", "name": "safe_tool", "input": {"value": "first"}},
-            {"toolUseId": "tool-2", "name": "safe_tool", "input": {"value": "second"}},
+            ToolUseBlock(id="tool-1", name="safe_tool", input={"value": "first"}),
+            ToolUseBlock(id="tool-2", name="safe_tool", input={"value": "second"}),
         ]
         self.mock_client.create_tool_result_message.side_effect = [
             {"role": "user", "content": [{"toolResult": {"toolUseId": "tool-1"}}]},
@@ -1024,7 +1025,7 @@ class TestMessageDuplicationPrevention(unittest.TestCase):
         ]
         self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "t1", "name": "safe_tool", "input": {"value": "test"}}
+            ToolUseBlock(id="t1", name="safe_tool", input={"value": "test"})
         ]
         self.mock_client.create_tool_result_message.return_value = {
             "role": "user",
@@ -1087,7 +1088,7 @@ class TestMessageDuplicationPrevention(unittest.TestCase):
         }
         self.mock_client.get_stop_reason.return_value = "tool_use"
         self.mock_client.parse_tool_use.return_value = [
-            {"toolUseId": "t1", "name": "sensitive_tool", "input": {"value": "x"}}
+            ToolUseBlock(id="t1", name="sensitive_tool", input={"value": "x"})
         ]
 
         runner = AgentRunner(

@@ -37,6 +37,33 @@ class BedrockClientError(AgentError):
     """Error related to AWS Bedrock API calls."""
 
 
+class BedrockResponseError(AgentError):
+    """Raised when Bedrock API response is malformed or missing required fields."""
+
+    def __init__(
+        self,
+        message: str,
+        response: dict[str, object] | None = None,
+        field: str | None = None,
+    ) -> None:
+        """Initialise Bedrock response error.
+
+        :param message: Human-readable error description.
+        :param response: Raw response that caused the error (for debugging).
+        :param field: Specific field that was missing or invalid.
+        """
+        super().__init__(message)
+        self.response = response
+        self.field = field
+
+    def __str__(self) -> str:
+        """Return string representation with field context if available."""
+        base = super().__str__()
+        if self.field:
+            return f"{base} (field: {self.field})"
+        return base
+
+
 class ToolSelectionError(AgentError):
     """Error during tool selection process."""
 
