@@ -24,6 +24,15 @@ class TelegramChat(BaseModel):
     last_name: str | None = None
 
 
+class TelegramEntity(BaseModel):
+    """Telegram message entity (formatting, links, etc.)."""
+
+    type: str
+    offset: int
+    length: int
+    url: str | None = None
+
+
 class TelegramMessageInfo(BaseModel):
     """Telegram message information from the API."""
 
@@ -32,9 +41,41 @@ class TelegramMessageInfo(BaseModel):
     chat: TelegramChat
     from_user: TelegramUser | None = Field(default=None, alias="from")
     text: str | None = None
+    entities: list[TelegramEntity] | None = None
     reply_to_message: "TelegramMessageInfo | None" = None
 
     model_config = {"populate_by_name": True}
+
+    def get_text_with_urls(self) -> str | None:
+        """Get message text with text_link entities replaced by their URLs.
+
+        For text_link entities (where visible text differs from URL),
+        replaces the visible text with the full URL so the agent can
+        extract the actual link.
+
+        :returns: Text with URLs resolved, or None if no text.
+        """
+        if not self.text:
+            return None
+
+        if not self.entities:
+            return self.text
+
+        # Process entities in reverse order to preserve offsets
+        result = self.text
+        text_links = sorted(
+            [e for e in self.entities if e.type == "text_link" and e.url],
+            key=lambda e: e.offset,
+            reverse=True,
+        )
+
+        for entity in text_links:
+            if entity.url:  # Redundant check for type narrowing
+                start = entity.offset
+                end = entity.offset + entity.length
+                result = result[:start] + entity.url + result[end:]
+
+        return result
 
 
 class TelegramUpdate(BaseModel):

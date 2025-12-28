@@ -79,9 +79,9 @@ End-to-end conversation flow testing.
 - Conversation simulator helper
 
 ### Misc Improvements
-- Add better logging to the Notion API 
+- Add better logging to the Notion API
 - Alert ops need to send a message to the Errors bot rather than silently failing
-- TLDR Links need to be the full URL but ideally the visible version is shortened, e.g. [Read More](example.com)
+- ~~TLDR Links need to be the full URL but ideally the visible version is shortened~~ (Fixed: Telegram entities now extracted to preserve full URLs)
 
 ### Agent Improvements
 

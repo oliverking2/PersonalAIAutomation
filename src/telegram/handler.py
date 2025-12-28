@@ -134,7 +134,7 @@ class MessageHandler:
 
         message = update.message
         chat_id = str(message.chat.id)
-        text = message.text
+        text = message.get_text_with_urls()
 
         # Ignore messages without text (e.g., photos, stickers)
         if not text:

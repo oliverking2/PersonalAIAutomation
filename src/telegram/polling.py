@@ -176,8 +176,13 @@ class PollingRunner:
         :param chat_id: The chat ID.
         :param updates: List of updates for this chat.
         """
-        # Combine message texts if multiple messages
-        messages = [u.message.text for u in updates if u.message and u.message.text]
+        # Combine message texts if multiple messages (with URLs resolved from entities)
+        messages: list[str] = []
+        for u in updates:
+            if u.message:
+                text = u.message.get_text_with_urls()
+                if text:
+                    messages.append(text)
         combined_text = "\n".join(messages)
 
         # Use the first update's message_id for tracking
