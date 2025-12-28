@@ -24,6 +24,23 @@ class TestInternalAPIClient(unittest.TestCase):
             self.assertEqual(client.api_token, "test-token")
             client.close()
 
+    def test_init_with_api_host_and_port(self) -> None:
+        """Test client initialisation with API_HOST and API_PORT."""
+        with patch.dict(
+            "os.environ",
+            {
+                "API_AUTH_TOKEN": "test-token",
+                "API_HOST": "api",
+                "API_PORT": "8080",
+            },
+            clear=False,
+        ):
+            client = InternalAPIClient()
+
+            self.assertEqual(client.base_url, "http://api:8080")
+            self.assertEqual(client.api_token, "test-token")
+            client.close()
+
     def test_init_with_custom_values(self) -> None:
         """Test client initialisation with custom values."""
         client = InternalAPIClient(

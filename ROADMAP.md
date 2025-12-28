@@ -52,11 +52,6 @@ End-to-end conversation flow testing.
 - Mock infrastructure for deterministic tests
 - Conversation simulator helper
 
-### Misc Improvements
-
-- Alert ops need to send a message to the Errors bot rather than silently failing
-- Fix API Port and API_BASE_URL config to standardise
-
 ### Agent Improvements
 
 | ID        | Description                                               | Priority |
@@ -152,6 +147,8 @@ End-to-end conversation flow testing.
 
 | Item                    | Description                                                |
 |-------------------------|------------------------------------------------------------|
+| Alert ops error notify  | Send errors to Errors bot instead of silently failing      |
+| API config standardise  | Use API_HOST and API_PORT consistently across codebase     |
 | Idea Tracking           | Full CRUD for ideas in Notion (query, get, create, update) |
 | Message duplication fix | Fixed exponential message growth in conversation state     |
 

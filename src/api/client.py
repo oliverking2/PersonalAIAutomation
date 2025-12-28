@@ -15,6 +15,23 @@ DEFAULT_TIMEOUT = 30
 # HTTP status code threshold for errors
 HTTP_ERROR_THRESHOLD = 400
 
+# Default API configuration
+DEFAULT_API_HOST = "localhost"
+DEFAULT_API_PORT = "8000"
+
+
+def _build_api_base_url() -> str:
+    """Build API base URL from environment variables.
+
+    Uses API_HOST and API_PORT environment variables to construct the URL.
+    Defaults to localhost:8000 if not configured.
+
+    :returns: Base URL for API (e.g., http://localhost:8000).
+    """
+    host = os.environ.get("API_HOST", DEFAULT_API_HOST)
+    port = os.environ.get("API_PORT", DEFAULT_API_PORT)
+    return f"http://{host}:{port}"
+
 
 class InternalAPIClientError(Exception):
     """Raised when an API request fails."""
@@ -44,12 +61,12 @@ class InternalAPIClient:
     ) -> None:
         """Initialise the API client.
 
-        :param base_url: Base URL for API. Defaults to API_BASE_URL env var.
+        :param base_url: Base URL for API. Defaults to http://{API_HOST}:{API_PORT}.
         :param api_token: API authentication token. Defaults to API_AUTH_TOKEN env var.
         :param timeout: Request timeout in seconds.
-        :raises ValueError: If base_url or api_token is not configured.
+        :raises ValueError: If api_token is not configured.
         """
-        self.base_url = base_url or os.environ.get("API_BASE_URL", "http://localhost:8000")
+        self.base_url = base_url or _build_api_base_url()
         self.api_token = api_token or os.environ.get("API_AUTH_TOKEN")
 
         if not self.api_token:
