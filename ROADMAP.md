@@ -52,7 +52,6 @@ End-to-end conversation flow testing.
 - Conversation simulator helper
 
 ### Misc Improvements
-- Telegram not picking up a reply to message into the context
 - Improve HTIL flow to run on all tools at once, provide the Arguments and a simpler message.
 
 ### Agent Improvements
