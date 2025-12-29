@@ -6,14 +6,6 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ## Up Next
 
-No items in progress.
-
----
-
-## Backlog
-
-### Features
-
 #### PRD05: Substack & Medium Integration
 Extend newsletter extraction to more sources.
 - Substack parser (multiple feeds: Joe Reis, DataExpert.io, etc.)
@@ -25,6 +17,13 @@ Extend newsletter extraction to more sources.
   - more feeds added recently
 - Medium Daily Digest parser (requires auth handling)
 - Rundown AI
+
+
+---
+
+## Backlog
+
+### Features
 
 #### PRD03B: Telegram Webhook Mode
 Production deployment with webhook instead of polling.
@@ -55,7 +54,6 @@ End-to-end conversation flow testing.
 ### Misc Improvements
 - Telegram not picking up a reply to message into the context
 - Improve HTIL flow to run on all tools at once, provide the Arguments and a simpler message.
-- Message to say chat session expired, new session created.
 
 ### Agent Improvements
 
