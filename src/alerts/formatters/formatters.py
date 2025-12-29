@@ -143,6 +143,44 @@ def format_reading_alert(alert: AlertData) -> str:
     return "\n".join(lines).strip()
 
 
+def format_substack_alert(alert: AlertData) -> str:
+    """Format a Substack posts alert as HTML for Telegram.
+
+    Groups posts by publication with headings.
+    Format: Title + subtitle + link per post.
+
+    :param alert: The alert data to format.
+    :returns: HTML-formatted message string.
+    """
+    lines = [f"<b>{alert.title}</b>", ""]
+
+    # Group items by publication
+    current_pub = None
+    for item in alert.items:
+        pub_name = item.metadata.get("publication", "Unknown")
+
+        if pub_name != current_pub:
+            if current_pub is not None:
+                lines.append("")  # Separator between publications
+            lines.append(f"<b>{pub_name}</b>")
+            current_pub = pub_name
+
+        # Title as link, with (Paid) indicator for paywalled posts
+        is_paywalled = item.metadata.get("is_paywalled") == "true"
+        paid_suffix = " (Paid)" if is_paywalled else ""
+        if item.url:
+            lines.append(f'<a href="{item.url}">{item.name}</a>{paid_suffix}')
+        else:
+            lines.append(f"<b>{item.name}</b>{paid_suffix}")
+
+        # Subtitle if present
+        subtitle = item.metadata.get("subtitle", "")
+        if subtitle:
+            lines.append(f"<i>{subtitle}</i>")
+
+    return "\n".join(lines).strip()
+
+
 def format_alert(alert: AlertData) -> str:
     """Format any alert based on its type.
 
@@ -155,6 +193,7 @@ def format_alert(alert: AlertData) -> str:
         AlertType.DAILY_TASK: format_task_alert,
         AlertType.MONTHLY_GOAL: format_goal_alert,
         AlertType.WEEKLY_READING: format_reading_alert,
+        AlertType.SUBSTACK: format_substack_alert,
     }
 
     formatter = formatters.get(alert.alert_type)

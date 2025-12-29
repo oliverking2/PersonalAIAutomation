@@ -6,15 +6,8 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ## Up Next
 
-#### PRD05: Substack & Medium Integration
-Extend newsletter extraction to more sources.
-- Substack parser (multiple feeds: Joe Reis, DataExpert.io, etc.)
-  - Joe Reis
-  - DataExpert.io (Subscription needed?)
-  - Daily Dose of Data Science
-  - Seattle Data Guy
-  - https://practicaldatamodeling.substack.com
-  - more feeds added recently
+#### PRD05B: Medium Integration
+Extend newsletter extraction to Medium.
 - Medium Daily Digest parser (requires auth handling)
 
 ---
@@ -68,6 +61,7 @@ End-to-end conversation flow testing.
 
 | ID       | Description                                             | Priority |
 |----------|---------------------------------------------------------|----------|
+| TELE-010 | Async typing indicator refresh during long Bedrock calls| Medium   |
 | TELE-005 | Structured logging with chat_id, session_id             | Medium   |
 | TELE-003 | Graceful long-poll timeout handling                     | Medium   |
 | TELE-009 | Integration test suite                                  | Medium   |
@@ -98,6 +92,7 @@ End-to-end conversation flow testing.
 
 | PRD    | Description                                        | Date       |
 |--------|----------------------------------------------------|------------|
+| PRD05A | Substack Integration                               | 2025-12-29 |
 | PRD18  | Bedrock toolUseId Validation                       | 2025-12-28 |
 | PRD22  | API Logging Improvements                           | 2024-12-28 |
 | PRD17  | Tool Execution Timeout                             | 2024-12-28 |

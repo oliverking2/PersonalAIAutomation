@@ -6,6 +6,7 @@ from src.alerts.formatters import (
     format_goal_alert,
     format_newsletter_alert,
     format_reading_alert,
+    format_substack_alert,
     format_task_alert,
 )
 from src.alerts.models import AlertData, AlertItem, AlertSendResult
@@ -14,6 +15,7 @@ from src.alerts.providers import (
     GoalAlertProvider,
     NewsletterAlertProvider,
     ReadingAlertProvider,
+    SubstackAlertProvider,
     TaskAlertProvider,
 )
 from src.alerts.service import AlertService
@@ -28,10 +30,12 @@ __all__ = [
     "GoalAlertProvider",
     "NewsletterAlertProvider",
     "ReadingAlertProvider",
+    "SubstackAlertProvider",
     "TaskAlertProvider",
     "format_alert",
     "format_goal_alert",
     "format_newsletter_alert",
     "format_reading_alert",
+    "format_substack_alert",
     "format_task_alert",
 ]

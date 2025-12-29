@@ -147,7 +147,7 @@ src/
 ├── dagster/         # Orchestration jobs and schedules
 ├── database/        # SQLAlchemy models and operations
 ├── graph/           # Microsoft Graph API client
-├── newsletters/     # Email parsing (TLDR, future: Substack/Medium)
+├── newsletters/     # Content extraction (TLDR email, Substack)
 ├── notion/          # Notion API client and models
 ├── observability/   # Error tracking (Sentry/GlitchTip)
 ├── telegram/        # Telegram Bot client and service
@@ -244,25 +244,39 @@ poetry run alembic upgrade head
 ## Features
 
 ### Newsletter Extraction
-Fetches TLDR newsletters (standard, AI, Dev) from Outlook via Microsoft Graph API, extracts articles, and stores them in PostgreSQL.
+Fetches newsletters from multiple sources and stores articles/posts in PostgreSQL with incremental extraction.
 
-Uses watermark-based incremental extraction to track the last processed timestamp, ensuring only new newsletters are fetched on each run. The watermark can be overridden via Dagster job configuration for backfills.
+Uses watermark-based incremental extraction to track the last processed timestamp, ensuring only new content is fetched on each run. The watermark can be overridden via Dagster job configuration for backfills.
+
+#### TLDR Newsletters (Email)
+Fetches TLDR newsletters from Outlook via Microsoft Graph API, extracts articles, and stores them in the `email_newsletters` and `email_articles` tables.
 
 Supported newsletters:
 - TLDR (general tech news)
 - TLDR AI (AI/ML focused)
 - TLDR Dev (developer focused)
 
+#### Substack Publications
+Fetches posts from configured Substack publications via the Substack API, stores them in the `substack_newsletters` and `substack_posts` tables.
+
+Configuration is hardcoded in `src/newsletters/substack/config.py`. Publications can be added by appending to the `SUBSTACK_PUBLICATIONS` list with (url, name) tuples.
+
+Features:
+- Incremental extraction using watermarks
+- Paywalled post detection (shown with "(Paid)" indicator in alerts)
+- Grouped alerts with posts organised by publication
+
 ### Unified Alert System
 Proactive Telegram notifications using a provider-based architecture. All alerts are tracked in the `sent_alerts` table to prevent duplicates.
 
 #### Alert Types
-| Type | Schedule | Description |
-|------|----------|-------------|
-| Newsletter | On new newsletter | Article summaries from TLDR newsletters |
-| Daily Task | 8:00 AM daily | Overdue tasks, due today, high priority this week |
-| Monthly Goal | 1st of month 9:00 AM | Active goals with progress status |
-| Weekly Reading | Sunday 6:00 PM | High priority and stale reading items |
+| Type           | Schedule             | Description                                                  |
+|----------------|----------------------|--------------------------------------------------------------|
+| Newsletter     | Hourly (8-21 UTC)    | Article summaries from TLDR newsletters                      |
+| Substack       | Hourly (8-21 UTC)    | New posts from Substack publications, grouped by publication |
+| Daily Task     | 8:00 AM daily        | Overdue tasks, due today, high priority this week            |
+| Monthly Goal   | 1st of month 9:00 AM | Active goals with progress status                            |
+| Weekly Reading | Sunday 6:00 PM       | High priority and stale reading items                        |
 
 #### Architecture
 The alert system uses a provider pattern:
@@ -271,7 +285,8 @@ The alert system uses a provider pattern:
 - **Formatters**: HTML message formatting per alert type
 
 Providers:
-- `NewsletterAlertProvider` - Queries database for unsent newsletters
+- `NewsletterAlertProvider` - Queries database for unsent TLDR newsletters
+- `SubstackAlertProvider` - Queries database for unsent Substack posts
 - `TaskAlertProvider` - Queries API for overdue/due tasks
 - `GoalAlertProvider` - Queries API for active goals
 - `ReadingAlertProvider` - Queries API for high priority/stale reading items

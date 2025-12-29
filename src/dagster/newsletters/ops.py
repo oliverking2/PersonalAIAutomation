@@ -5,12 +5,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from dagster import Backoff, Jitter, OpExecutionContext, RetryPolicy, op
-from src.alerts import AlertService, AlertType, NewsletterAlertProvider
+from src.alerts import AlertService, AlertType, NewsletterAlertProvider, SubstackAlertProvider
 from src.database.connection import get_session
 from src.database.extraction_state import get_watermark, set_watermark
 from src.database.newsletters import backfill_article_urls
 from src.enums import ExtractionSource
 from src.graph.client import GraphClient
+from src.newsletters.substack import SubstackService
 from src.newsletters.tldr.service import NewsletterService
 from src.telegram import TelegramClient
 from src.telegram.utils.config import get_telegram_settings
@@ -136,5 +137,101 @@ def send_alerts_op(context: OpExecutionContext, newsletter_stats: NewsletterStat
 
     context.log.info(
         f"Telegram alerts complete: {result.alerts_sent} sent, {len(result.errors)} errors"
+    )
+    return stats
+
+
+@dataclass
+class SubstackStats:
+    """Stats for Substack processing operations."""
+
+    posts_processed: int
+    posts_new: int
+    posts_duplicate: int
+
+
+@op(
+    name="process_substack_posts",
+    retry_policy=NEWSLETTER_RETRY_POLICY,
+    description="Fetch and process posts from Substack publications.",
+)
+def process_substack_posts_op(context: OpExecutionContext) -> SubstackStats:
+    """Process Substack publications using watermark-based incremental extraction.
+
+    Fetches posts from configured Substack publications (since watermark),
+    stores new posts, and updates the watermark.
+
+    :param context: Dagster execution context.
+    :returns: SubstackStats with processing statistics.
+    """
+    with get_session() as session:
+        since = get_watermark(session, ExtractionSource.SUBSTACK)
+        if since is not None:
+            context.log.info(f"Using Substack watermark: {since}")
+        else:
+            context.log.info("No Substack watermark found, processing recent posts")
+
+        service = SubstackService(session)
+        result = service.process_publications(since=since, limit_per_publication=10)
+
+        if result.latest_published_at is not None:
+            set_watermark(session, ExtractionSource.SUBSTACK, result.latest_published_at)
+            context.log.info(f"Updated Substack watermark to: {result.latest_published_at}")
+
+    stats = SubstackStats(
+        posts_processed=result.posts_processed,
+        posts_new=result.posts_new,
+        posts_duplicate=result.posts_duplicate,
+    )
+
+    context.log.info(
+        f"Substack processing complete: {result.posts_processed} processed, "
+        f"{result.posts_new} new, {result.posts_duplicate} duplicate"
+    )
+    return stats
+
+
+@op(
+    name="send_substack_alerts",
+    retry_policy=NEWSLETTER_RETRY_POLICY,
+    description="Send Telegram alerts for new Substack posts.",
+)
+def send_substack_alerts_op(
+    context: OpExecutionContext,
+    substack_stats: SubstackStats,
+) -> AlertStats:
+    """Send Telegram alerts for unsent Substack posts.
+
+    Uses the unified AlertService with SubstackAlertProvider to send
+    a grouped alert for all new Substack posts.
+
+    :param context: Dagster execution context.
+    :param substack_stats: Stats from previous Substack processing op.
+    :returns: AlertStats with alerting statistics.
+    """
+    context.log.info(f"Starting Substack alerts (processed {substack_stats.posts_new} new posts)")
+
+    settings = get_telegram_settings()
+    telegram_client = TelegramClient(
+        bot_token=settings.bot_token,
+        chat_id=settings.chat_id,
+    )
+
+    with get_session() as session:
+        provider = SubstackAlertProvider(session)
+        alert_service = AlertService(
+            session=session,
+            telegram_client=telegram_client,
+            providers=[provider],
+        )
+        result = alert_service.send_alerts(alert_types=[AlertType.SUBSTACK])
+
+    stats = AlertStats(
+        newsletters_sent=result.alerts_sent,
+        errors=result.errors,
+    )
+
+    context.log.info(
+        f"Substack alerts complete: {result.alerts_sent} sent, {len(result.errors)} errors"
     )
     return stats

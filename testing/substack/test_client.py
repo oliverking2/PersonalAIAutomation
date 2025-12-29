@@ -13,11 +13,15 @@ class TestSubstackClient(unittest.TestCase):
     """Tests for SubstackClient class."""
 
     def test_init_without_cookies(self) -> None:
-        """Test initialisation without cookies path."""
-        client = SubstackClient()
+        """Test initialisation without cookies path (no default file exists)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            nonexistent_path = Path(tmpdir) / ".substack" / "cookies.json"
+            with patch("src.substack.client.PROJECT_ROOT", Path(tmpdir)):
+                client = SubstackClient()
 
-        self.assertFalse(client.authenticated)
-        self.assertTrue(client.rate_limit)
+                self.assertEqual(client.cookies_path, nonexistent_path)
+                self.assertFalse(client.authenticated)
+                self.assertTrue(client.rate_limit)
 
     def test_init_with_missing_cookies_file(self) -> None:
         """Test initialisation with missing cookies file."""

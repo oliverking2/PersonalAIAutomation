@@ -12,9 +12,9 @@ from src.newsletters.tldr.models import NewsletterType
 
 
 class Newsletter(Base):
-    """ORM model for newsletters table."""
+    """ORM model for email newsletters table."""
 
-    __tablename__ = "newsletters"
+    __tablename__ = "email_newsletters"
 
     id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -53,8 +53,8 @@ class Newsletter(Base):
     )
 
     __table_args__ = (
-        Index("idx_newsletters_received_at", "received_at"),
-        Index("idx_newsletters_type", "newsletter_type"),
+        Index("idx_email_newsletters_received_at", "received_at"),
+        Index("idx_email_newsletters_type", "newsletter_type"),
     )
 
     def __repr__(self) -> str:
@@ -63,9 +63,9 @@ class Newsletter(Base):
 
 
 class Article(Base):
-    """ORM model for articles table."""
+    """ORM model for email articles table."""
 
-    __tablename__ = "articles"
+    __tablename__ = "email_articles"
 
     id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -74,7 +74,7 @@ class Article(Base):
     )
     newsletter_id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("newsletters.id"),
+        ForeignKey("email_newsletters.id"),
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -94,8 +94,8 @@ class Article(Base):
     )
 
     __table_args__ = (
-        Index("idx_articles_url_hash", "url_hash"),
-        Index("idx_articles_newsletter_id", "newsletter_id"),
+        Index("idx_email_articles_url_hash", "url_hash"),
+        Index("idx_email_articles_newsletter_id", "newsletter_id"),
     )
 
     def __repr__(self) -> str:

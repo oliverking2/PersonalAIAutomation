@@ -4232,6 +4232,18 @@ files = [
 ]
 
 [[package]]
+name = "types-python-dateutil"
+version = "2.9.0.20251115"
+description = "Typing stubs for python-dateutil"
+optional = false
+python-versions = ">=3.9"
+groups = ["dev"]
+files = [
+    {file = "types_python_dateutil-2.9.0.20251115-py3-none-any.whl", hash = "sha256:9cf9c1c582019753b8639a081deefd7e044b9fa36bd8217f565c6c4e36ee0624"},
+    {file = "types_python_dateutil-2.9.0.20251115.tar.gz", hash = "sha256:8a47f2c3920f52a994056b8786309b43143faa5a64d4cbb2722d6addabdf1a58"},
+]
+
+[[package]]
 name = "types-requests"
 version = "2.32.4.20250913"
 description = "Typing stubs for requests"
@@ -4841,4 +4853,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "b590b1db0a3fcd922bc9164a1c0b94d57cc350f651cd16f5d8f0e1220f7842ee"
+content-hash = "b09c843682b083f25d5a8521ca91aa1ca264a2863c5c96784f701d1aa673f266"
