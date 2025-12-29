@@ -288,6 +288,10 @@ class MessageHandler:
         # Invoke agent with potentially augmented text
         response = self._invoke_agent(db_session, telegram_session, agent_text)
 
+        # Prepend session expiry notification if applicable
+        if is_new:
+            response = f"Previous chat session expired, new session created.\n\n{response}"
+
         # Record assistant response
         create_telegram_message(
             db_session,

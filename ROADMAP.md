@@ -24,7 +24,7 @@ Extend newsletter extraction to more sources.
   - https://practicaldatamodeling.substack.com
   - more feeds added recently
 - Medium Daily Digest parser (requires auth handling)
-- Configurable feed management
+- Rundown AI
 
 #### PRD03B: Telegram Webhook Mode
 Production deployment with webhook instead of polling.
@@ -51,6 +51,11 @@ End-to-end conversation flow testing.
 - Multi-turn scenarios (clarification, confirmation, denial)
 - Mock infrastructure for deterministic tests
 - Conversation simulator helper
+
+### Misc Improvements
+- Telegram not picking up a reply to message into the context
+- Improve HTIL flow to run on all tools at once, provide the Arguments and a simpler message.
+- Message to say chat session expired, new session created.
 
 ### Agent Improvements
 
