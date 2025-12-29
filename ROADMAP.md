@@ -16,8 +16,6 @@ Extend newsletter extraction to more sources.
   - https://practicaldatamodeling.substack.com
   - more feeds added recently
 - Medium Daily Digest parser (requires auth handling)
-- Rundown AI
-
 
 ---
 
@@ -52,7 +50,7 @@ End-to-end conversation flow testing.
 - Conversation simulator helper
 
 ### Misc Improvements
-- Improve HTIL flow to run on all tools at once, provide the Arguments and a simpler message.
+(No items currently)
 
 ### Agent Improvements
 
@@ -151,6 +149,7 @@ End-to-end conversation flow testing.
 |-------------------------|------------------------------------------------------------|
 | Alert ops error notify  | Send errors to Errors bot instead of silently failing      |
 | API config standardise  | Use API_HOST and API_PORT consistently across codebase     |
+| Batch HITL confirmation | Multi-tool confirmation with partial approvals/corrections |
 | Idea Tracking           | Full CRUD for ideas in Notion (query, get, create, update) |
 | Message duplication fix | Fixed exponential message growth in conversation state     |
 

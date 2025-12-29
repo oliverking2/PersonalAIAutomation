@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from src.agent.exceptions import BedrockClientError
-from src.agent.models import ConversationState, PendingConfirmation
+from src.agent.models import ConversationState, PendingConfirmation, PendingToolAction
 from src.agent.utils.context_manager import (
     _format_messages_for_summary,
     append_messages,
@@ -71,11 +71,16 @@ class TestLoadConversationState(unittest.TestCase):
         conversation.messages_json = []
         conversation.selected_tools = []
         conversation.pending_confirmation = {
-            "tool_use_id": "tool-123",
-            "tool_name": "create_task",
-            "tool_description": "Create a task",
-            "input_args": {"name": "Test"},
-            "action_summary": "Create a task",
+            "tools": [
+                {
+                    "index": 1,
+                    "tool_use_id": "tool-123",
+                    "tool_name": "create_task",
+                    "tool_description": "Create a task",
+                    "input_args": {"name": "Test"},
+                    "action_summary": "Create a task",
+                },
+            ],
             "selected_tools": ["create_task"],
         }
         conversation.summary = None
@@ -85,8 +90,9 @@ class TestLoadConversationState(unittest.TestCase):
         state = load_conversation_state(conversation)
 
         self.assertIsNotNone(state.pending_confirmation)
-        self.assertEqual(state.pending_confirmation.tool_use_id, "tool-123")
-        self.assertEqual(state.pending_confirmation.tool_name, "create_task")
+        self.assertEqual(len(state.pending_confirmation.tools), 1)
+        self.assertEqual(state.pending_confirmation.tools[0].tool_use_id, "tool-123")
+        self.assertEqual(state.pending_confirmation.tools[0].tool_name, "create_task")
 
 
 class TestSaveConversationState(unittest.TestCase):
@@ -122,11 +128,16 @@ class TestSaveConversationState(unittest.TestCase):
         session = MagicMock()
 
         pending = PendingConfirmation(
-            tool_use_id="tool-456",
-            tool_name="delete_task",
-            tool_description="Delete a task",
-            input_args={"task_id": "123"},
-            action_summary="Delete task 123",
+            tools=[
+                PendingToolAction(
+                    index=1,
+                    tool_use_id="tool-456",
+                    tool_name="delete_task",
+                    tool_description="Delete a task",
+                    input_args={"task_id": "123"},
+                    action_summary="Delete task 123",
+                ),
+            ],
             selected_tools=["delete_task"],
         )
 
@@ -138,7 +149,8 @@ class TestSaveConversationState(unittest.TestCase):
         save_conversation_state(session, conversation, state)
 
         self.assertIsNotNone(conversation.pending_confirmation)
-        self.assertEqual(conversation.pending_confirmation["tool_use_id"], "tool-456")
+        self.assertEqual(len(conversation.pending_confirmation["tools"]), 1)
+        self.assertEqual(conversation.pending_confirmation["tools"][0]["tool_use_id"], "tool-456")
 
 
 class TestAppendMessages(unittest.TestCase):
@@ -350,11 +362,16 @@ class TestPendingConfirmation(unittest.TestCase):
         """Test setting pending confirmation."""
         state = ConversationState(conversation_id=uuid.uuid4())
         pending = PendingConfirmation(
-            tool_use_id="tool-123",
-            tool_name="delete_task",
-            tool_description="Delete a task",
-            input_args={"task_id": "456"},
-            action_summary="Delete task 456",
+            tools=[
+                PendingToolAction(
+                    index=1,
+                    tool_use_id="tool-123",
+                    tool_name="delete_task",
+                    tool_description="Delete a task",
+                    input_args={"task_id": "456"},
+                    action_summary="Delete task 456",
+                ),
+            ],
         )
 
         set_pending_confirmation(state, pending)
@@ -364,11 +381,16 @@ class TestPendingConfirmation(unittest.TestCase):
     def test_clear_pending_confirmation(self) -> None:
         """Test clearing pending confirmation."""
         pending = PendingConfirmation(
-            tool_use_id="tool-123",
-            tool_name="delete_task",
-            tool_description="Delete a task",
-            input_args={"task_id": "456"},
-            action_summary="Delete task 456",
+            tools=[
+                PendingToolAction(
+                    index=1,
+                    tool_use_id="tool-123",
+                    tool_name="delete_task",
+                    tool_description="Delete a task",
+                    input_args={"task_id": "456"},
+                    action_summary="Delete task 456",
+                ),
+            ],
         )
         state = ConversationState(
             conversation_id=uuid.uuid4(),

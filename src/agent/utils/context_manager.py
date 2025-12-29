@@ -326,4 +326,4 @@ def set_pending_confirmation(
     :param pending: Pending confirmation details.
     """
     state.pending_confirmation = pending
-    logger.debug(f"Set pending confirmation: tool={pending.tool_name}")
+    logger.debug(f"Set pending confirmation: {len(pending.tools)} tool(s)")

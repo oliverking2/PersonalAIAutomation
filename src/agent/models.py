@@ -99,21 +99,34 @@ class ToolCall(BaseModel):
     is_error: bool = False
 
 
-class ConfirmationRequest(BaseModel):
-    """Request for user confirmation before executing a sensitive tool.
+class PendingToolAction(BaseModel):
+    """A single tool action pending confirmation.
 
-    :param tool_name: Name of the sensitive tool requiring confirmation.
+    :param index: 1-based index for user display.
+    :param tool_use_id: ID of the tool use block from the LLM.
+    :param tool_name: Name of the tool.
     :param tool_description: Description of the tool.
     :param input_args: Arguments that would be passed to the tool.
     :param action_summary: Human-readable summary of what the tool would do.
-    :param tool_use_id: ID of the tool use block from the LLM.
     """
 
+    index: int
+    tool_use_id: str
     tool_name: str
     tool_description: str
     input_args: dict[str, Any]
     action_summary: str
-    tool_use_id: str
+
+
+class ConfirmationRequest(BaseModel):
+    """Request for user confirmation before executing sensitive tools.
+
+    Supports batch confirmation of multiple tools.
+
+    :param tools: List of pending tool actions requiring confirmation.
+    """
+
+    tools: list[PendingToolAction]
 
 
 class AgentRunResult(BaseModel):
@@ -137,21 +150,13 @@ class PendingConfirmation(BaseModel):
     """Serialisable pending confirmation state for persistence.
 
     This model is stored in the database as JSONB to preserve confirmation
-    context between agent runs.
+    context between agent runs. Supports batch confirmation of multiple tools.
 
-    :param tool_use_id: ID of the tool use block from the LLM.
-    :param tool_name: Name of the sensitive tool requiring confirmation.
-    :param tool_description: Description of the tool.
-    :param input_args: Arguments that would be passed to the tool.
-    :param action_summary: Human-readable summary of what the tool would do.
+    :param tools: List of pending tool actions requiring confirmation.
     :param selected_tools: Tool names that were selected for this flow.
     """
 
-    tool_use_id: str
-    tool_name: str
-    tool_description: str
-    input_args: dict[str, Any]
-    action_summary: str
+    tools: list[PendingToolAction]
     selected_tools: list[str] = Field(default_factory=list)
 
 

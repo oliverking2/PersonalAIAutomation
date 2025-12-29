@@ -282,9 +282,11 @@ class TestAgentRunner(unittest.TestCase):
 
         self.assertEqual(result.stop_reason, "confirmation_required")
         self.assertIsNotNone(result.confirmation_request)
-        self.assertEqual(result.confirmation_request.tool_name, "sensitive_tool")
-        self.assertEqual(result.confirmation_request.input_args, {"value": "update"})
-        self.assertEqual(result.confirmation_request.tool_use_id, "tool-456")
+        self.assertEqual(len(result.confirmation_request.tools), 1)
+        tool_action = result.confirmation_request.tools[0]
+        self.assertEqual(tool_action.tool_name, "sensitive_tool")
+        self.assertEqual(tool_action.input_args, {"value": "update"})
+        self.assertEqual(tool_action.tool_use_id, "tool-456")
         self.assertEqual(result.steps_taken, 0)
 
     @patch("src.agent.runner.complete_agent_run")

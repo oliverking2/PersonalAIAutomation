@@ -4,6 +4,8 @@ import unittest
 import uuid
 from unittest.mock import MagicMock, patch
 
+from src.agent.models import PendingToolAction
+from src.api.client import InternalAPIClientError
 from src.telegram.handler import (
     MessageHandler,
     UnauthorisedChatError,
@@ -152,8 +154,14 @@ class TestMessageHandler(unittest.TestCase):
         self.mock_session_manager.get_or_create_session.return_value = (mock_session, False)
         self.mock_session_manager.ensure_agent_conversation.return_value = mock_session
 
+        mock_tool = MagicMock()
+        mock_tool.index = 1
+        mock_tool.tool_name = "create_task"
+        mock_tool.action_summary = "Create task: Buy groceries"
+        mock_tool.input_args = {"title": "Buy groceries"}
+
         mock_confirmation = MagicMock()
-        mock_confirmation.action_summary = "Create task: Buy groceries"
+        mock_confirmation.tools = [mock_tool]
 
         mock_result = MagicMock()
         mock_result.stop_reason = "confirmation_required"
@@ -376,6 +384,207 @@ class TestParseCommand(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "my_command")
+
+
+class TestFormatToolAction(unittest.TestCase):
+    """Tests for _format_tool_action method."""
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.settings = TelegramConfig(
+            bot_token="test-token",
+            allowed_chat_ids="12345",
+            _env_file=None,
+        )
+        self.mock_session_manager = MagicMock()
+        self.handler = MessageHandler(
+            settings=self.settings,
+            session_manager=self.mock_session_manager,
+        )
+
+    @patch("src.telegram.handler.InternalAPIClient")
+    def test_format_tool_action_with_entity_name_lookup(
+        self,
+        mock_api_client_class: MagicMock,
+    ) -> None:
+        """Test formatting tool action with successful entity name lookup."""
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"task_name": "Review quarterly report"}
+        mock_api_client_class.return_value.__enter__.return_value = mock_client
+
+        tool = PendingToolAction(
+            index=1,
+            tool_use_id="tool-123",
+            tool_name="update_task",
+            tool_description="Update a task",
+            input_args={"task_id": "abc-123", "due_date": "2025-01-01"},
+            action_summary="Update task",
+        )
+
+        result = self.handler._format_tool_action(tool)
+
+        self.assertEqual(result, "update_task: 'Review quarterly report' → due_date='2025-01-01'")
+        mock_client.get.assert_called_once_with("/notion/tasks/abc-123")
+
+    @patch("src.telegram.handler.InternalAPIClient")
+    def test_format_tool_action_with_entity_lookup_failure(
+        self,
+        mock_api_client_class: MagicMock,
+    ) -> None:
+        """Test formatting tool action when entity lookup fails."""
+        mock_client = MagicMock()
+        mock_client.get.side_effect = InternalAPIClientError("Not found", 404)
+        mock_api_client_class.return_value.__enter__.return_value = mock_client
+
+        tool = PendingToolAction(
+            index=1,
+            tool_use_id="tool-123",
+            tool_name="update_task",
+            tool_description="Update a task",
+            input_args={"task_id": "abc-123", "due_date": "2025-01-01"},
+            action_summary="Update task",
+        )
+
+        result = self.handler._format_tool_action(tool)
+
+        # Falls back to showing the args since lookup failed
+        self.assertIn("update_task:", result)
+        self.assertIn("task_id='abc-123'", result)
+        self.assertIn("due_date='2025-01-01'", result)
+
+    def test_format_tool_action_without_entity_id(self) -> None:
+        """Test formatting tool action without entity ID field."""
+        tool = PendingToolAction(
+            index=1,
+            tool_use_id="tool-123",
+            tool_name="create_task",
+            tool_description="Create a task",
+            input_args={"title": "New task", "priority": "High"},
+            action_summary="Create task",
+        )
+
+        result = self.handler._format_tool_action(tool)
+
+        self.assertEqual(result, "create_task: title='New task', priority='High'")
+
+    def test_format_tool_action_with_many_args_truncates(self) -> None:
+        """Test that tool actions with many args are truncated."""
+        tool = PendingToolAction(
+            index=1,
+            tool_use_id="tool-123",
+            tool_name="create_task",
+            tool_description="Create a task",
+            input_args={
+                "title": "Task",
+                "priority": "High",
+                "due_date": "2025-01-01",
+                "status": "To Do",
+                "notes": "Extra notes",
+            },
+            action_summary="Create task",
+        )
+
+        result = self.handler._format_tool_action(tool)
+
+        # Should only show first 3 args plus "..."
+        self.assertIn("create_task:", result)
+        self.assertIn("...", result)
+
+    @patch("src.telegram.handler.InternalAPIClient")
+    def test_format_tool_action_entity_only_no_other_args(
+        self,
+        mock_api_client_class: MagicMock,
+    ) -> None:
+        """Test formatting when tool only has entity ID argument."""
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"goal_name": "Learn Spanish"}
+        mock_api_client_class.return_value.__enter__.return_value = mock_client
+
+        tool = PendingToolAction(
+            index=1,
+            tool_use_id="tool-123",
+            tool_name="get_goal",
+            tool_description="Get a goal",
+            input_args={"goal_id": "goal-456"},
+            action_summary="Get goal",
+        )
+
+        result = self.handler._format_tool_action(tool)
+
+        self.assertEqual(result, "get_goal: 'Learn Spanish'")
+
+
+class TestLookupEntityName(unittest.TestCase):
+    """Tests for _lookup_entity_name method."""
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.settings = TelegramConfig(
+            bot_token="test-token",
+            allowed_chat_ids="12345",
+            _env_file=None,
+        )
+        self.mock_session_manager = MagicMock()
+        self.handler = MessageHandler(
+            settings=self.settings,
+            session_manager=self.mock_session_manager,
+        )
+
+    @patch("src.telegram.handler.InternalAPIClient")
+    def test_lookup_task_name(self, mock_api_client_class: MagicMock) -> None:
+        """Test looking up task name by ID."""
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"task_name": "Review quarterly report"}
+        mock_api_client_class.return_value.__enter__.return_value = mock_client
+
+        result = self.handler._lookup_entity_name("task_id", "task-123")
+
+        self.assertEqual(result, "Review quarterly report")
+        mock_client.get.assert_called_once_with("/notion/tasks/task-123")
+
+    @patch("src.telegram.handler.InternalAPIClient")
+    def test_lookup_goal_name(self, mock_api_client_class: MagicMock) -> None:
+        """Test looking up goal name by ID."""
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"goal_name": "Learn Spanish"}
+        mock_api_client_class.return_value.__enter__.return_value = mock_client
+
+        result = self.handler._lookup_entity_name("goal_id", "goal-456")
+
+        self.assertEqual(result, "Learn Spanish")
+        mock_client.get.assert_called_once_with("/notion/goals/goal-456")
+
+    @patch("src.telegram.handler.InternalAPIClient")
+    def test_lookup_reading_item_title(self, mock_api_client_class: MagicMock) -> None:
+        """Test looking up reading item title by ID."""
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"title": "Clean Code"}
+        mock_api_client_class.return_value.__enter__.return_value = mock_client
+
+        result = self.handler._lookup_entity_name("reading_item_id", "reading-789")
+
+        self.assertEqual(result, "Clean Code")
+        mock_client.get.assert_called_once_with("/notion/reading-list/reading-789")
+
+    def test_lookup_unknown_field_returns_none(self) -> None:
+        """Test that unknown field names return None."""
+        result = self.handler._lookup_entity_name("unknown_id", "some-id")
+
+        self.assertIsNone(result)
+
+    @patch("src.telegram.handler.InternalAPIClient")
+    def test_lookup_api_error_returns_none(
+        self,
+        mock_api_client_class: MagicMock,
+    ) -> None:
+        """Test that API errors return None gracefully."""
+        mock_client = MagicMock()
+        mock_client.get.side_effect = InternalAPIClientError("Not found", 404)
+        mock_api_client_class.return_value.__enter__.return_value = mock_client
+
+        result = self.handler._lookup_entity_name("task_id", "task-123")
+
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

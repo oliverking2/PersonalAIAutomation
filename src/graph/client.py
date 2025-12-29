@@ -234,4 +234,5 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv()
-    print(GraphClient("oliver@oliverking.me.uk").access_token)
+    client = GraphClient("oliver@oliverking.me.uk")
+    print(client.access_token)

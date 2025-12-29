@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from src.agent.bedrock_client import BedrockClient, ToolUseBlock
-from src.agent.enums import ConfirmationType, RiskLevel
+from src.agent.enums import ConfirmationType, RiskLevel, ToolDecisionType
 from src.agent.exceptions import (
     BedrockClientError,
     BedrockResponseError,
@@ -25,6 +25,7 @@ from src.agent.models import (
     ConfirmationRequest,
     ConversationState,
     PendingConfirmation,
+    PendingToolAction,
     ToolCall,
     ToolDef,
 )
@@ -32,7 +33,9 @@ from src.agent.utils.call_tracking import TrackingContext, set_tracking_context
 from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
 from src.agent.utils.confirmation_classifier import (
     ClassificationParseError,
-    classify_confirmation_response,
+    ToolDecision,
+    apply_correction,
+    classify_batch_confirmation_response,
 )
 from src.agent.utils.context_manager import (
     append_messages,
@@ -63,7 +66,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Default system prompt for the agent (use {current_date} placeholder)
-DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, and reading lists.
+DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, reading lists, and ideas.
+
+You can:
+- Query, get, create, and update tasks (including changing due dates, status, priority)
+- Query, get, create, and update goals
+- Query, get, create, and update reading list items
+- Query, get, create, and update ideas
 
 Today's date is {current_date}.
 
@@ -75,6 +84,8 @@ When using tools:
 5. Handle errors gracefully and explain any issues to the user
 6. When users mention relative dates (e.g., "end of week", "next Friday"), calculate the actual date
 7. Before calling create tools, check if the name/title is specific enough to find later. If vague (e.g., "Send email", "Meeting"), nudge the user for more details
+
+IMPORTANT: Before saying you cannot do something, check your available tools. If you have a tool that could accomplish the task, use it.
 
 Always be concise and helpful in your responses. Keep responses short and to the point."""
 
@@ -251,8 +262,8 @@ class AgentRunner:
     ) -> AgentRunResult:
         """Handle a user response when there's a pending confirmation.
 
-        Classifies the user's message as CONFIRM, DENY, or NEW_INTENT and
-        processes accordingly.
+        Classifies the user's message as CONFIRM, DENY, PARTIAL_CONFIRM,
+        or NEW_INTENT and processes accordingly.
 
         :param user_message: The user's response message.
         :param conv_state: Conversation state with pending confirmation.
@@ -263,9 +274,9 @@ class AgentRunner:
             # Should not happen, but handle gracefully
             return self._execute_run(user_message, None, conv_state)
 
-        # Classify the user's response
+        # Classify the user's response using batch classifier
         try:
-            confirmation_type = classify_confirmation_response(
+            result = classify_batch_confirmation_response(
                 client=self.client,
                 user_message=user_message,
                 pending=pending,
@@ -285,21 +296,22 @@ class AgentRunner:
                 stop_reason="classification_error",
             )
 
-        logger.info(f"Confirmation response classified as: {confirmation_type}")
+        logger.info(f"Confirmation response classified as: {result.classification}")
 
-        if confirmation_type == ConfirmationType.CONFIRM:
-            # Clear pending and execute the tool directly
+        if result.classification == ConfirmationType.CONFIRM:
+            # Clear pending and execute all tools
             clear_pending_confirmation(conv_state)
 
-            logger.info(f"User confirmed action, executing tool: {pending.tool_name}")
+            tool_count = len(pending.tools)
+            logger.info(f"User confirmed all {tool_count} action(s)")
 
-            return self._execute_confirmed_tool(
+            return self._execute_confirmed_tools(
                 pending=pending,
                 conv_state=conv_state,
                 user_message=user_message,
             )
 
-        if confirmation_type == ConfirmationType.DENY:
+        if result.classification == ConfirmationType.DENY:
             # Clear pending and return cancellation
             clear_pending_confirmation(conv_state)
 
@@ -307,13 +319,26 @@ class AgentRunner:
             user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
             append_messages(conv_state, [user_msg])
 
-            logger.info("User declined confirmation")
+            logger.info("User declined all confirmations")
 
             return AgentRunResult(
-                response="Action cancelled.",
+                response="All actions cancelled.",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="user_cancelled",
+            )
+
+        if result.classification == ConfirmationType.PARTIAL_CONFIRM:
+            # Handle partial confirmation with per-tool decisions
+            logger.info(
+                f"User provided partial confirmation: {len(result.tool_decisions)} decisions"
+            )
+
+            return self._handle_partial_confirmation(
+                pending=pending,
+                conv_state=conv_state,
+                user_message=user_message,
+                tool_decisions=result.tool_decisions,
             )
 
         # NEW_INTENT
@@ -328,50 +353,87 @@ class AgentRunner:
             conv_state=conv_state,
         )
 
-    def _execute_confirmed_tool(
+    def _execute_confirmed_tools(
         self,
         pending: PendingConfirmation,
         conv_state: ConversationState,
         user_message: str,
+        tools_to_execute: list[PendingToolAction] | None = None,
     ) -> AgentRunResult:
-        """Execute a tool that was previously confirmed by the user.
+        """Execute confirmed tools from a batch confirmation.
 
-        Directly executes the tool with saved arguments, then hands off to
+        Directly executes the tools with saved arguments, then hands off to
         the agent loop to generate a response. The user's confirmation message
-        is included so the LLM can see any additional requests (e.g., "yes,
-        and also add X").
+        is included so the LLM can see any additional requests.
 
         :param pending: The confirmed pending action with tool details.
         :param conv_state: Conversation state for context.
         :param user_message: The user's confirmation message (may contain followup).
+        :param tools_to_execute: Specific tools to execute. If None, executes all.
         :returns: Result of the agent run.
         """
-        tool = self.registry.get(pending.tool_name)
+        tools = tools_to_execute if tools_to_execute is not None else pending.tools
 
-        # Execute the tool and create the call record
-        tool_result, tool_call = self._execute_and_create_tool_call(
-            tool=tool,
-            tool_use_id=pending.tool_use_id,
-            input_args=pending.input_args,
-        )
+        if not tools:
+            # No tools to execute, just return cancelled message
+            return AgentRunResult(
+                response="No actions to execute.",
+                tool_calls=[],
+                steps_taken=0,
+                stop_reason="no_actions",
+            )
 
-        logger.info(
-            f"Confirmed tool executed: tool={pending.tool_name}, error={tool_call.is_error}"
-        )
-
-        # Build messages: context + user confirmation + assistant tool request + tool result
-        # Include user message so LLM can see any additional requests in the confirmation
+        # Build messages: context + user confirmation + assistant tool requests + tool results
         context_messages = build_context_messages(conv_state)
         context_length = len(context_messages)
         user_confirmation_msg = self.client.create_user_message(user_message)
-        assistant_tool_request = self.client.create_assistant_tool_use_message(
-            tool_use_id=pending.tool_use_id,
-            name=pending.tool_name,
-            input_args=pending.input_args,
-        )
-        tool_result_msg = self.client.create_tool_result_message(
-            pending.tool_use_id, tool_result, is_error=tool_call.is_error
-        )
+
+        # Build assistant message with all tool_use blocks
+        tool_use_contents: list[dict[str, Any]] = []
+        for tool_action in tools:
+            tool_use_contents.append(
+                {
+                    "toolUse": {
+                        "toolUseId": tool_action.tool_use_id,
+                        "name": tool_action.tool_name,
+                        "input": tool_action.input_args,
+                    }
+                }
+            )
+
+        assistant_tool_request: dict[str, Any] = {
+            "role": "assistant",
+            "content": tool_use_contents,
+        }
+
+        # Execute all tools and collect results
+        tool_calls: list[ToolCall] = []
+        tool_result_contents: list[dict[str, Any]] = []
+
+        for tool_action in tools:
+            tool = self.registry.get(tool_action.tool_name)
+            tool_result, tool_call = self._execute_and_create_tool_call(
+                tool=tool,
+                tool_use_id=tool_action.tool_use_id,
+                input_args=tool_action.input_args,
+            )
+            tool_calls.append(tool_call)
+
+            logger.info(
+                f"Confirmed tool executed: tool={tool_action.tool_name}, error={tool_call.is_error}"
+            )
+
+            tool_result_contents.append(
+                {
+                    "toolResult": {
+                        "toolUseId": tool_action.tool_use_id,
+                        "content": [{"json": tool_result}],
+                        "status": "error" if tool_call.is_error else "success",
+                    }
+                }
+            )
+
+        tool_result_msg: dict[str, Any] = {"role": "user", "content": tool_result_contents}
 
         messages: list[Any] = [
             *context_messages,
@@ -385,7 +447,7 @@ class AgentRunner:
 
         state = _RunState(
             messages=messages,
-            tool_calls=[tool_call],
+            tool_calls=tool_calls,
             steps_taken=1,
             tools=self._build_tools_dict(all_tool_names),
             confirmed_tool_use_ids=set(),
@@ -394,6 +456,107 @@ class AgentRunner:
         )
 
         return self._run_agent_loop(state, self._build_tool_config(all_tool_names), conv_state)
+
+    def _handle_partial_confirmation(
+        self,
+        pending: PendingConfirmation,
+        conv_state: ConversationState,
+        user_message: str,
+        tool_decisions: list[ToolDecision],
+    ) -> AgentRunResult:
+        """Handle a partial confirmation with per-tool decisions.
+
+        :param pending: The pending confirmation with list of tools.
+        :param conv_state: Conversation state for context.
+        :param user_message: The user's response message.
+        :param tool_decisions: Per-tool decisions from the classifier.
+        :returns: Result of the agent run.
+        """
+        clear_pending_confirmation(conv_state)
+
+        # Build decision map for quick lookup
+        decision_map: dict[int, ToolDecision] = {d.index: d for d in tool_decisions}
+
+        # Process each tool based on its decision
+        tools_to_execute: list[PendingToolAction] = []
+        rejected_count = 0
+
+        for tool_action in pending.tools:
+            decision = decision_map.get(tool_action.index)
+
+            if decision is None:
+                # No explicit decision - default to approve
+                tools_to_execute.append(tool_action)
+                continue
+
+            if decision.decision == ToolDecisionType.APPROVE:
+                tools_to_execute.append(tool_action)
+
+            elif decision.decision == ToolDecisionType.REJECT:
+                rejected_count += 1
+                logger.info(f"Tool rejected by user: {tool_action.tool_name}")
+
+            elif decision.decision == ToolDecisionType.MODIFY and decision.correction:
+                try:
+                    updated_args = apply_correction(
+                        client=self.client,
+                        tool=tool_action,
+                        correction=decision.correction,
+                    )
+                    # Create modified tool action
+                    modified_action = PendingToolAction(
+                        index=tool_action.index,
+                        tool_use_id=tool_action.tool_use_id,
+                        tool_name=tool_action.tool_name,
+                        tool_description=tool_action.tool_description,
+                        input_args=updated_args,
+                        action_summary=self._generate_action_summary(
+                            tool_action.tool_description, updated_args
+                        ),
+                    )
+                    tools_to_execute.append(modified_action)
+                    logger.info(
+                        f"Tool modified: {tool_action.tool_name}, "
+                        f"correction='{decision.correction}'"
+                    )
+                except ClassificationParseError as e:
+                    logger.warning(f"Failed to apply correction to {tool_action.tool_name}: {e}")
+                    # Add error message to response
+                    user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
+                    append_messages(conv_state, [user_msg])
+                    return AgentRunResult(
+                        response=(
+                            f"I couldn't apply your correction to the "
+                            f"'{tool_action.tool_name}' action. Please try rephrasing "
+                            f"or provide more specific instructions."
+                        ),
+                        tool_calls=[],
+                        steps_taken=0,
+                        stop_reason="correction_error",
+                    )
+
+        if not tools_to_execute:
+            # All tools rejected
+            user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
+            append_messages(conv_state, [user_msg])
+            return AgentRunResult(
+                response="All actions were rejected.",
+                tool_calls=[],
+                steps_taken=0,
+                stop_reason="user_cancelled",
+            )
+
+        logger.info(
+            f"Executing {len(tools_to_execute)} tool(s) after partial confirmation "
+            f"({rejected_count} rejected)"
+        )
+
+        return self._execute_confirmed_tools(
+            pending=pending,
+            conv_state=conv_state,
+            user_message=user_message,
+            tools_to_execute=tools_to_execute,
+        )
 
     def _resolve_tools(
         self,
@@ -673,8 +836,9 @@ class AgentRunner:
         """Handle a tool use response from the LLM.
 
         When the LLM returns multiple tool uses in one response, we must
-        provide a tool_result for each one. This method handles all tool
-        uses in the response.
+        provide a tool_result for each one. This method:
+        1. Executes safe tools immediately
+        2. Collects all sensitive tools for batch confirmation
 
         :returns: AgentRunResult if the run should stop, None to continue.
         """
@@ -715,14 +879,36 @@ class AgentRunner:
             self._handle_unknown_tool(tool_uses, state, response)
             return None
 
-        # Check if ANY tool requires confirmation - if so, pause on first sensitive one
+        # Separate tools into safe and sensitive
+        safe_contexts: list[_ToolUseContext] = []
+        sensitive_contexts: list[_ToolUseContext] = []
+
         for ctx in contexts:
             tool = state.tools[ctx.tool_name]
-            confirmation_result = self._check_confirmation_required(ctx, tool, state, conv_state)
-            if confirmation_result is not None:
-                return confirmation_result
+            if (
+                self.require_confirmation
+                and tool.risk_level == RiskLevel.SENSITIVE
+                and ctx.tool_use_id not in state.confirmed_tool_use_ids
+            ):
+                sensitive_contexts.append(ctx)
+            else:
+                safe_contexts.append(ctx)
 
-        # Execute ALL tools and collect results
+        # If there are sensitive tools requiring confirmation, create batch request
+        if sensitive_contexts:
+            logger.info(
+                f"Batch confirmation needed: {len(sensitive_contexts)} sensitive, "
+                f"{len(safe_contexts)} safe"
+            )
+            return self._request_batch_confirmation(
+                sensitive_contexts=sensitive_contexts,
+                safe_contexts=safe_contexts,
+                state=state,
+                conv_state=conv_state,
+                response=response,
+            )
+
+        # No sensitive tools - execute all tools
         self._execute_all_tools(contexts, state, response)
         return None
 
@@ -827,56 +1013,106 @@ class AgentRunner:
         # Add single message with ALL tool results
         state.messages.append({"role": "user", "content": tool_result_contents})
 
-    def _check_confirmation_required(
+    def _request_batch_confirmation(
         self,
-        ctx: _ToolUseContext,
-        tool: ToolDef,
+        sensitive_contexts: list[_ToolUseContext],
+        safe_contexts: list[_ToolUseContext],
         state: _RunState,
         conv_state: ConversationState | None,
-    ) -> AgentRunResult | None:
-        """Check if a sensitive tool requires confirmation.
+        response: dict[str, Any],
+    ) -> AgentRunResult:
+        """Create a batch confirmation request for multiple sensitive tools.
 
-        :returns: AgentRunResult if confirmation is required, None otherwise.
+        Safe tools are executed immediately. Sensitive tools are collected
+        into a batch confirmation request.
+
+        :param sensitive_contexts: Contexts for sensitive tools needing confirmation.
+        :param safe_contexts: Contexts for safe tools to execute immediately.
+        :param state: Current run state.
+        :param conv_state: Conversation state for persistence.
+        :param response: Full LLM response.
+        :returns: AgentRunResult with batch confirmation request.
         """
-        if not self.require_confirmation:
-            return None
-        if tool.risk_level != RiskLevel.SENSITIVE:
-            return None
-        if ctx.tool_use_id in state.confirmed_tool_use_ids:
-            return None
+        # Execute safe tools first (if any)
+        if safe_contexts:
+            logger.info(f"Executing {len(safe_contexts)} safe tool(s) before confirmation")
+            # Add the assistant message (contains all tool_use blocks)
+            state.messages.append(response["output"]["message"])
 
-        logger.info(f"Sensitive tool requires confirmation: tool={ctx.tool_name}")
-        action_summary = self._generate_action_summary(tool.description, ctx.input_args)
+            # Execute safe tools and collect results
+            tool_result_contents: list[dict[str, Any]] = []
+            for ctx in safe_contexts:
+                tool = state.tools[ctx.tool_name]
+                tool_result, tool_call = self._execute_and_create_tool_call(
+                    tool=tool,
+                    tool_use_id=ctx.tool_use_id,
+                    input_args=ctx.input_args,
+                )
+                state.tool_calls.append(tool_call)
+                tool_result_contents.append(
+                    {
+                        "toolResult": {
+                            "toolUseId": ctx.tool_use_id,
+                            "content": [{"json": tool_result}],
+                            "status": "error" if tool_call.is_error else "success",
+                        }
+                    }
+                )
 
-        # Store pending confirmation in conversation state if available
+            # Add placeholder results for sensitive tools (we'll execute them after confirmation)
+            for ctx in sensitive_contexts:
+                tool_result_contents.append(
+                    {
+                        "toolResult": {
+                            "toolUseId": ctx.tool_use_id,
+                            "content": [{"json": {"status": "awaiting_confirmation"}}],
+                            "status": "success",
+                        }
+                    }
+                )
+
+            # Add single message with ALL tool results
+            state.messages.append({"role": "user", "content": tool_result_contents})
+
+        # Build pending tool actions with 1-based indices
+        pending_tools: list[PendingToolAction] = []
+        for idx, ctx in enumerate(sensitive_contexts, start=1):
+            tool = state.tools[ctx.tool_name]
+            action_summary = self._generate_action_summary(tool.description, ctx.input_args)
+            pending_tools.append(
+                PendingToolAction(
+                    index=idx,
+                    tool_use_id=ctx.tool_use_id,
+                    tool_name=ctx.tool_name,
+                    tool_description=tool.description,
+                    input_args=ctx.input_args,
+                    action_summary=action_summary,
+                )
+            )
+
+        # Store pending confirmation in conversation state
         if conv_state is not None:
             pending = PendingConfirmation(
-                tool_use_id=ctx.tool_use_id,
-                tool_name=ctx.tool_name,
-                tool_description=tool.description,
-                input_args=ctx.input_args,
-                action_summary=action_summary,
+                tools=pending_tools,
                 selected_tools=state.all_tool_names,
             )
             set_pending_confirmation(conv_state, pending)
 
             # Save current messages to state for resumption
-            # Only append new messages (skip context that's already stored)
             new_messages = state.messages[state.context_length :]
             append_messages(conv_state, new_messages)
+
+        logger.info(
+            f"Batch confirmation requested: {len(pending_tools)} tool(s) "
+            f"({len(safe_contexts)} safe already executed)"
+        )
 
         return AgentRunResult(
             response="",
             tool_calls=state.tool_calls,
             steps_taken=state.steps_taken,
             stop_reason="confirmation_required",
-            confirmation_request=ConfirmationRequest(
-                tool_name=ctx.tool_name,
-                tool_description=tool.description,
-                input_args=ctx.input_args,
-                action_summary=action_summary,
-                tool_use_id=ctx.tool_use_id,
-            ),
+            confirmation_request=ConfirmationRequest(tools=pending_tools),
         )
 
     def _build_final_result(

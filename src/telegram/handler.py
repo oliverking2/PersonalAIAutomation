@@ -6,11 +6,12 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from src.agent.models import AgentRunResult
+from src.agent.models import AgentRunResult, ConfirmationRequest, PendingToolAction
 from src.agent.runner import AgentRunner
 from src.agent.utils.tools.registry import create_default_registry
+from src.api.client import InternalAPIClient, InternalAPIClientError
 from src.database.telegram import create_telegram_message
 
 if TYPE_CHECKING:
@@ -32,6 +33,17 @@ REPLY_CONTEXT_TEMPLATE = "[Replying to previous message: {quoted_text}]\n\n{mess
 # Pattern to match Telegram commands (e.g., /newchat, /help)
 # Captures: group 1 = command name, group 2 = optional args (may be None)
 COMMAND_PATTERN = re.compile(r"^/([a-zA-Z_]+)(?:\s+(.*))?$", re.DOTALL)
+
+# Maximum number of tool arguments to show in confirmation message preview
+MAX_ARGS_IN_PREVIEW = 3
+
+# Mapping of entity ID fields to their API endpoints and name fields
+# Format: field_name -> (endpoint_template, name_field)
+ENTITY_ID_LOOKUPS: dict[str, tuple[str, str]] = {
+    "task_id": ("/notion/tasks/{id}", "task_name"),
+    "goal_id": ("/notion/goals/{id}", "goal_name"),
+    "reading_item_id": ("/notion/reading-list/{id}", "title"),
+}
 
 
 @dataclass
@@ -358,12 +370,7 @@ class MessageHandler:
 
             # Handle confirmation requests
             if result.stop_reason == "confirmation_required" and result.confirmation_request:
-                confirmation = result.confirmation_request
-                return (
-                    f"I need your confirmation to proceed:\n\n"
-                    f"{confirmation.action_summary}\n\n"
-                    f"Reply 'yes' to confirm or 'no' to cancel."
-                )
+                return self._format_confirmation_request(result.confirmation_request)
 
             return result.response or "I processed your request but have no response."
 
@@ -376,3 +383,99 @@ class MessageHandler:
                 "I encountered an error while processing your request. "
                 "Please try again or start a new chat with /newchat."
             )
+
+    def _format_confirmation_request(self, confirmation: ConfirmationRequest) -> str:
+        """Format a confirmation request for display in Telegram.
+
+        Handles both single and multiple tool confirmations.
+        Looks up entity names for ID fields to make the message more readable.
+
+        :param confirmation: The confirmation request from the agent.
+        :returns: Formatted message for the user.
+        """
+        tools = confirmation.tools
+
+        if len(tools) == 1:
+            # Single tool - use simple format with entity name lookup
+            tool = tools[0]
+            formatted_action = self._format_tool_action(tool)
+            return (
+                f"I need your confirmation to proceed:\n\n"
+                f"{formatted_action}\n\n"
+                f"Reply 'yes' to confirm or 'no' to cancel."
+            )
+
+        # Multiple tools - use numbered list
+        lines = ["I need your confirmation to proceed with these actions:\n"]
+
+        for tool in tools:
+            formatted_action = self._format_tool_action(tool)
+            lines.append(f"{tool.index}. {formatted_action}")
+
+        lines.append("")
+        lines.append("Reply 'yes' to confirm all, 'no' to cancel all,")
+        lines.append("or specify which to approve (e.g., 'yes to 1 and 2, skip 3').")
+        lines.append("You can also provide corrections (e.g., 'yes but change priority to High').")
+
+        return "\n".join(lines)
+
+    def _format_tool_action(self, tool: PendingToolAction) -> str:
+        """Format a single tool action for display.
+
+        Looks up entity names for ID fields (task_id, goal_id, etc.) and formats
+        the remaining arguments.
+
+        :param tool: The pending tool action.
+        :returns: Formatted action string like "update_task: 'Task Name' → due_date='2025-01-01'"
+        """
+        entity_name = None
+        other_args: dict[str, Any] = {}
+
+        # Separate entity ID from other args
+        for key, value in tool.input_args.items():
+            if key in ENTITY_ID_LOOKUPS and isinstance(value, str):
+                # Look up the entity name
+                entity_name = self._lookup_entity_name(key, value)
+            else:
+                other_args[key] = value
+
+        # Build the formatted string
+        if entity_name:
+            # Format: "update_task: 'Task Name' → due_date='2025-01-01'"
+            if other_args:
+                args_str = ", ".join(f"{k}={v!r}" for k, v in other_args.items())
+                return f"{tool.tool_name}: '{entity_name}' → {args_str}"
+            return f"{tool.tool_name}: '{entity_name}'"
+
+        # No entity ID found, just format the args
+        args_str = ", ".join(
+            f"{k}={v!r}" for k, v in list(tool.input_args.items())[:MAX_ARGS_IN_PREVIEW]
+        )
+        if len(tool.input_args) > MAX_ARGS_IN_PREVIEW:
+            args_str += ", ..."
+        return f"{tool.tool_name}: {args_str}"
+
+    def _lookup_entity_name(self, field_name: str, entity_id: str) -> str | None:
+        """Look up an entity name by its ID.
+
+        :param field_name: The field name (e.g., 'task_id', 'goal_id').
+        :param entity_id: The entity's ID.
+        :returns: The entity name, or None if lookup fails.
+        """
+        lookup_info = ENTITY_ID_LOOKUPS.get(field_name)
+        if not lookup_info:
+            return None
+
+        endpoint_template, name_field = lookup_info
+        endpoint = endpoint_template.format(id=entity_id)
+
+        try:
+            with InternalAPIClient() as client:
+                response = client.get(endpoint)
+                return response.get(name_field)
+        except InternalAPIClientError as e:
+            logger.warning(f"Failed to look up entity name: {field_name}={entity_id}, error={e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Unexpected error looking up entity name: {e}")
+            return None
