@@ -34,6 +34,7 @@ class TestPollingRunnerGrouping(unittest.TestCase):
         chat_id: int,
         text: str | None,
         message_id: int = 1,
+        reply_to_message: TelegramMessageInfo | None = None,
     ) -> TelegramUpdate:
         """Create a test TelegramUpdate."""
         return TelegramUpdate(
@@ -43,6 +44,7 @@ class TestPollingRunnerGrouping(unittest.TestCase):
                 date=1234567890,
                 chat=TelegramChat(id=chat_id, type="private"),
                 text=text,
+                reply_to_message=reply_to_message,
             ),
         )
 
@@ -165,6 +167,112 @@ class TestPollingRunnerGrouping(unittest.TestCase):
             self.runner._process_chat_updates("12345", updates)
 
         self.assertEqual(captured_updates[0].message.text, "Hello")
+
+    def test_process_chat_updates_embeds_reply_context_in_text(self) -> None:
+        """Test that reply context is embedded in the combined text."""
+        reply_to = TelegramMessageInfo(
+            message_id=50,
+            date=1234567800,
+            chat=TelegramChat(id=12345, type="private"),
+            text="Original message being replied to",
+        )
+        updates = [
+            self._create_update(1, 12345, "My reply", reply_to_message=reply_to),
+        ]
+
+        captured_updates: list[TelegramUpdate] = []
+
+        def capture_update(update: TelegramUpdate) -> None:
+            captured_updates.append(update)
+
+        with patch.object(self.runner, "_process_update", side_effect=capture_update):
+            self.runner._process_chat_updates("12345", updates)
+
+        # Reply context should be embedded in the text
+        self.assertIn("Replying to previous message", captured_updates[0].message.text)
+        self.assertIn("Original message being replied to", captured_updates[0].message.text)
+        self.assertIn("My reply", captured_updates[0].message.text)
+
+    def test_process_chat_updates_embeds_reply_context_for_second_message(self) -> None:
+        """Test that reply context is embedded when second message has a reply."""
+        reply_to = TelegramMessageInfo(
+            message_id=50,
+            date=1234567800,
+            chat=TelegramChat(id=12345, type="private"),
+            text="Task list to extend",
+        )
+        updates = [
+            self._create_update(1, 12345, "Hello"),
+            self._create_update(2, 12345, "Extend these", reply_to_message=reply_to),
+        ]
+
+        captured_updates: list[TelegramUpdate] = []
+
+        def capture_update(update: TelegramUpdate) -> None:
+            captured_updates.append(update)
+
+        with patch.object(self.runner, "_process_update", side_effect=capture_update):
+            self.runner._process_chat_updates("12345", updates)
+
+        # Combined text should include first message and second with reply context
+        combined_text = captured_updates[0].message.text
+        self.assertIn("Hello", combined_text)
+        self.assertIn("Replying to previous message", combined_text)
+        self.assertIn("Task list to extend", combined_text)
+        self.assertIn("Extend these", combined_text)
+
+    def test_process_chat_updates_embeds_multiple_reply_contexts(self) -> None:
+        """Test that multiple reply contexts are embedded when multiple messages reply."""
+        reply_to_1 = TelegramMessageInfo(
+            message_id=50,
+            date=1234567800,
+            chat=TelegramChat(id=12345, type="private"),
+            text="First quoted message",
+        )
+        reply_to_2 = TelegramMessageInfo(
+            message_id=51,
+            date=1234567810,
+            chat=TelegramChat(id=12345, type="private"),
+            text="Second quoted message",
+        )
+        updates = [
+            self._create_update(1, 12345, "Reply to first", reply_to_message=reply_to_1),
+            self._create_update(2, 12345, "Reply to second", reply_to_message=reply_to_2),
+        ]
+
+        captured_updates: list[TelegramUpdate] = []
+
+        def capture_update(update: TelegramUpdate) -> None:
+            captured_updates.append(update)
+
+        with patch.object(self.runner, "_process_update", side_effect=capture_update):
+            self.runner._process_chat_updates("12345", updates)
+
+        # Both reply contexts should be embedded
+        combined_text = captured_updates[0].message.text
+        self.assertIn("First quoted message", combined_text)
+        self.assertIn("Reply to first", combined_text)
+        self.assertIn("Second quoted message", combined_text)
+        self.assertIn("Reply to second", combined_text)
+
+    def test_process_chat_updates_no_reply_context_when_none(self) -> None:
+        """Test that no reply context is added when messages have no replies."""
+        updates = [
+            self._create_update(1, 12345, "Hello"),
+            self._create_update(2, 12345, "World"),
+        ]
+
+        captured_updates: list[TelegramUpdate] = []
+
+        def capture_update(update: TelegramUpdate) -> None:
+            captured_updates.append(update)
+
+        with patch.object(self.runner, "_process_update", side_effect=capture_update):
+            self.runner._process_chat_updates("12345", updates)
+
+        # No reply context should be present
+        self.assertEqual(captured_updates[0].message.text, "Hello\nWorld")
+        self.assertNotIn("Replying to previous message", captured_updates[0].message.text)
 
 
 if __name__ == "__main__":

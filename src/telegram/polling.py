@@ -20,6 +20,9 @@ from src.telegram.utils.config import TelegramConfig, get_telegram_settings
 from src.telegram.utils.session_manager import SessionManager
 from src.utils.logging import configure_logging
 
+# Template for including replied-to message context (matches handler.py format)
+REPLY_CONTEXT_TEMPLATE = "[Replying to previous message: {quoted_text}]\n\n{message}"
+
 if TYPE_CHECKING:
     pass
 
@@ -171,17 +174,20 @@ class PollingRunner:
     ) -> None:
         """Process grouped updates for a single chat.
 
-        Combines multiple messages into one agent invocation.
+        Combines multiple messages into one agent invocation. Reply contexts
+        are embedded into each message's text before combining.
 
         :param chat_id: The chat ID.
         :param updates: List of updates for this chat.
         """
-        # Combine message texts if multiple messages (with URLs resolved from entities)
+        # Build message texts with reply contexts embedded
         messages: list[str] = []
         for u in updates:
             if u.message:
                 text = u.message.get_text_with_urls()
                 if text:
+                    # Embed reply context into this message's text if present
+                    text = self._build_text_with_reply_context(text, u.message)
                     messages.append(text)
         combined_text = "\n".join(messages)
 
@@ -194,6 +200,7 @@ class PollingRunner:
             )
 
         # Create a synthetic update with combined text for the handler
+        # Note: reply contexts are already embedded in the text, so no need to pass reply_to_message
         synthetic_update = TelegramUpdate(
             update_id=updates[-1].update_id,
             message=TelegramMessageInfo(
@@ -205,6 +212,31 @@ class PollingRunner:
         )
 
         self._process_update(synthetic_update)
+
+    def _build_text_with_reply_context(
+        self,
+        text: str,
+        message: TelegramMessageInfo,
+    ) -> str:
+        """Build message text with reply context if the message is a reply.
+
+        :param text: The message text (with URLs resolved).
+        :param message: The message info containing reply_to_message.
+        :returns: Text with reply context prepended if applicable.
+        """
+        reply_to = message.reply_to_message
+        if reply_to is None or not reply_to.text:
+            return text
+
+        logger.info(
+            f"Including reply context: message_id={message.message_id} "
+            f"replying to message_id={reply_to.message_id}"
+        )
+
+        return REPLY_CONTEXT_TEMPLATE.format(
+            quoted_text=reply_to.text,
+            message=text,
+        )
 
     def _process_update(self, update: TelegramUpdate) -> None:
         """Process a single update.
