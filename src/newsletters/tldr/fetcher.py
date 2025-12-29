@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from src.graph.auth import GraphAPI
+from src.graph.client import GraphClient
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ DEFAULT_LIMIT = 25
 
 
 def fetch_tldr_newsletters(
-    graph_client: GraphAPI,
+    graph_client: GraphClient,
     *,
     since: datetime | None = None,
     limit: int = DEFAULT_LIMIT,

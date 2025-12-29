@@ -21,7 +21,7 @@ class GraphAuthenticationError(Exception):
     """Raised when Graph API authentication fails."""
 
 
-class GraphAPI:
+class GraphClient:
     """Client for Microsoft Graph API using device code authentication.
 
     Handles OAuth2 device code flow authentication and token caching for
@@ -234,4 +234,4 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv()
-    print(GraphAPI("oliver@oliverking.me.uk").access_token)
+    print(GraphClient("oliver@oliverking.me.uk").access_token)

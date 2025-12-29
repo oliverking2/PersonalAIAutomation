@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.database.newsletters import create_newsletter, newsletter_exists
-from src.graph.auth import GraphAPI
+from src.graph.client import GraphClient
 from src.newsletters.tldr.fetcher import extract_email_metadata, fetch_tldr_newsletters
 from src.newsletters.tldr.models import ParsedNewsletter
 from src.newsletters.tldr.parser import identify_newsletter_type, parse_newsletter_html
@@ -29,7 +29,7 @@ class ProcessingResult(BaseModel):
 class NewsletterService:
     """Service for processing TLDR newsletters."""
 
-    def __init__(self, session: Session, graph_client: GraphAPI) -> None:
+    def __init__(self, session: Session, graph_client: GraphClient) -> None:
         """Initialise the newsletter service.
 
         :param session: A SQLAlchemy database session.

@@ -5,10 +5,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.graph.auth import (
+from src.graph.client import (
     DEFAULT_REQUEST_TIMEOUT,
-    GraphAPI,
     GraphAuthenticationError,
+    GraphClient,
 )
 from src.paths import PROJECT_ROOT
 
@@ -20,13 +20,13 @@ class TestGraphAPIInitialisation(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_initialisation_with_required_env_vars(
         self,
         mock_app: MagicMock,
     ) -> None:
         """Test successful initialisation with required environment variables."""
-        client = GraphAPI("user@example.com")
+        client = GraphClient("user@example.com")
 
         self.assertEqual(client._target_upn, "user@example.com")
         self.assertEqual(client._tenant_id, "test-tenant")
@@ -37,7 +37,7 @@ class TestGraphAPIInitialisation(unittest.TestCase):
     def test_initialisation_missing_tenant_id_raises_key_error(self) -> None:
         """Test initialisation fails when GRAPH_TENANT_ID is missing."""
         with self.assertRaises(KeyError) as context:
-            GraphAPI("user@example.com")
+            GraphClient("user@example.com")
 
         self.assertIn("GRAPH_TENANT_ID", str(context.exception))
 
@@ -45,7 +45,7 @@ class TestGraphAPIInitialisation(unittest.TestCase):
     def test_initialisation_missing_application_id_raises_key_error(self) -> None:
         """Test initialisation fails when GRAPH_APPLICATION_ID is missing."""
         with self.assertRaises(KeyError) as context:
-            GraphAPI("user@example.com")
+            GraphClient("user@example.com")
 
         self.assertIn("GRAPH_APPLICATION_ID", str(context.exception))
 
@@ -53,14 +53,14 @@ class TestGraphAPIInitialisation(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_initialisation_with_custom_cache_file(
         self,
         mock_app: MagicMock,
     ) -> None:
         """Test initialisation with custom cache file path."""
         custom_path = Path("/tmp/custom_cache.bin")
-        client = GraphAPI("user@example.com", cache_file=custom_path)
+        client = GraphClient("user@example.com", cache_file=custom_path)
 
         self.assertEqual(client._cache_file, custom_path)
 
@@ -72,14 +72,14 @@ class TestGraphAPICache(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_load_cache_creates_new_cache_when_file_missing(
         self,
         mock_app: MagicMock,
     ) -> None:
         """Test cache loading creates new cache when file does not exist."""
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
             cache = client._load_cache()
 
             self.assertIsNotNone(cache)
@@ -89,7 +89,7 @@ class TestGraphAPICache(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_load_cache_deserialises_existing_cache(
         self,
         mock_app: MagicMock,
@@ -101,7 +101,7 @@ class TestGraphAPICache(unittest.TestCase):
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value=cache_data),
         ):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
             # Reset cache to force reload
             client._cache = None
             cache = client._load_cache()
@@ -112,13 +112,13 @@ class TestGraphAPICache(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_save_cache_raises_when_not_initialised(
         self,
         mock_app: MagicMock,
     ) -> None:
         """Test saving cache raises ValueError when cache is not initialised."""
-        client = GraphAPI("user@example.com")
+        client = GraphClient("user@example.com")
         client._cache = None
 
         with self.assertRaises(ValueError) as context:
@@ -130,14 +130,14 @@ class TestGraphAPICache(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_save_cache_writes_when_state_changed(
         self,
         mock_app: MagicMock,
     ) -> None:
         """Test saving cache writes to file when state has changed."""
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._cache.has_state_changed = True
 
@@ -153,7 +153,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_access_token_silent_success(
         self,
         mock_app_class: MagicMock,
@@ -167,7 +167,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         }
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         with patch.object(Path, "write_text"):
             token = client._get_access_token()
@@ -180,7 +180,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_access_token_device_flow_success(
         self,
         mock_app_class: MagicMock,
@@ -198,7 +198,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         }
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         with patch.object(Path, "write_text"):
             token = client._get_access_token()
@@ -209,7 +209,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_access_token_device_flow_initiation_fails(
         self,
         mock_app_class: MagicMock,
@@ -223,7 +223,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         }
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         with self.assertRaises(GraphAuthenticationError) as context:
             client._get_access_token()
@@ -234,7 +234,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_access_token_acquisition_fails(
         self,
         mock_app_class: MagicMock,
@@ -256,7 +256,7 @@ class TestGraphAPITokenAcquisition(unittest.TestCase):
         }
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         with (
             patch.object(Path, "write_text"),
@@ -274,14 +274,14 @@ class TestGraphAPIAccessTokenProperty(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_access_token_returns_cached_token_when_valid(
         self,
         mock_app_class: MagicMock,
     ) -> None:
         """Test access_token returns cached token when not expired."""
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._access_token = "cached-token"
         client._access_expires = datetime.now(UTC) + timedelta(hours=1)
@@ -294,7 +294,7 @@ class TestGraphAPIAccessTokenProperty(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_access_token_refreshes_when_expired(
         self,
         mock_app_class: MagicMock,
@@ -308,7 +308,7 @@ class TestGraphAPIAccessTokenProperty(unittest.TestCase):
         }
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._access_token = "old-token"
         client._access_expires = datetime.now(UTC) - timedelta(hours=1)
@@ -322,14 +322,14 @@ class TestGraphAPIAccessTokenProperty(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.PublicClientApplication")
     def test_access_token_raises_when_expiry_not_set(
         self,
         mock_app_class: MagicMock,
     ) -> None:
         """Test access_token raises RuntimeError when expiry is not set."""
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._access_token = "some-token"
         client._access_expires = None
@@ -347,8 +347,8 @@ class TestGraphAPIRequests(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.requests.get")
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.requests.get")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_request_success(
         self,
         mock_app_class: MagicMock,
@@ -360,7 +360,7 @@ class TestGraphAPIRequests(unittest.TestCase):
         mock_requests_get.return_value = mock_response
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._access_token = "test-token"
         client._access_expires = datetime.now(UTC) + timedelta(hours=1)
@@ -379,8 +379,8 @@ class TestGraphAPIRequests(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.requests.get")
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.requests.get")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_request_with_params(
         self,
         mock_app_class: MagicMock,
@@ -390,7 +390,7 @@ class TestGraphAPIRequests(unittest.TestCase):
         mock_requests_get.return_value = MagicMock()
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._access_token = "test-token"
         client._access_expires = datetime.now(UTC) + timedelta(hours=1)
@@ -406,8 +406,8 @@ class TestGraphAPIRequests(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.requests.get")
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.requests.get")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_request_strips_slashes_from_endpoint(
         self,
         mock_app_class: MagicMock,
@@ -417,7 +417,7 @@ class TestGraphAPIRequests(unittest.TestCase):
         mock_requests_get.return_value = MagicMock()
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._access_token = "test-token"
         client._access_expires = datetime.now(UTC) + timedelta(hours=1)
@@ -433,8 +433,8 @@ class TestGraphAPIRequests(unittest.TestCase):
         "os.environ",
         {"GRAPH_TENANT_ID": "test-tenant", "GRAPH_APPLICATION_ID": "test-app"},
     )
-    @patch("src.graph.auth.requests.get")
-    @patch("src.graph.auth.PublicClientApplication")
+    @patch("src.graph.client.requests.get")
+    @patch("src.graph.client.PublicClientApplication")
     def test_get_request_with_custom_timeout(
         self,
         mock_app_class: MagicMock,
@@ -444,7 +444,7 @@ class TestGraphAPIRequests(unittest.TestCase):
         mock_requests_get.return_value = MagicMock()
 
         with patch.object(Path, "exists", return_value=False):
-            client = GraphAPI("user@example.com")
+            client = GraphClient("user@example.com")
 
         client._access_token = "test-token"
         client._access_expires = datetime.now(UTC) + timedelta(hours=1)

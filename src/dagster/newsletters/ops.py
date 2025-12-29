@@ -10,7 +10,7 @@ from src.database.connection import get_session
 from src.database.extraction_state import get_watermark, set_watermark
 from src.database.newsletters import backfill_article_urls
 from src.enums import ExtractionSource
-from src.graph.auth import GraphAPI
+from src.graph.client import GraphClient
 from src.newsletters.tldr.service import NewsletterService
 from src.telegram import TelegramClient
 from src.telegram.utils.config import get_telegram_settings
@@ -60,7 +60,7 @@ def process_newsletters_op(context: OpExecutionContext) -> NewsletterStats:
     :param context: Dagster execution context.
     :returns: Dictionary with processing statistics.
     """
-    graph_client = GraphAPI(GRAPH_USER_EMAIL)
+    graph_client = GraphClient(GRAPH_USER_EMAIL)
 
     with get_session() as session:
         # Determine the since datetime
