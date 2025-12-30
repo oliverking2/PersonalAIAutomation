@@ -1,14 +1,14 @@
 """Tests for Telegram polling runner module."""
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from src.telegram.models import TelegramChat, TelegramMessageInfo, TelegramUpdate
 from src.telegram.polling import PollingRunner
 from src.telegram.utils.config import TelegramConfig
 
 
-class TestPollingRunnerGrouping(unittest.TestCase):
+class TestPollingRunnerGrouping(unittest.IsolatedAsyncioTestCase):
     """Tests for PollingRunner message grouping."""
 
     def setUp(self) -> None:
@@ -18,8 +18,8 @@ class TestPollingRunnerGrouping(unittest.TestCase):
             allowed_chat_ids="12345,67890",
             _env_file=None,
         )
-        self.mock_client = MagicMock()
-        self.mock_handler = MagicMock()
+        self.mock_client = AsyncMock()
+        self.mock_handler = AsyncMock()
 
         with patch.object(PollingRunner, "_setup_signal_handlers"):
             self.runner = PollingRunner(
@@ -99,7 +99,7 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         self.assertEqual(len(grouped["12345"]), 2)
 
-    def test_process_chat_updates_combines_messages(self) -> None:
+    async def test_process_chat_updates_combines_messages(self) -> None:
         """Test that multiple messages are combined into one."""
         updates = [
             self._create_update(1, 12345, "Hello", message_id=100),
@@ -109,16 +109,16 @@ class TestPollingRunnerGrouping(unittest.TestCase):
         # Mock _process_update to capture the synthetic update
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         self.assertEqual(len(captured_updates), 1)
         self.assertEqual(captured_updates[0].message.text, "Hello\nWorld")
 
-    def test_process_chat_updates_uses_first_message_id(self) -> None:
+    async def test_process_chat_updates_uses_first_message_id(self) -> None:
         """Test that the first message_id is used for tracking."""
         updates = [
             self._create_update(1, 12345, "Hello", message_id=100),
@@ -127,15 +127,15 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         self.assertEqual(captured_updates[0].message.message_id, 100)
 
-    def test_process_chat_updates_uses_last_update_id(self) -> None:
+    async def test_process_chat_updates_uses_last_update_id(self) -> None:
         """Test that the last update_id is used for the synthetic update."""
         updates = [
             self._create_update(1, 12345, "Hello"),
@@ -144,15 +144,15 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         self.assertEqual(captured_updates[0].update_id, 5)
 
-    def test_process_chat_updates_single_message(self) -> None:
+    async def test_process_chat_updates_single_message(self) -> None:
         """Test processing a single message (no combining needed)."""
         updates = [
             self._create_update(1, 12345, "Hello"),
@@ -160,15 +160,15 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         self.assertEqual(captured_updates[0].message.text, "Hello")
 
-    def test_process_chat_updates_embeds_reply_context_in_text(self) -> None:
+    async def test_process_chat_updates_embeds_reply_context_in_text(self) -> None:
         """Test that reply context is embedded in the combined text."""
         reply_to = TelegramMessageInfo(
             message_id=50,
@@ -182,18 +182,18 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         # Reply context should be embedded in the text
         self.assertIn("Replying to previous message", captured_updates[0].message.text)
         self.assertIn("Original message being replied to", captured_updates[0].message.text)
         self.assertIn("My reply", captured_updates[0].message.text)
 
-    def test_process_chat_updates_embeds_reply_context_for_second_message(self) -> None:
+    async def test_process_chat_updates_embeds_reply_context_for_second_message(self) -> None:
         """Test that reply context is embedded when second message has a reply."""
         reply_to = TelegramMessageInfo(
             message_id=50,
@@ -208,11 +208,11 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         # Combined text should include first message and second with reply context
         combined_text = captured_updates[0].message.text
@@ -221,7 +221,7 @@ class TestPollingRunnerGrouping(unittest.TestCase):
         self.assertIn("Task list to extend", combined_text)
         self.assertIn("Extend these", combined_text)
 
-    def test_process_chat_updates_embeds_multiple_reply_contexts(self) -> None:
+    async def test_process_chat_updates_embeds_multiple_reply_contexts(self) -> None:
         """Test that multiple reply contexts are embedded when multiple messages reply."""
         reply_to_1 = TelegramMessageInfo(
             message_id=50,
@@ -242,11 +242,11 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         # Both reply contexts should be embedded
         combined_text = captured_updates[0].message.text
@@ -255,7 +255,7 @@ class TestPollingRunnerGrouping(unittest.TestCase):
         self.assertIn("Second quoted message", combined_text)
         self.assertIn("Reply to second", combined_text)
 
-    def test_process_chat_updates_no_reply_context_when_none(self) -> None:
+    async def test_process_chat_updates_no_reply_context_when_none(self) -> None:
         """Test that no reply context is added when messages have no replies."""
         updates = [
             self._create_update(1, 12345, "Hello"),
@@ -264,11 +264,11 @@ class TestPollingRunnerGrouping(unittest.TestCase):
 
         captured_updates: list[TelegramUpdate] = []
 
-        def capture_update(update: TelegramUpdate) -> None:
+        async def capture_update(update: TelegramUpdate) -> None:
             captured_updates.append(update)
 
         with patch.object(self.runner, "_process_update", side_effect=capture_update):
-            self.runner._process_chat_updates("12345", updates)
+            await self.runner._process_chat_updates("12345", updates)
 
         # No reply context should be present
         self.assertEqual(captured_updates[0].message.text, "Hello\nWorld")

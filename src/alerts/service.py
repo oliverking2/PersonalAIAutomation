@@ -93,7 +93,7 @@ class AlertService:
         :raises TelegramClientError: If sending fails.
         """
         content = format_alert(alert)
-        send_result = self._telegram.send_message(content)
+        send_result = self._telegram.send_message_sync(content)
 
         # Record in sent_alerts table
         create_sent_alert(

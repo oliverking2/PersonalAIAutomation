@@ -21,4 +21,4 @@ class TelegramResource(ConfigurableResource[TelegramClient]):
 
     def send_message(self, text: str) -> SendMessageResult:
         """Send a text message to the configured chat."""
-        return self.get_client().send_message(text)
+        return self.get_client().send_message_sync(text)

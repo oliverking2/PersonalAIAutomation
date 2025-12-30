@@ -41,7 +41,7 @@ def telegram_on_run_failure(context: RunFailureSensorContext) -> None:
     )
     context.log.info(f"Message: {text}")
 
-    client.send_message(text, parse_mode="MarkdownV2")
+    client.send_message_sync(text, parse_mode="MarkdownV2")
 
 
 util_sensor_defs = Definitions(

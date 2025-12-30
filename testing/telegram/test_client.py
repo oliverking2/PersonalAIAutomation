@@ -1,12 +1,11 @@
 """Tests for Telegram client module."""
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import requests
+import httpx
 
 from src.telegram.client import (
-    DEFAULT_REQUEST_TIMEOUT,
     TelegramClient,
     TelegramClientError,
 )
@@ -43,11 +42,10 @@ class TestTelegramClientInitialisation(unittest.TestCase):
         self.assertEqual(client._poll_timeout, 30)
 
 
-class TestTelegramClientSendMessage(unittest.TestCase):
+class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
     """Tests for TelegramClient.send_message method."""
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_message_success(self, mock_post: MagicMock) -> None:
+    async def test_send_message_success(self) -> None:
         """Test successful message sending returns SendMessageResult."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -55,22 +53,26 @@ class TestTelegramClientSendMessage(unittest.TestCase):
             "ok": True,
             "result": {"message_id": 123, "chat": {"id": 12345}},
         }
-        mock_post.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
-        result = client.send_message("Hello, World!")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        self.assertEqual(result.message_id, 123)
-        self.assertEqual(result.chat_id, 12345)
-        mock_post.assert_called_once()
-        call_kwargs = mock_post.call_args.kwargs
-        self.assertEqual(call_kwargs["json"]["chat_id"], "12345")
-        self.assertEqual(call_kwargs["json"]["text"], "Hello, World!")
-        self.assertEqual(call_kwargs["json"]["parse_mode"], "HTML")
-        self.assertEqual(call_kwargs["timeout"], DEFAULT_REQUEST_TIMEOUT)
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+            result = await client.send_message("Hello, World!")
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_message_with_explicit_chat_id(self, mock_post: MagicMock) -> None:
+            self.assertEqual(result.message_id, 123)
+            self.assertEqual(result.chat_id, 12345)
+            mock_client.post.assert_called_once()
+            call_kwargs = mock_client.post.call_args.kwargs
+            self.assertEqual(call_kwargs["json"]["chat_id"], "12345")
+            self.assertEqual(call_kwargs["json"]["text"], "Hello, World!")
+            self.assertEqual(call_kwargs["json"]["parse_mode"], "HTML")
+
+    async def test_send_message_with_explicit_chat_id(self) -> None:
         """Test sending message to explicit chat_id parameter."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -78,26 +80,31 @@ class TestTelegramClientSendMessage(unittest.TestCase):
             "ok": True,
             "result": {"message_id": 456, "chat": {"id": 99999}},
         }
-        mock_post.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
-        result = client.send_message("Hello!", chat_id="99999")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        self.assertEqual(result.chat_id, 99999)
-        call_kwargs = mock_post.call_args.kwargs
-        self.assertEqual(call_kwargs["json"]["chat_id"], "99999")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+            result = await client.send_message("Hello!", chat_id="99999")
 
-    def test_send_message_without_chat_id_raises_value_error(self) -> None:
+            self.assertEqual(result.chat_id, 99999)
+            call_kwargs = mock_client.post.call_args.kwargs
+            self.assertEqual(call_kwargs["json"]["chat_id"], "99999")
+
+    async def test_send_message_without_chat_id_raises_value_error(self) -> None:
         """Test sending message without any chat_id raises ValueError."""
         client = TelegramClient(bot_token="test-token")
 
         with self.assertRaises(ValueError) as context:
-            client.send_message("Test message")
+            await client.send_message("Test message")
 
         self.assertIn("chat_id", str(context.exception).lower())
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_message_api_error_raises_exception(self, mock_post: MagicMock) -> None:
+    async def test_send_message_api_error_raises_exception(self) -> None:
         """Test that API error response raises TelegramClientError."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -106,57 +113,74 @@ class TestTelegramClientSendMessage(unittest.TestCase):
             "description": "Bad Request: chat not found",
         }
         mock_response.raise_for_status = MagicMock()
-        mock_post.return_value = mock_response
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.send_message("Test message")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
 
-        self.assertIn("chat not found", str(context.exception))
+            with self.assertRaises(TelegramClientError) as context:
+                await client.send_message("Test message")
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_message_http_error_raises_exception(self, mock_post: MagicMock) -> None:
+            self.assertIn("chat not found", str(context.exception))
+
+    async def test_send_message_http_error_raises_exception(self) -> None:
         """Test that HTTP error raises TelegramClientError."""
         mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            "401 Unauthorized"
+        mock_response.status_code = 401
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "401 Unauthorized",
+            request=MagicMock(),
+            response=mock_response,
         )
-        mock_post.return_value = mock_response
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.send_message("Test message")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
 
-        self.assertIn("request failed", str(context.exception).lower())
+            with self.assertRaises(TelegramClientError) as context:
+                await client.send_message("Test message")
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_message_timeout_raises_exception(self, mock_post: MagicMock) -> None:
+            self.assertIn("401", str(context.exception))
+
+    async def test_send_message_timeout_raises_exception(self) -> None:
         """Test that timeout raises TelegramClientError."""
-        mock_post.side_effect = requests.exceptions.Timeout("Connection timed out")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.send_message("Test message")
+            with self.assertRaises(TelegramClientError) as context:
+                await client.send_message("Test message")
 
-        self.assertIn("timed out", str(context.exception).lower())
+            self.assertIn("timed out", str(context.exception).lower())
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_message_connection_error_raises_exception(self, mock_post: MagicMock) -> None:
+    async def test_send_message_connection_error_raises_exception(self) -> None:
         """Test that connection error raises TelegramClientError."""
-        mock_post.side_effect = requests.exceptions.ConnectionError("Connection refused")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = httpx.ConnectError("Connection refused")
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.send_message("Test message")
+            with self.assertRaises(TelegramClientError) as context:
+                await client.send_message("Test message")
 
-        self.assertIn("request failed", str(context.exception).lower())
+            self.assertIn("request failed", str(context.exception).lower())
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_message_disables_web_page_preview(self, mock_post: MagicMock) -> None:
+    async def test_send_message_disables_web_page_preview(self) -> None:
         """Test that web page preview is disabled in messages."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -164,20 +188,25 @@ class TestTelegramClientSendMessage(unittest.TestCase):
             "ok": True,
             "result": {"message_id": 1, "chat": {"id": 12345}},
         }
-        mock_post.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
-        client.send_message("Check out https://example.com")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        call_kwargs = mock_post.call_args.kwargs
-        self.assertTrue(call_kwargs["json"]["disable_web_page_preview"])
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+            await client.send_message("Check out https://example.com")
+
+            call_kwargs = mock_client.post.call_args.kwargs
+            self.assertTrue(call_kwargs["json"]["disable_web_page_preview"])
 
 
-class TestTelegramClientGetUpdates(unittest.TestCase):
+class TestTelegramClientGetUpdates(unittest.IsolatedAsyncioTestCase):
     """Tests for TelegramClient.get_updates method."""
 
-    @patch("src.telegram.client.requests.get")
-    def test_get_updates_success(self, mock_get: MagicMock) -> None:
+    async def test_get_updates_success(self) -> None:
         """Test successful retrieval of updates."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -200,51 +229,66 @@ class TestTelegramClientGetUpdates(unittest.TestCase):
                 }
             ],
         }
-        mock_get.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token")
-        updates = client.get_updates(offset=100)
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        self.assertEqual(len(updates), 1)
-        self.assertEqual(updates[0].update_id, 123)
-        self.assertIsNotNone(updates[0].message)
-        self.assertEqual(updates[0].message.text, "Hello")
+            client = TelegramClient(bot_token="test-token")
+            updates = await client.get_updates(offset=100)
 
-        call_kwargs = mock_get.call_args.kwargs
-        self.assertEqual(call_kwargs["params"]["offset"], 100)
-        self.assertEqual(call_kwargs["params"]["timeout"], 30)  # Default poll timeout
+            self.assertEqual(len(updates), 1)
+            self.assertEqual(updates[0].update_id, 123)
+            self.assertIsNotNone(updates[0].message)
+            self.assertEqual(updates[0].message.text, "Hello")
 
-    @patch("src.telegram.client.requests.get")
-    def test_get_updates_empty(self, mock_get: MagicMock) -> None:
+            call_kwargs = mock_client.get.call_args.kwargs
+            self.assertEqual(call_kwargs["params"]["offset"], 100)
+            self.assertEqual(call_kwargs["params"]["timeout"], 30)  # Default poll timeout
+
+    async def test_get_updates_empty(self) -> None:
         """Test get_updates with no updates."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": True, "result": []}
-        mock_get.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token")
-        updates = client.get_updates()
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        self.assertEqual(len(updates), 0)
+            client = TelegramClient(bot_token="test-token")
+            updates = await client.get_updates()
 
-    @patch("src.telegram.client.requests.get")
-    def test_get_updates_custom_timeout(self, mock_get: MagicMock) -> None:
+            self.assertEqual(len(updates), 0)
+
+    async def test_get_updates_custom_timeout(self) -> None:
         """Test get_updates with custom timeout."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": True, "result": []}
-        mock_get.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token", poll_timeout=60)
-        client.get_updates(timeout=45)
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        call_kwargs = mock_get.call_args.kwargs
-        self.assertEqual(call_kwargs["params"]["timeout"], 45)
-        # Request timeout should be poll_timeout + 10
-        self.assertEqual(call_kwargs["timeout"], 55)
+            client = TelegramClient(bot_token="test-token", poll_timeout=60)
+            await client.get_updates(timeout=45)
 
-    @patch("src.telegram.client.requests.get")
-    def test_get_updates_api_error(self, mock_get: MagicMock) -> None:
+            call_kwargs = mock_client.get.call_args.kwargs
+            self.assertEqual(call_kwargs["params"]["timeout"], 45)
+            # Request timeout should be poll_timeout + 10
+            self.assertEqual(call_kwargs["timeout"], 55.0)
+
+    async def test_get_updates_api_error(self) -> None:
         """Test get_updates handles API error."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -253,86 +297,108 @@ class TestTelegramClientGetUpdates(unittest.TestCase):
             "description": "Unauthorized",
         }
         mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
 
-        client = TelegramClient(bot_token="test-token")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.get_updates()
+            client = TelegramClient(bot_token="test-token")
 
-        self.assertIn("Unauthorized", str(context.exception))
+            with self.assertRaises(TelegramClientError) as context:
+                await client.get_updates()
 
-    @patch("src.telegram.client.requests.get")
-    def test_get_updates_timeout_raises_error(self, mock_get: MagicMock) -> None:
+            self.assertIn("Unauthorized", str(context.exception))
+
+    async def test_get_updates_timeout_raises_error(self) -> None:
         """Test get_updates raises error on timeout."""
-        mock_get.side_effect = requests.exceptions.Timeout("Connection timed out")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.side_effect = httpx.TimeoutException("Connection timed out")
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        client = TelegramClient(bot_token="test-token")
+            client = TelegramClient(bot_token="test-token")
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.get_updates()
+            with self.assertRaises(TelegramClientError) as context:
+                await client.get_updates()
 
-        self.assertIn("timed out", str(context.exception).lower())
+            self.assertIn("timed out", str(context.exception).lower())
 
 
-class TestTelegramClientSendChatAction(unittest.TestCase):
+class TestTelegramClientSendChatAction(unittest.IsolatedAsyncioTestCase):
     """Tests for TelegramClient.send_chat_action method."""
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_chat_action_success(self, mock_post: MagicMock) -> None:
+    async def test_send_chat_action_success(self) -> None:
         """Test successful sending of chat action."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": True, "result": True}
-        mock_post.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
-        client.send_chat_action()
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        mock_post.assert_called_once()
-        call_kwargs = mock_post.call_args.kwargs
-        self.assertEqual(call_kwargs["json"]["chat_id"], "12345")
-        self.assertEqual(call_kwargs["json"]["action"], "typing")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+            await client.send_chat_action()
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_chat_action_with_explicit_chat_id(self, mock_post: MagicMock) -> None:
+            mock_client.post.assert_called_once()
+            call_kwargs = mock_client.post.call_args.kwargs
+            self.assertEqual(call_kwargs["json"]["chat_id"], "12345")
+            self.assertEqual(call_kwargs["json"]["action"], "typing")
+
+    async def test_send_chat_action_with_explicit_chat_id(self) -> None:
         """Test sending chat action to explicit chat_id parameter."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": True, "result": True}
-        mock_post.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
-        client.send_chat_action(chat_id="99999")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        call_kwargs = mock_post.call_args.kwargs
-        self.assertEqual(call_kwargs["json"]["chat_id"], "99999")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+            await client.send_chat_action(chat_id="99999")
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_chat_action_custom_action(self, mock_post: MagicMock) -> None:
+            call_kwargs = mock_client.post.call_args.kwargs
+            self.assertEqual(call_kwargs["json"]["chat_id"], "99999")
+
+    async def test_send_chat_action_custom_action(self) -> None:
         """Test sending custom chat action."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": True, "result": True}
-        mock_post.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
-        client.send_chat_action(action="upload_document")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        call_kwargs = mock_post.call_args.kwargs
-        self.assertEqual(call_kwargs["json"]["action"], "upload_document")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+            await client.send_chat_action(action="upload_document")
 
-    def test_send_chat_action_without_chat_id_raises_value_error(self) -> None:
+            call_kwargs = mock_client.post.call_args.kwargs
+            self.assertEqual(call_kwargs["json"]["action"], "upload_document")
+
+    async def test_send_chat_action_without_chat_id_raises_value_error(self) -> None:
         """Test sending chat action without any chat_id raises ValueError."""
         client = TelegramClient(bot_token="test-token")
 
         with self.assertRaises(ValueError) as context:
-            client.send_chat_action()
+            await client.send_chat_action()
 
         self.assertIn("chat_id", str(context.exception).lower())
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_chat_action_api_error_raises_exception(self, mock_post: MagicMock) -> None:
+    async def test_send_chat_action_api_error_raises_exception(self) -> None:
         """Test that API error response raises TelegramClientError."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -341,26 +407,60 @@ class TestTelegramClientSendChatAction(unittest.TestCase):
             "description": "Bad Request: chat not found",
         }
         mock_response.raise_for_status = MagicMock()
-        mock_post.return_value = mock_response
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.send_chat_action()
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
 
-        self.assertIn("chat not found", str(context.exception))
+            with self.assertRaises(TelegramClientError) as context:
+                await client.send_chat_action()
 
-    @patch("src.telegram.client.requests.post")
-    def test_send_chat_action_timeout_raises_exception(self, mock_post: MagicMock) -> None:
+            self.assertIn("chat not found", str(context.exception))
+
+    async def test_send_chat_action_timeout_raises_exception(self) -> None:
         """Test that timeout raises TelegramClientError."""
-        mock_post.side_effect = requests.exceptions.Timeout("Connection timed out")
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
 
-        client = TelegramClient(bot_token="test-token", chat_id="12345")
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
 
-        with self.assertRaises(TelegramClientError) as context:
-            client.send_chat_action()
+            with self.assertRaises(TelegramClientError) as context:
+                await client.send_chat_action()
 
-        self.assertIn("timed out", str(context.exception).lower())
+            self.assertIn("timed out", str(context.exception).lower())
+
+
+class TestTelegramClientClose(unittest.IsolatedAsyncioTestCase):
+    """Tests for TelegramClient.close method."""
+
+    async def test_close_client(self) -> None:
+        """Test closing the HTTP client."""
+        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.is_closed = False
+            mock_client_class.return_value = mock_client
+
+            client = TelegramClient(bot_token="test-token")
+            # Trigger client creation
+            await client._get_client()
+
+            # Close the client
+            await client.close()
+
+            mock_client.aclose.assert_called_once()
+
+    async def test_close_client_when_already_closed(self) -> None:
+        """Test closing client when already closed does nothing."""
+        client = TelegramClient(bot_token="test-token")
+        # Client not created yet, should not raise
+        await client.close()
 
 
 if __name__ == "__main__":

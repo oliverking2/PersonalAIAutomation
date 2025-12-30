@@ -77,7 +77,7 @@ def _notify_errors(context: OpExecutionContext, alert_type: str, errors: list[st
     )
 
     try:
-        client.send_message(text, parse_mode="MarkdownV2")
+        client.send_message_sync(text, parse_mode="MarkdownV2")
         context.log.info(f"Error notification sent for {alert_type}: {len(errors)} errors")
     except Exception as e:
         context.log.error(f"Failed to send error notification: {e}")

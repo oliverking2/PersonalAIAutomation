@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import signal
-import time
-from types import FrameType
+import sys
 from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
@@ -30,11 +30,11 @@ logger = logging.getLogger(__name__)
 
 
 class PollingRunner:
-    """Long polling runner for receiving Telegram updates.
+    """Async long polling runner for receiving Telegram updates.
 
-    Runs a continuous loop that:
+    Runs a continuous async loop that:
     1. Polls Telegram for updates using long polling
-    2. Delegates updates to the MessageHandler
+    2. Delegates updates to the async MessageHandler
     3. Persists the polling offset
     4. Handles graceful shutdown on SIGINT/SIGTERM
     """
@@ -62,22 +62,15 @@ class PollingRunner:
         self._handler = handler or MessageHandler(
             settings=self._settings,
             session_manager=self._session_manager,
-            typing_callback=self._send_typing_indicator,
+            telegram_client=self._client,
         )
         self._running = False
         self._consecutive_errors = 0
 
-    def _send_typing_indicator(self, chat_id: str) -> None:
-        """Send typing indicator to a chat.
+    async def run(self) -> None:
+        """Start the async polling loop.
 
-        :param chat_id: Target chat ID.
-        """
-        self._client.send_chat_action(action="typing", chat_id=chat_id)
-
-    def run(self) -> None:
-        """Start the polling loop.
-
-        Blocks until shutdown signal is received.
+        Runs until shutdown signal is received or stop() is called.
         """
         self._running = True
         self._setup_signal_handlers()
@@ -88,10 +81,11 @@ class PollingRunner:
         )
 
         try:
-            self._polling_loop()
-        except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt")
+            await self._polling_loop()
+        except asyncio.CancelledError:
+            logger.info("Polling loop cancelled")
         finally:
+            await self._client.close()
             logger.info("Polling runner stopped")
 
     def stop(self) -> None:
@@ -100,27 +94,38 @@ class PollingRunner:
         self._running = False
 
     def _setup_signal_handlers(self) -> None:
-        """Set up signal handlers for graceful shutdown."""
+        """Set up signal handlers for graceful shutdown.
 
-        def signal_handler(signum: int, frame: FrameType | None) -> None:
-            logger.info(f"Received signal {signum}, initiating shutdown")
-            self.stop()
+        Uses asyncio-compatible signal handling on Unix systems.
+        Falls back to no-op on Windows.
+        """
+        if sys.platform == "win32":
+            # Windows doesn't support add_signal_handler
+            logger.warning("Signal handlers not supported on Windows, use Ctrl+C")
+            return
 
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        try:
+            loop = asyncio.get_running_loop()
 
-    def _polling_loop(self) -> None:
-        """Execute the main polling loop."""
-        # Get initial offset from database
-        with get_session() as db_session:
-            cursor = get_or_create_polling_cursor(db_session)
-            offset = cursor.last_update_id + 1 if cursor.last_update_id > 0 else None
+            def signal_handler() -> None:
+                logger.info("Received shutdown signal")
+                self.stop()
+
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(sig, signal_handler)
+        except RuntimeError:
+            logger.warning("Could not set up signal handlers (no running event loop)")
+
+    async def _polling_loop(self) -> None:
+        """Execute the main async polling loop."""
+        # Get initial offset from database (sync operation wrapped in thread)
+        offset = await asyncio.to_thread(self._get_initial_offset)
 
         logger.info(f"Starting polling from offset={offset}")
 
         while self._running:
             try:
-                updates = self._client.get_updates(offset=offset)
+                updates = await self._client.get_updates(offset=offset)
                 self._consecutive_errors = 0  # Reset on success
 
                 if not updates:
@@ -130,18 +135,38 @@ class PollingRunner:
                 grouped = self._group_updates_by_chat(updates)
 
                 for chat_id, chat_updates in grouped.items():
-                    self._process_chat_updates(chat_id, chat_updates)
+                    await self._process_chat_updates(chat_id, chat_updates)
 
                 # Update offset to highest update_id + 1
                 max_update_id = max(u.update_id for u in updates)
                 offset = max_update_id + 1
 
-                # Persist offset to database
-                with get_session() as db_session:
-                    update_polling_cursor(db_session, max_update_id)
+                # Persist offset to database (sync operation wrapped in thread)
+                await asyncio.to_thread(self._persist_offset, max_update_id)
 
             except TelegramClientError as e:
-                self._handle_polling_error(e)
+                await self._handle_polling_error(e)
+
+    def _get_initial_offset(self) -> int | None:
+        """Get the initial offset from the database.
+
+        Sync method called via asyncio.to_thread().
+
+        :returns: Initial offset or None if no cursor exists.
+        """
+        with get_session() as db_session:
+            cursor = get_or_create_polling_cursor(db_session)
+            return cursor.last_update_id + 1 if cursor.last_update_id > 0 else None
+
+    def _persist_offset(self, max_update_id: int) -> None:
+        """Persist the polling offset to the database.
+
+        Sync method called via asyncio.to_thread().
+
+        :param max_update_id: The maximum update ID to persist.
+        """
+        with get_session() as db_session:
+            update_polling_cursor(db_session, max_update_id)
 
     def _group_updates_by_chat(
         self,
@@ -167,7 +192,7 @@ class PollingRunner:
 
         return grouped
 
-    def _process_chat_updates(
+    async def _process_chat_updates(
         self,
         chat_id: str,
         updates: list[TelegramUpdate],
@@ -211,7 +236,7 @@ class PollingRunner:
             ),
         )
 
-        self._process_update(synthetic_update)
+        await self._process_update(synthetic_update)
 
     def _build_text_with_reply_context(
         self,
@@ -238,20 +263,20 @@ class PollingRunner:
             message=text,
         )
 
-    def _process_update(self, update: TelegramUpdate) -> None:
+    async def _process_update(self, update: TelegramUpdate) -> None:
         """Process a single update.
 
         :param update: The Telegram update to process.
         """
         try:
             with get_session() as db_session:
-                response = self._handler.handle_update(db_session, update)
+                response = await self._handler.handle_update(db_session, update)
 
                 if response:
                     # Send response back to the chat
                     chat_id = str(update.message.chat.id) if update.message else None
                     if chat_id:
-                        self._send_response(chat_id, response)
+                        await self._send_response(chat_id, response)
 
         except UnauthorisedChatError as e:
             logger.warning(f"Ignored message from unauthorised chat: {e.chat_id}")
@@ -260,27 +285,27 @@ class PollingRunner:
             # Try to send error message to user
             if update.message:
                 chat_id = str(update.message.chat.id)
-                self._send_error_response(chat_id)
+                await self._send_error_response(chat_id)
 
-    def _send_response(self, chat_id: str, text: str) -> None:
+    async def _send_response(self, chat_id: str, text: str) -> None:
         """Send a response message to a chat.
 
         :param chat_id: Target chat ID.
         :param text: Response text.
         """
         try:
-            self._client.send_message(text, chat_id=chat_id, parse_mode="")
+            await self._client.send_message(text, chat_id=chat_id, parse_mode="")
             logger.debug(f"Sent response to chat_id={chat_id}")
         except TelegramClientError:
             logger.exception(f"Failed to send response to chat_id={chat_id}")
 
-    def _send_error_response(self, chat_id: str) -> None:
+    async def _send_error_response(self, chat_id: str) -> None:
         """Send a generic error response to a chat.
 
         :param chat_id: Target chat ID.
         """
         try:
-            self._client.send_message(
+            await self._client.send_message(
                 "Sorry, I encountered an error. Please try again.",
                 chat_id=chat_id,
                 parse_mode="",
@@ -288,7 +313,7 @@ class PollingRunner:
         except TelegramClientError:
             logger.exception(f"Failed to send error response to chat_id={chat_id}")
 
-    def _handle_polling_error(self, error: TelegramClientError) -> None:
+    async def _handle_polling_error(self, error: TelegramClientError) -> None:
         """Handle an error during polling.
 
         Implements exponential backoff for consecutive errors.
@@ -303,10 +328,10 @@ class PollingRunner:
                 f"Max consecutive errors reached ({self._settings.max_consecutive_errors}), "
                 f"backing off for {self._settings.backoff_delay}s"
             )
-            time.sleep(self._settings.backoff_delay)
+            await asyncio.sleep(self._settings.backoff_delay)
             self._consecutive_errors = 0
         else:
-            time.sleep(self._settings.error_retry_delay)
+            await asyncio.sleep(self._settings.error_retry_delay)
 
 
 def main() -> None:
@@ -314,7 +339,7 @@ def main() -> None:
     load_dotenv(PROJECT_ROOT / ".env")
     configure_logging()
     runner = PollingRunner()
-    runner.run()
+    asyncio.run(runner.run())
 
 
 if __name__ == "__main__":

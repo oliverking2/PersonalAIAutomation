@@ -17,7 +17,7 @@ class TestAlertService(unittest.TestCase):
         """Set up test fixtures."""
         self.mock_session = MagicMock()
         self.mock_telegram = MagicMock()
-        self.mock_telegram.send_message.return_value = SendMessageResult(
+        self.mock_telegram.send_message_sync.return_value = SendMessageResult(
             message_id=123, chat_id=456
         )
 
@@ -49,7 +49,7 @@ class TestAlertService(unittest.TestCase):
         self.assertEqual(result.alerts_sent, 1)
         self.assertEqual(result.alerts_skipped, 0)
         self.assertEqual(len(result.errors), 0)
-        self.mock_telegram.send_message.assert_called_once()
+        self.mock_telegram.send_message_sync.assert_called_once()
         mock_create.assert_called_once()
         self.mock_provider.mark_sent.assert_called_once_with("test-123")
 
@@ -68,13 +68,13 @@ class TestAlertService(unittest.TestCase):
 
         self.assertEqual(result.alerts_sent, 0)
         self.assertEqual(result.alerts_skipped, 1)
-        self.mock_telegram.send_message.assert_not_called()
+        self.mock_telegram.send_message_sync.assert_not_called()
 
     @patch("src.alerts.service.was_alert_sent_today")
     def test_handles_send_failure(self, mock_was_sent: MagicMock) -> None:
         """Test that send failures are recorded as errors."""
         mock_was_sent.return_value = False
-        self.mock_telegram.send_message.side_effect = TelegramClientError("Failed")
+        self.mock_telegram.send_message_sync.side_effect = TelegramClientError("Failed")
 
         service = AlertService(
             session=self.mock_session,
