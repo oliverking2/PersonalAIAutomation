@@ -259,7 +259,7 @@ Supported newsletters:
 #### Substack Publications
 Fetches posts from configured Substack publications via the Substack API, stores them in the `substack_newsletters` and `substack_posts` tables.
 
-Configuration is hardcoded in `src/newsletters/substack/config.py`. Publications can be added by appending to the `SUBSTACK_PUBLICATIONS` list with (url, name) tuples.
+Publications are fetched dynamically from the configured Substack user's subscriptions.
 
 Features:
 - Incremental extraction using watermarks

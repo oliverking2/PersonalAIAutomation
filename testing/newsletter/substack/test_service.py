@@ -12,13 +12,20 @@ from src.newsletters.substack.service import SubstackService
 class TestSubstackService(unittest.TestCase):
     """Tests for SubstackService class."""
 
-    def test_process_publications_returns_empty_result_when_no_publications(self) -> None:
+    @patch("src.newsletters.substack.service.User")
+    def test_process_publications_returns_empty_result_when_no_publications(
+        self,
+        mock_user_class: MagicMock,
+    ) -> None:
         """Should return empty result when no publications are configured."""
+        mock_user = MagicMock()
+        mock_user.get_subscriptions.return_value = []
+        mock_user_class.return_value = mock_user
+
         session = MagicMock()
         service = SubstackService(session)
 
-        with patch("src.newsletters.substack.service.SUBSTACK_PUBLICATIONS", []):
-            result = service.process_publications()
+        result = service.process_publications()
 
         self.assertEqual(result.posts_processed, 0)
         self.assertEqual(result.posts_new, 0)
@@ -27,18 +34,23 @@ class TestSubstackService(unittest.TestCase):
 
     @patch("src.newsletters.substack.service.ensure_newsletters_exist")
     @patch("src.newsletters.substack.service.Newsletter")
-    @patch("src.newsletters.substack.service.SUBSTACK_PUBLICATIONS")
+    @patch("src.newsletters.substack.service.User")
     def test_process_publications_skips_old_posts(
         self,
-        mock_publications: MagicMock,
+        mock_user_class: MagicMock,
         mock_newsletter_class: MagicMock,
         mock_ensure: MagicMock,
     ) -> None:
         """Should skip posts older than watermark."""
+        # Set up User mock to return subscriptions
+        mock_user = MagicMock()
+        mock_user.get_subscriptions.return_value = [
+            {"domain": "https://test.substack.com", "publication_name": "Test"}
+        ]
+        mock_user_class.return_value = mock_user
+
         session = MagicMock()
         newsletter_id = uuid.uuid4()
-        mock_publications.__iter__ = lambda _: iter([("https://test.substack.com", "Test")])
-        mock_publications.__bool__ = lambda _: True
         mock_ensure.return_value = {"https://test.substack.com": newsletter_id}
 
         # Create mock post with old date
@@ -66,20 +78,25 @@ class TestSubstackService(unittest.TestCase):
 
     @patch("src.newsletters.substack.service.ensure_newsletters_exist")
     @patch("src.newsletters.substack.service.Newsletter")
-    @patch("src.newsletters.substack.service.SUBSTACK_PUBLICATIONS")
+    @patch("src.newsletters.substack.service.User")
     @patch("src.newsletters.substack.service.substack_post_exists")
     def test_process_publications_skips_duplicate_posts(
         self,
         mock_exists: MagicMock,
-        mock_publications: MagicMock,
+        mock_user_class: MagicMock,
         mock_newsletter_class: MagicMock,
         mock_ensure: MagicMock,
     ) -> None:
         """Should skip posts that already exist."""
+        # Set up User mock to return subscriptions
+        mock_user = MagicMock()
+        mock_user.get_subscriptions.return_value = [
+            {"domain": "https://test.substack.com", "publication_name": "Test"}
+        ]
+        mock_user_class.return_value = mock_user
+
         session = MagicMock()
         newsletter_id = uuid.uuid4()
-        mock_publications.__iter__ = lambda _: iter([("https://test.substack.com", "Test")])
-        mock_publications.__bool__ = lambda _: True
         mock_ensure.return_value = {"https://test.substack.com": newsletter_id}
         mock_exists.return_value = True  # Post exists
 

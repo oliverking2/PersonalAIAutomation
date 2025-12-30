@@ -14,9 +14,8 @@ from src.database.substack import (
     ensure_newsletters_exist,
     substack_post_exists,
 )
-from src.newsletters.substack.config import SUBSTACK_PUBLICATIONS
 from src.newsletters.substack.models import SubstackProcessingResult
-from src.substack import Newsletter, Post, SubstackClient
+from src.substack import Newsletter, Post, SubstackClient, User
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +47,12 @@ class SubstackService:
         self._session = session
         self._client = client or SubstackClient(rate_limit=True)
 
+        self._substack_user = User("oliverking804615")
+        self._substack_publications = [
+            (sub["domain"], sub["publication_name"])
+            for sub in self._substack_user.get_subscriptions()
+        ]
+
     def process_publications(
         self,
         *,
@@ -62,14 +67,10 @@ class SubstackService:
         """
         result = SubstackProcessingResult()
 
-        if not SUBSTACK_PUBLICATIONS:
-            logger.warning("No Substack publications configured")
-            return result
-
         # Ensure all newsletters exist in the database
-        url_to_id = ensure_newsletters_exist(self._session, SUBSTACK_PUBLICATIONS)
+        url_to_id = ensure_newsletters_exist(self._session, self._substack_publications)
 
-        for pub_url, pub_name in SUBSTACK_PUBLICATIONS:
+        for pub_url, pub_name in self._substack_publications:
             try:
                 context = PublicationContext(
                     url=pub_url,
