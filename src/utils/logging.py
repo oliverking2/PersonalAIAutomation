@@ -70,7 +70,7 @@ def configure_logging() -> None:
 
     # HTTP noise
     _set_logger_levels(
-        ("urllib3", "urllib3.connectionpool", "httpx"),
+        ("urllib3", "urllib3.connectionpool", "httpx", "httpcore.http11"),
         logging.WARNING,
     )
 

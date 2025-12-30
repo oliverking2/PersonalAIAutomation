@@ -59,13 +59,12 @@ End-to-end conversation flow testing.
 
 ### Telegram Improvements
 
-| ID       | Description                                             | Priority |
-|----------|---------------------------------------------------------|----------|
-| TELE-010 | Async typing indicator refresh during long Bedrock calls| Medium   |
-| TELE-005 | Structured logging with chat_id, session_id             | Medium   |
-| TELE-003 | Graceful long-poll timeout handling                     | Medium   |
-| TELE-009 | Integration test suite                                  | Medium   |
-| TELE-004 | Connection pooling with requests.Session                | Low      |
+| ID       | Description                                  | Priority |
+|----------|----------------------------------------------|----------|
+| TELE-005 | Structured logging with chat_id, session_id  | Medium   |
+| TELE-003 | Graceful long-poll timeout handling          | Medium   |
+| TELE-009 | Integration test suite                       | Medium   |
+| TELE-004 | Connection pooling with requests.Session     | Low      |
 
 ### Technical Debt
 

@@ -49,7 +49,7 @@ class SubstackService:
 
         self._substack_user = User("oliverking804615")
         self._substack_publications = [
-            (sub["domain"], sub["publication_name"])
+            (f"https://{sub['domain']}", sub["publication_name"])
             for sub in self._substack_user.get_subscriptions()
         ]
 

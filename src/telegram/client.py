@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from http import HTTPStatus
 from typing import Any
 
 import httpx
@@ -102,6 +103,8 @@ class TelegramClient:
         try:
             client = await self._get_client()
             response = await client.post(url, json=payload)
+            if response.status_code == HTTPStatus.BAD_REQUEST:
+                logger.info(f"Telegram API Message Error: {response.text}")
             response.raise_for_status()
 
             result: dict[str, Any] = response.json()
