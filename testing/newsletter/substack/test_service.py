@@ -43,9 +43,10 @@ class TestSubstackService(unittest.TestCase):
     ) -> None:
         """Should skip posts older than watermark."""
         # Set up User mock to return subscriptions
+        # Note: domain should NOT include https:// prefix - service adds it
         mock_user = MagicMock()
         mock_user.get_subscriptions.return_value = [
-            {"domain": "https://test.substack.com", "publication_name": "Test"}
+            {"domain": "test.substack.com", "publication_name": "Test"}
         ]
         mock_user_class.return_value = mock_user
 
@@ -89,9 +90,10 @@ class TestSubstackService(unittest.TestCase):
     ) -> None:
         """Should skip posts that already exist."""
         # Set up User mock to return subscriptions
+        # Note: domain should NOT include https:// prefix - service adds it
         mock_user = MagicMock()
         mock_user.get_subscriptions.return_value = [
-            {"domain": "https://test.substack.com", "publication_name": "Test"}
+            {"domain": "test.substack.com", "publication_name": "Test"}
         ]
         mock_user_class.return_value = mock_user
 
