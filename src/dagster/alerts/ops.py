@@ -8,8 +8,10 @@ from src.alerts import (
     AlertService,
     AlertType,
     GoalAlertProvider,
+    OverdueTaskAlertProvider,
+    PersonalTaskAlertProvider,
     ReadingAlertProvider,
-    TaskAlertProvider,
+    WorkTaskAlertProvider,
 )
 from src.api.client import InternalAPIClient
 from src.database.connection import get_session
@@ -96,25 +98,25 @@ def _get_telegram_client() -> TelegramClient:
 
 
 @op(
-    name="send_daily_task_alerts",
+    name="send_work_task_alerts",
     retry_policy=ALERT_RETRY_POLICY,
-    description="Send daily task reminder alerts.",
+    description="Send daily work task reminder alerts (9am).",
 )
-def send_daily_task_alerts_op(context: OpExecutionContext) -> AlertStats:
-    """Send daily task reminder alerts.
+def send_work_task_alerts_op(context: OpExecutionContext) -> AlertStats:
+    """Send work task reminder alerts.
 
-    Sends a summary of overdue tasks, tasks due today, and high priority
-    tasks due this week.
+    Sends a summary of work tasks due today. On Mondays, also includes
+    high and medium priority work tasks for the week.
 
     :param context: Dagster execution context.
     :returns: Stats with counts of sent/skipped alerts.
     """
-    context.log.info("Starting daily task alerts")
+    context.log.info("Starting work task alerts")
 
     telegram_client = _get_telegram_client()
 
     with InternalAPIClient() as api_client:
-        provider = TaskAlertProvider(api_client)
+        provider = WorkTaskAlertProvider(api_client)
 
         with get_session() as session:
             service = AlertService(
@@ -122,7 +124,7 @@ def send_daily_task_alerts_op(context: OpExecutionContext) -> AlertStats:
                 telegram_client=telegram_client,
                 providers=[provider],
             )
-            result = service.send_alerts(alert_types=[AlertType.DAILY_TASK])
+            result = service.send_alerts(alert_types=[AlertType.DAILY_TASK_WORK])
 
     stats = AlertStats(
         alerts_sent=result.alerts_sent,
@@ -131,29 +133,120 @@ def send_daily_task_alerts_op(context: OpExecutionContext) -> AlertStats:
     )
 
     context.log.info(
-        f"Daily task alerts complete: {stats.alerts_sent} sent, "
+        f"Work task alerts complete: {stats.alerts_sent} sent, "
         f"{stats.alerts_skipped} skipped, {len(stats.errors)} errors"
     )
 
-    _notify_errors(context, "Daily Task Alerts", stats.errors)
+    _notify_errors(context, "Work Task Alerts", stats.errors)
 
     return stats
 
 
 @op(
-    name="send_monthly_goal_alerts",
+    name="send_personal_task_alerts",
     retry_policy=ALERT_RETRY_POLICY,
-    description="Send monthly goal review alerts.",
+    description="Send daily personal task reminder alerts (6pm).",
 )
-def send_monthly_goal_alerts_op(context: OpExecutionContext) -> AlertStats:
-    """Send monthly goal review alerts.
+def send_personal_task_alerts_op(context: OpExecutionContext) -> AlertStats:
+    """Send personal task reminder alerts.
 
-    Sends a summary of all active goals with their progress.
+    Sends a summary of personal/photography tasks due today. On Saturdays,
+    also includes high and medium priority personal tasks for the weekend.
 
     :param context: Dagster execution context.
     :returns: Stats with counts of sent/skipped alerts.
     """
-    context.log.info("Starting monthly goal alerts")
+    context.log.info("Starting personal task alerts")
+
+    telegram_client = _get_telegram_client()
+
+    with InternalAPIClient() as api_client:
+        provider = PersonalTaskAlertProvider(api_client)
+
+        with get_session() as session:
+            service = AlertService(
+                session=session,
+                telegram_client=telegram_client,
+                providers=[provider],
+            )
+            result = service.send_alerts(alert_types=[AlertType.DAILY_TASK_PERSONAL])
+
+    stats = AlertStats(
+        alerts_sent=result.alerts_sent,
+        alerts_skipped=result.alerts_skipped,
+        errors=result.errors,
+    )
+
+    context.log.info(
+        f"Personal task alerts complete: {stats.alerts_sent} sent, "
+        f"{stats.alerts_skipped} skipped, {len(stats.errors)} errors"
+    )
+
+    _notify_errors(context, "Personal Task Alerts", stats.errors)
+
+    return stats
+
+
+@op(
+    name="send_overdue_task_alerts",
+    retry_policy=ALERT_RETRY_POLICY,
+    description="Send daily overdue/incomplete task reminder alerts (9pm).",
+)
+def send_overdue_task_alerts_op(context: OpExecutionContext) -> AlertStats:
+    """Send overdue task reminder alerts.
+
+    Sends a summary of all tasks due today that are incomplete,
+    plus all overdue tasks.
+
+    :param context: Dagster execution context.
+    :returns: Stats with counts of sent/skipped alerts.
+    """
+    context.log.info("Starting overdue task alerts")
+
+    telegram_client = _get_telegram_client()
+
+    with InternalAPIClient() as api_client:
+        provider = OverdueTaskAlertProvider(api_client)
+
+        with get_session() as session:
+            service = AlertService(
+                session=session,
+                telegram_client=telegram_client,
+                providers=[provider],
+            )
+            result = service.send_alerts(alert_types=[AlertType.DAILY_TASK_OVERDUE])
+
+    stats = AlertStats(
+        alerts_sent=result.alerts_sent,
+        alerts_skipped=result.alerts_skipped,
+        errors=result.errors,
+    )
+
+    context.log.info(
+        f"Overdue task alerts complete: {stats.alerts_sent} sent, "
+        f"{stats.alerts_skipped} skipped, {len(stats.errors)} errors"
+    )
+
+    _notify_errors(context, "Overdue Task Alerts", stats.errors)
+
+    return stats
+
+
+@op(
+    name="send_weekly_goal_alerts",
+    retry_policy=ALERT_RETRY_POLICY,
+    description="Send weekly goal review alerts (Monday 7am).",
+)
+def send_weekly_goal_alerts_op(context: OpExecutionContext) -> AlertStats:
+    """Send weekly goal review alerts.
+
+    Sends a summary of goals that are in progress or have a due date
+    within the next 3 months.
+
+    :param context: Dagster execution context.
+    :returns: Stats with counts of sent/skipped alerts.
+    """
+    context.log.info("Starting weekly goal alerts")
 
     telegram_client = _get_telegram_client()
 
@@ -166,7 +259,7 @@ def send_monthly_goal_alerts_op(context: OpExecutionContext) -> AlertStats:
                 telegram_client=telegram_client,
                 providers=[provider],
             )
-            result = service.send_alerts(alert_types=[AlertType.MONTHLY_GOAL])
+            result = service.send_alerts(alert_types=[AlertType.WEEKLY_GOAL])
 
     stats = AlertStats(
         alerts_sent=result.alerts_sent,
@@ -175,11 +268,11 @@ def send_monthly_goal_alerts_op(context: OpExecutionContext) -> AlertStats:
     )
 
     context.log.info(
-        f"Monthly goal alerts complete: {stats.alerts_sent} sent, "
+        f"Weekly goal alerts complete: {stats.alerts_sent} sent, "
         f"{stats.alerts_skipped} skipped, {len(stats.errors)} errors"
     )
 
-    _notify_errors(context, "Monthly Goal Alerts", stats.errors)
+    _notify_errors(context, "Weekly Goal Alerts", stats.errors)
 
     return stats
 

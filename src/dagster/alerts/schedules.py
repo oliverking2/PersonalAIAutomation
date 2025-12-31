@@ -2,22 +2,38 @@
 
 from dagster import ScheduleDefinition
 from src.dagster.alerts.jobs import (
-    daily_task_alerts_job,
-    monthly_goal_alerts_job,
+    overdue_task_alerts_job,
+    personal_task_alerts_job,
+    weekly_goal_alerts_job,
     weekly_reading_alerts_job,
+    work_task_alerts_job,
 )
 
-# Daily task alerts: 8:00 AM Europe/London
-daily_task_alert_schedule = ScheduleDefinition(
-    job=daily_task_alerts_job,
-    cron_schedule="0 8 * * *",
+# Work task alerts: 9:00 AM Europe/London daily
+work_task_alert_schedule = ScheduleDefinition(
+    job=work_task_alerts_job,
+    cron_schedule="0 9 * * *",
     execution_timezone="Europe/London",
 )
 
-# Monthly goal alerts: 1st Monday of month at 8:00 PM Europe/London
-monthly_goal_alert_schedule = ScheduleDefinition(
-    job=monthly_goal_alerts_job,
-    cron_schedule="0 20 * * 1#1",
+# Personal task alerts: 6:00 PM Europe/London daily
+personal_task_alert_schedule = ScheduleDefinition(
+    job=personal_task_alerts_job,
+    cron_schedule="0 18 * * *",
+    execution_timezone="Europe/London",
+)
+
+# Overdue task alerts: 9:00 PM Europe/London daily
+overdue_task_alert_schedule = ScheduleDefinition(
+    job=overdue_task_alerts_job,
+    cron_schedule="0 21 * * *",
+    execution_timezone="Europe/London",
+)
+
+# Weekly goal alerts: Monday at 7:00 AM Europe/London
+weekly_goal_alert_schedule = ScheduleDefinition(
+    job=weekly_goal_alerts_job,
+    cron_schedule="0 7 * * 1",
     execution_timezone="Europe/London",
 )
 

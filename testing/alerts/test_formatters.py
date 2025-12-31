@@ -73,9 +73,9 @@ class TestFormatTaskAlert(unittest.TestCase):
     def test_formats_sections(self) -> None:
         """Test that tasks are organised into sections."""
         alert = AlertData(
-            alert_type=AlertType.DAILY_TASK,
-            source_id="2025-01-15",
-            title="Daily Task Summary",
+            alert_type=AlertType.DAILY_TASK_WORK,
+            source_id="2025-01-15-work",
+            title="Work Tasks (Weekly Overview)",
             items=[
                 AlertItem(
                     name="Overdue task", metadata={"section": "overdue", "days_overdue": "3"}
@@ -91,7 +91,7 @@ class TestFormatTaskAlert(unittest.TestCase):
         result = format_task_alert(alert)
 
         self.assertIn("<b>OVERDUE (1)</b>", result)
-        self.assertIn("Overdue task (3 days overdue)", result)
+        self.assertIn("Overdue task (3 days)", result)
         self.assertIn("<b>DUE TODAY (1)</b>", result)
         self.assertIn("Today task", result)
         self.assertIn("<b>HIGH PRIORITY THIS WEEK (1)</b>", result)
@@ -100,9 +100,9 @@ class TestFormatTaskAlert(unittest.TestCase):
     def test_empty_sections_not_shown(self) -> None:
         """Test that empty sections are not rendered."""
         alert = AlertData(
-            alert_type=AlertType.DAILY_TASK,
-            source_id="2025-01-15",
-            title="Daily Task Summary",
+            alert_type=AlertType.DAILY_TASK_WORK,
+            source_id="2025-01-15-work",
+            title="Work Tasks",
             items=[AlertItem(name="Today task", metadata={"section": "due_today"})],
         )
 
@@ -119,9 +119,9 @@ class TestFormatGoalAlert(unittest.TestCase):
     def test_formats_goals_with_progress(self) -> None:
         """Test that goals show progress bars."""
         alert = AlertData(
-            alert_type=AlertType.MONTHLY_GOAL,
-            source_id="2025-01",
-            title="Monthly Goal Review - January 2025",
+            alert_type=AlertType.WEEKLY_GOAL,
+            source_id="2025-W03",
+            title="Weekly Goal Review",
             items=[
                 AlertItem(
                     name="Learn Spanish",
@@ -136,7 +136,7 @@ class TestFormatGoalAlert(unittest.TestCase):
 
         result = format_goal_alert(alert)
 
-        self.assertIn("<b>Monthly Goal Review - January 2025</b>", result)
+        self.assertIn("<b>Weekly Goal Review</b>", result)
         self.assertIn("IN PROGRESS (1)", result)
         self.assertIn("Learn Spanish", result)
         self.assertIn("75%", result)
@@ -183,7 +183,7 @@ class TestFormatAlert(unittest.TestCase):
             items=[],
         )
         task = AlertData(
-            alert_type=AlertType.DAILY_TASK,
+            alert_type=AlertType.DAILY_TASK_WORK,
             source_id="2",
             title="Tasks",
             items=[],

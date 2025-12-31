@@ -43,7 +43,9 @@ End-to-end conversation flow testing.
 - Conversation simulator helper
 
 ### Misc Improvements
-(No items currently)
+- tools are currently too cautious, change it to have all tasks tools if there is a question about tasks (check the token usage for increasing this threshold)
+- substack alerts doesn't seem to be deduplicating alerts
+- CLAUDE.md improvements, don't bodge solutions, if it makes sense to update/change other things out of the current scope then stop and ask
 
 ### Agent Improvements
 

@@ -41,16 +41,16 @@ class TestCreateSentAlert(unittest.TestCase):
 
         alert = create_sent_alert(
             session=mock_session,
-            alert_type=AlertType.DAILY_TASK,
+            alert_type=AlertType.DAILY_TASK_WORK,
             chat_id="789",
             content="Daily task reminder",
             telegram_message_id=42,
-            source_id="2025-01-15",
+            source_id="2025-01-15-work",
         )
 
-        self.assertEqual(alert.alert_type, AlertType.DAILY_TASK)
+        self.assertEqual(alert.alert_type, AlertType.DAILY_TASK_WORK)
         self.assertEqual(alert.telegram_message_id, 42)
-        self.assertEqual(alert.source_id, "2025-01-15")
+        self.assertEqual(alert.source_id, "2025-01-15-work")
 
 
 class TestWasAlertSentToday(unittest.TestCase):
@@ -96,14 +96,14 @@ class TestGetSentAlertsByType(unittest.TestCase):
         """Test that alerts are filtered by type."""
         mock_session = MagicMock()
         mock_alerts = [
-            SentAlert(alert_type=AlertType.DAILY_TASK, chat_id="1", content="task 1"),
-            SentAlert(alert_type=AlertType.DAILY_TASK, chat_id="1", content="task 2"),
+            SentAlert(alert_type=AlertType.DAILY_TASK_WORK, chat_id="1", content="task 1"),
+            SentAlert(alert_type=AlertType.DAILY_TASK_WORK, chat_id="1", content="task 2"),
         ]
         mock_session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = mock_alerts
 
         result = get_sent_alerts_by_type(
             session=mock_session,
-            alert_type=AlertType.DAILY_TASK,
+            alert_type=AlertType.DAILY_TASK_WORK,
         )
 
         self.assertEqual(len(result), 2)

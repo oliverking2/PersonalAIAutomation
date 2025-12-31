@@ -14,9 +14,11 @@ from src.alerts.providers import (
     AlertProvider,
     GoalAlertProvider,
     NewsletterAlertProvider,
+    OverdueTaskAlertProvider,
+    PersonalTaskAlertProvider,
     ReadingAlertProvider,
     SubstackAlertProvider,
-    TaskAlertProvider,
+    WorkTaskAlertProvider,
 )
 from src.alerts.service import AlertService
 
@@ -29,9 +31,11 @@ __all__ = [
     "AlertType",
     "GoalAlertProvider",
     "NewsletterAlertProvider",
+    "OverdueTaskAlertProvider",
+    "PersonalTaskAlertProvider",
     "ReadingAlertProvider",
     "SubstackAlertProvider",
-    "TaskAlertProvider",
+    "WorkTaskAlertProvider",
     "format_alert",
     "format_goal_alert",
     "format_newsletter_alert",

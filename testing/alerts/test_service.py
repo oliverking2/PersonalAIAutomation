@@ -111,7 +111,7 @@ class TestAlertService(unittest.TestCase):
         mock_was_sent.return_value = False
 
         task_provider = MagicMock()
-        task_provider.alert_type = AlertType.DAILY_TASK
+        task_provider.alert_type = AlertType.DAILY_TASK_WORK
         task_provider.get_pending_alerts.return_value = []
 
         service = AlertService(

@@ -18,8 +18,10 @@ class AlertType(StrEnum):
     """Types of alerts that can be sent."""
 
     NEWSLETTER = "newsletter"
-    DAILY_TASK = "daily_task"
-    MONTHLY_GOAL = "monthly_goal"
+    DAILY_TASK_WORK = "daily_task_work"
+    DAILY_TASK_PERSONAL = "daily_task_personal"
+    DAILY_TASK_OVERDUE = "daily_task_overdue"
+    WEEKLY_GOAL = "weekly_goal"
     WEEKLY_READING = "weekly_reading"
     SUBSTACK = "substack"
 
