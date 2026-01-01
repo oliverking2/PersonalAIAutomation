@@ -4,6 +4,7 @@ from src.alerts.enums import AlertType
 from src.alerts.formatters import (
     format_alert,
     format_goal_alert,
+    format_medium_alert,
     format_newsletter_alert,
     format_reading_alert,
     format_substack_alert,
@@ -13,6 +14,7 @@ from src.alerts.models import AlertData, AlertItem, AlertSendResult
 from src.alerts.providers import (
     AlertProvider,
     GoalAlertProvider,
+    MediumAlertProvider,
     NewsletterAlertProvider,
     OverdueTaskAlertProvider,
     PersonalTaskAlertProvider,
@@ -30,6 +32,7 @@ __all__ = [
     "AlertService",
     "AlertType",
     "GoalAlertProvider",
+    "MediumAlertProvider",
     "NewsletterAlertProvider",
     "OverdueTaskAlertProvider",
     "PersonalTaskAlertProvider",
@@ -38,6 +41,7 @@ __all__ = [
     "WorkTaskAlertProvider",
     "format_alert",
     "format_goal_alert",
+    "format_medium_alert",
     "format_newsletter_alert",
     "format_reading_alert",
     "format_substack_alert",

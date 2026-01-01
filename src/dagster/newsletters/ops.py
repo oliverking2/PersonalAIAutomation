@@ -5,14 +5,21 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from dagster import Backoff, Jitter, OpExecutionContext, RetryPolicy, op
-from src.alerts import AlertService, AlertType, NewsletterAlertProvider, SubstackAlertProvider
+from src.alerts import (
+    AlertService,
+    AlertType,
+    MediumAlertProvider,
+    NewsletterAlertProvider,
+    SubstackAlertProvider,
+)
 from src.database.connection import get_session
 from src.database.extraction_state import get_watermark, set_watermark
 from src.database.newsletters import backfill_article_urls
 from src.enums import ExtractionSource
 from src.graph.client import GraphClient
+from src.newsletters.medium.service import MediumService
 from src.newsletters.substack import SubstackService
-from src.newsletters.tldr.service import NewsletterService
+from src.newsletters.tldr.service import TLDRService
 from src.telegram import TelegramClient
 from src.telegram.utils.config import get_telegram_settings
 
@@ -74,8 +81,8 @@ def process_newsletters_op(context: OpExecutionContext) -> NewsletterStats:
             context.log.info("No watermark found, processing last 7 days of emails")
 
         # Process newsletters
-        newsletter_service = NewsletterService(session, graph_client)
-        result = newsletter_service.process_newsletters(since=since)
+        service = TLDRService(session, graph_client)
+        result = service.process_digests(since=since)
 
         # Update watermark if we processed any newsletters
         if result.latest_received_at is not None:
@@ -86,7 +93,7 @@ def process_newsletters_op(context: OpExecutionContext) -> NewsletterStats:
         backfill_result = backfill_article_urls(session)
 
     stats = NewsletterStats(
-        newsletters_processed=result.newsletters_processed,
+        newsletters_processed=result.digests_processed,
         articles_new=result.articles_new,
         articles_duplicate=result.articles_duplicate,
         urls_backfilled=backfill_result.articles_updated,
@@ -233,5 +240,108 @@ def send_substack_alerts_op(
 
     context.log.info(
         f"Substack alerts complete: {result.alerts_sent} sent, {len(result.errors)} errors"
+    )
+    return stats
+
+
+@dataclass
+class MediumStats:
+    """Stats for Medium digest processing operations."""
+
+    digests_processed: int
+    articles_new: int
+    articles_duplicate: int
+
+
+@op(
+    name="process_medium_digests",
+    retry_policy=NEWSLETTER_RETRY_POLICY,
+    description="Fetch and process Medium Daily Digests from Microsoft Graph API.",
+)
+def process_medium_digests_op(context: OpExecutionContext) -> MediumStats:
+    """Process Medium digests using watermark-based incremental extraction.
+
+    Fetches Medium digests from Graph API (since the last watermark),
+    parses them, stores in database, and updates the watermark.
+
+    :param context: Dagster execution context.
+    :returns: MediumStats with processing statistics.
+    """
+    graph_client = GraphClient(GRAPH_USER_EMAIL)
+
+    with get_session() as session:
+        # Determine the since datetime
+        since = get_watermark(session, ExtractionSource.NEWSLETTER_MEDIUM)
+        if since is not None:
+            context.log.info(f"Using Medium watermark: {since}")
+        else:
+            # Default to 7 days ago if no watermark is found
+            since = datetime.now(UTC) - timedelta(days=7)
+            context.log.info("No Medium watermark found, processing last 7 days of emails")
+
+        # Process digests
+        service = MediumService(session, graph_client)
+        result = service.process_digests(since=since)
+
+        # Update watermark if we processed any digests
+        if result.latest_received_at is not None:
+            set_watermark(session, ExtractionSource.NEWSLETTER_MEDIUM, result.latest_received_at)
+            context.log.info(f"Updated Medium watermark to: {result.latest_received_at}")
+
+    stats = MediumStats(
+        digests_processed=result.digests_processed,
+        articles_new=result.articles_new,
+        articles_duplicate=result.articles_duplicate,
+    )
+
+    context.log.info(
+        f"Medium processing complete: {result.digests_processed} digests, "
+        f"{result.articles_new} new, {result.articles_duplicate} duplicate"
+    )
+    return stats
+
+
+@op(
+    name="send_medium_alerts",
+    retry_policy=NEWSLETTER_RETRY_POLICY,
+    description="Send Telegram alerts for new Medium digest articles.",
+)
+def send_medium_alerts_op(
+    context: OpExecutionContext,
+    medium_stats: MediumStats,
+) -> AlertStats:
+    """Send Telegram alerts for unsent Medium digests.
+
+    Uses the unified AlertService with MediumAlertProvider to send
+    alerts for digests that haven't been alerted yet.
+
+    :param context: Dagster execution context.
+    :param medium_stats: Stats from previous Medium processing op.
+    :returns: AlertStats with alerting statistics.
+    """
+    context.log.info(f"Starting Medium alerts (processed {medium_stats.digests_processed} digests)")
+
+    settings = get_telegram_settings()
+    telegram_client = TelegramClient(
+        bot_token=settings.bot_token,
+        chat_id=settings.chat_id,
+    )
+
+    with get_session() as session:
+        provider = MediumAlertProvider(session)
+        alert_service = AlertService(
+            session=session,
+            telegram_client=telegram_client,
+            providers=[provider],
+        )
+        result = alert_service.send_alerts(alert_types=[AlertType.MEDIUM])
+
+    stats = AlertStats(
+        newsletters_sent=result.alerts_sent,
+        errors=result.errors,
+    )
+
+    context.log.info(
+        f"Medium alerts complete: {result.alerts_sent} sent, {len(result.errors)} errors"
     )
     return stats

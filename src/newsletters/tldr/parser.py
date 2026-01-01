@@ -9,7 +9,8 @@ from bs4 import BeautifulSoup, Tag
 from pydantic import HttpUrl
 from readability import Document
 
-from src.newsletters.tldr.models import NewsletterType, ParsedArticle
+from src.enums import NewsletterType
+from src.newsletters.tldr.models import ParsedArticle
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,11 @@
 
 from dagster import job
 from src.dagster.newsletters.ops import (
+    process_medium_digests_op,
     process_newsletters_op,
     process_substack_posts_op,
     send_alerts_op,
+    send_medium_alerts_op,
     send_substack_alerts_op,
 )
 
@@ -31,3 +33,15 @@ def substack_pipeline_job() -> None:
     """
     substack_stats = process_substack_posts_op()
     send_substack_alerts_op(substack_stats)
+
+
+@job(description="Process Medium Daily Digests and send Telegram alerts.")
+def medium_pipeline_job() -> None:
+    """Medium Daily Digest processing pipeline.
+
+    Sequential workflow:
+    1. Fetch and process Medium digests from Graph API
+    2. Send Telegram alerts for any unsent digests
+    """
+    medium_stats = process_medium_digests_op()
+    send_medium_alerts_op(medium_stats)

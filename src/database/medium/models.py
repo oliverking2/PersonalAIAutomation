@@ -1,20 +1,19 @@
-"""SQLAlchemy ORM models for the database."""
+"""SQLAlchemy ORM models for Medium digests."""
 
 import uuid as uuid_module
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.core import Base
-from src.enums import NewsletterType
 
 
-class Newsletter(Base):
-    """ORM model for email newsletters table."""
+class MediumDigest(Base):
+    """ORM model for Medium Daily Digest emails."""
 
-    __tablename__ = "email_newsletters"
+    __tablename__ = "medium_digests"
 
     id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -22,10 +21,6 @@ class Newsletter(Base):
         default=uuid_module.uuid4,
     )
     email_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    newsletter_type: Mapped[NewsletterType] = mapped_column(
-        Enum(NewsletterType, name="newsletter_type_enum"),
-        nullable=False,
-    )
     subject: Mapped[str] = mapped_column(String(500), nullable=False)
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -46,58 +41,55 @@ class Newsletter(Base):
         default=None,
     )
 
-    articles: Mapped[list["Article"]] = relationship(
-        "Article",
-        back_populates="newsletter",
+    articles: Mapped[list["MediumArticle"]] = relationship(
+        "MediumArticle",
+        back_populates="digest",
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (
-        Index("idx_email_newsletters_received_at", "received_at"),
-        Index("idx_email_newsletters_type", "newsletter_type"),
-    )
+    __table_args__ = (Index("idx_medium_digests_received_at", "received_at"),)
 
     def __repr__(self) -> str:
-        """Return string representation of the newsletter."""
-        return f"<Newsletter(id={self.id}, type={self.newsletter_type}, subject={self.subject!r})>"
+        """Return string representation of the digest."""
+        return f"<MediumDigest(id={self.id}, subject={self.subject!r})>"
 
 
-class Article(Base):
-    """ORM model for email articles table."""
+class MediumArticle(Base):
+    """ORM model for Medium articles extracted from digests."""
 
-    __tablename__ = "email_articles"
+    __tablename__ = "medium_articles"
 
     id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid_module.uuid4,
     )
-    newsletter_id: Mapped[uuid_module.UUID] = mapped_column(
+    digest_id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("email_newsletters.id"),
+        ForeignKey("medium_digests.id"),
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
-    url_parsed: Mapped[str] = mapped_column(String(2000), nullable=True)
     url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    read_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
 
-    newsletter: Mapped["Newsletter"] = relationship(
-        "Newsletter",
+    digest: Mapped["MediumDigest"] = relationship(
+        "MediumDigest",
         back_populates="articles",
     )
 
     __table_args__ = (
-        Index("idx_email_articles_url_hash", "url_hash"),
-        Index("idx_email_articles_newsletter_id", "newsletter_id"),
+        Index("idx_medium_articles_url_hash", "url_hash"),
+        Index("idx_medium_articles_digest_id", "digest_id"),
     )
 
     def __repr__(self) -> str:
         """Return string representation of the article."""
-        return f"<Article(id={self.id}, title={self.title!r})>"
+        return f"<MediumArticle(id={self.id}, title={self.title!r})>"

@@ -1,4 +1,4 @@
-"""Fetcher for TLDR newsletters via Microsoft Graph API."""
+"""Fetcher for Medium Daily Digests via Microsoft Graph API."""
 
 from datetime import datetime
 from typing import Any
@@ -9,16 +9,16 @@ from src.newsletters.base.fetcher import (
     fetch_emails,
 )
 
-TLDR_SENDER_EMAIL = "dan@tldrnewsletter.com"
+MEDIUM_SENDER_EMAIL = "noreply@medium.com"
 
 
-def fetch_tldr_newsletters(
+def fetch_medium_digests(
     graph_client: GraphClient,
     *,
     since: datetime | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> list[dict[str, Any]]:
-    """Fetch TLDR newsletter emails from Outlook inbox.
+    """Fetch Medium Daily Digest emails from Outlook inbox.
 
     :param graph_client: An authenticated GraphAPI client.
     :param since: Only fetch emails received after this datetime.
@@ -28,7 +28,7 @@ def fetch_tldr_newsletters(
     """
     return fetch_emails(
         graph_client,
-        TLDR_SENDER_EMAIL,
+        MEDIUM_SENDER_EMAIL,
         since=since,
         limit=limit,
     )

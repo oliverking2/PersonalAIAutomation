@@ -218,6 +218,27 @@ def format_substack_alert(alert: AlertData) -> str:
     return "\n".join(lines).strip()
 
 
+def format_medium_alert(alert: AlertData) -> str:
+    """Format a Medium digest alert as HTML for Telegram.
+
+    :param alert: The alert data to format.
+    :returns: HTML-formatted message string.
+    """
+    lines = [f"<b>{alert.title}</b>", ""]
+
+    for item in alert.items:
+        lines.append(f"<b>{item.name}</b>")
+        description = item.metadata.get("description", "")
+        if description:
+            lines.append(summarise_description(description, max_length=150))
+        if item.url:
+            domain = urlparse(item.url).netloc
+            lines.append(f'<a href="{item.url}">{domain}</a>')
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
 def format_alert(alert: AlertData) -> str:
     """Format any alert based on its type.
 
@@ -227,6 +248,7 @@ def format_alert(alert: AlertData) -> str:
     """
     formatters = {
         AlertType.NEWSLETTER: format_newsletter_alert,
+        AlertType.MEDIUM: format_medium_alert,
         AlertType.DAILY_TASK_WORK: format_task_alert,
         AlertType.DAILY_TASK_PERSONAL: format_task_alert,
         AlertType.DAILY_TASK_OVERDUE: format_task_alert,

@@ -3,15 +3,15 @@
 import unittest
 from datetime import datetime
 
-from src.newsletters.tldr.fetcher import _parse_datetime, extract_email_metadata
+from src.newsletters.base.fetcher import extract_email_metadata, parse_datetime
 
 
 class TestParseDateTime(unittest.TestCase):
-    """Tests for _parse_datetime function."""
+    """Tests for parse_datetime function."""
 
     def test_parses_z_suffix_datetime(self) -> None:
         """Test parsing datetime with Z suffix."""
-        result = _parse_datetime("2024-01-15T10:30:00Z")
+        result = parse_datetime("2024-01-15T10:30:00Z")
 
         self.assertEqual(result.year, 2024)
         self.assertEqual(result.month, 1)
@@ -22,7 +22,7 @@ class TestParseDateTime(unittest.TestCase):
 
     def test_parses_offset_datetime(self) -> None:
         """Test parsing datetime with timezone offset."""
-        result = _parse_datetime("2024-01-15T10:30:00+00:00")
+        result = parse_datetime("2024-01-15T10:30:00+00:00")
 
         self.assertEqual(result.year, 2024)
         self.assertEqual(result.month, 1)
@@ -30,7 +30,7 @@ class TestParseDateTime(unittest.TestCase):
 
     def test_parses_positive_offset(self) -> None:
         """Test parsing datetime with positive offset."""
-        result = _parse_datetime("2024-01-15T10:30:00+05:30")
+        result = parse_datetime("2024-01-15T10:30:00+05:30")
 
         self.assertEqual(result.hour, 10)
         self.assertIsNotNone(result.tzinfo)

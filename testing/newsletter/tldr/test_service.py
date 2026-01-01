@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.database.newsletters import compute_url_hash
+from src.database.base import compute_url_hash
 
 
 class TestComputeUrlHash(unittest.TestCase):

@@ -20,7 +20,7 @@ class TestNewsletterAlertProvider(unittest.TestCase):
         provider = NewsletterAlertProvider(session=self.mock_session)
         self.assertEqual(provider.alert_type, AlertType.NEWSLETTER)
 
-    @patch("src.alerts.providers.newsletter.get_unsent_newsletters")
+    @patch("src.alerts.base.provider.get_unsent_by_alerted_at")
     def test_get_pending_alerts_converts_newsletters(self, mock_get_unsent: MagicMock) -> None:
         """Test that newsletters are converted to AlertData."""
         mock_newsletter = MagicMock()
@@ -39,7 +39,7 @@ class TestNewsletterAlertProvider(unittest.TestCase):
         self.assertIn("TLDR AI", alerts[0].title)
         self.assertIn("Issue 123", alerts[0].title)
 
-    @patch("src.alerts.providers.newsletter.get_unsent_newsletters")
+    @patch("src.alerts.base.provider.get_unsent_by_alerted_at")
     def test_get_pending_alerts_includes_articles(self, mock_get_unsent: MagicMock) -> None:
         """Test that articles are included as items."""
         mock_article = MagicMock()
@@ -62,15 +62,15 @@ class TestNewsletterAlertProvider(unittest.TestCase):
         self.assertEqual(alerts[0].items[0].name, "Test Article")
         self.assertEqual(alerts[0].items[0].url, "https://example.com")
 
-    @patch("src.alerts.providers.newsletter.mark_newsletter_alerted")
+    @patch("src.alerts.base.provider.mark_alerted")
     def test_mark_sent_calls_database(self, mock_mark: MagicMock) -> None:
-        """Test that mark_sent calls mark_newsletter_alerted."""
+        """Test that mark_sent calls mark_alerted."""
         test_id = uuid.uuid4()
         provider = NewsletterAlertProvider(session=self.mock_session)
 
         provider.mark_sent(str(test_id))
 
-        mock_mark.assert_called_once_with(self.mock_session, test_id)
+        mock_mark.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ class AlertType(StrEnum):
     """Types of alerts that can be sent."""
 
     NEWSLETTER = "newsletter"
+    MEDIUM = "medium"
     DAILY_TASK_WORK = "daily_task_work"
     DAILY_TASK_PERSONAL = "daily_task_personal"
     DAILY_TASK_OVERDUE = "daily_task_overdue"
