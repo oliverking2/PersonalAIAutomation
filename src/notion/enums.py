@@ -48,6 +48,7 @@ class GoalCategory(StrEnum):
 
     RUNNING = "Running"
     PERSONAL_DEVELOPMENT = "Personal Development"
+    WORK = "Work"
     OTHER = "Other"
 
 

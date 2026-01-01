@@ -83,8 +83,8 @@ class AgentGoalCreateArgs(BaseModel):
         default=Priority.LOW,
         description=f"Goal priority (default: {Priority.LOW})",
     )
-    category: GoalCategory | None = Field(
-        None,
+    category: GoalCategory = Field(
+        ...,
         description=f"Goal category ({', '.join(GoalCategory)})",
     )
     progress: int | None = Field(
@@ -93,7 +93,7 @@ class AgentGoalCreateArgs(BaseModel):
         le=100,
         description="Progress percentage (0-100, default: 0)",
     )
-    due_date: date | None = Field(None, description="Target completion date")
+    due_date: date = Field(..., description="Target completion date")
 
 
 class AgentReadingItemCreateArgs(BaseModel):
@@ -120,8 +120,8 @@ class AgentReadingItemCreateArgs(BaseModel):
         default=Priority.LOW,
         description=f"Priority (default: {Priority.LOW})",
     )
-    category: ReadingCategory | None = Field(
-        None,
+    category: ReadingCategory = Field(
+        ...,
         description=f"Content category ({', '.join(ReadingCategory)})",
     )
 
