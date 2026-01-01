@@ -61,16 +61,17 @@ def fetch_emails(
     if since is None:
         since = datetime.now(UTC) - timedelta(hours=DEFAULT_LOOKBACK_HOURS)
 
-    since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    since_iso = since.isoformat()
 
-    logger.info(f"Fetching emails from {sender_email} since {since_str} (limit={limit})")
+    logger.info(f"Fetching emails from {sender_email} since {since_iso} (limit={limit})")
 
+    # receivedDateTime must come first for Graph API to use its index efficiently
     filter_query = (
-        f"from/emailAddress/address eq '{sender_email}' and receivedDateTime ge {since_str}"
+        f"receivedDateTime ge {since_iso} and from/emailAddress/address eq '{sender_email}'"
     )
 
     response = graph_client.get(
-        "/me/messages",
+        "mailFolders/Inbox/messages",
         params={
             "$filter": filter_query,
             "$select": select_fields,
@@ -78,6 +79,7 @@ def fetch_emails(
             "$orderby": "receivedDateTime desc",
         },
     )
+    response.raise_for_status()
 
     messages = response.json().get("value", [])
     logger.info(f"Fetched {len(messages)} email(s) from {sender_email}")
