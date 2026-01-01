@@ -193,7 +193,9 @@ class TestReadingListToolHandlers(unittest.TestCase):
         }
 
         tool = self.tool_dict["create_reading_list"]
-        item = AgentReadingItemCreateArgs(title="New Article", item_type=ReadingType.ARTICLE)
+        item = AgentReadingItemCreateArgs(
+            title="New Article", item_type=ReadingType.ARTICLE, category=ReadingCategory.AI
+        )
         args = tool.args_model(items=[item])
         result = tool.handler(args)
 

@@ -16,7 +16,7 @@ from src.agent.tools.models import (
 )
 from src.agent.tools.reading_list import READING_LIST_TOOL_CONFIG
 from src.agent.tools.tasks import TASK_TOOL_CONFIG
-from src.notion.enums import ReadingType
+from src.notion.enums import GoalCategory, ReadingCategory, ReadingType
 
 
 class TestTaskContentBuilding(unittest.TestCase):
@@ -135,6 +135,7 @@ class TestReadingListContentBuilding(unittest.TestCase):
             title="Clean Code",
             item_type=ReadingType.BOOK,
             notes="Recommended by colleague",
+            category=ReadingCategory.DATA_ANALYTICS,
         )
         args = self.create_tool.args_model(items=[item])
         result = self.create_tool.handler(args)
@@ -154,6 +155,7 @@ class TestReadingListContentBuilding(unittest.TestCase):
             title="Clean Code",
             item_type=ReadingType.BOOK,
             notes="Recommended by colleague",
+            category=ReadingCategory.DATA_ANALYTICS,
         )
         args = self.create_tool.args_model(items=[item])
         self.create_tool.handler(args)
@@ -186,6 +188,8 @@ class TestGoalContentBuilding(unittest.TestCase):
         item = AgentGoalCreateArgs(
             goal_name="Run a half marathon by June 2025",
             description="Train for and complete a half marathon",
+            category=GoalCategory.WORK,
+            due_date=date(2025, 6, 15),
         )
         args = self.create_tool.args_model(items=[item])
         result = self.create_tool.handler(args)

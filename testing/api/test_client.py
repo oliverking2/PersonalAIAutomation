@@ -82,7 +82,7 @@ class TestInternalAPIClient(unittest.TestCase):
             "http://localhost:8000/test",
             params={"key": "value"},
             json=None,
-            timeout=30,
+            timeout=60,
         )
 
     @patch("src.api.client.requests.Session")
@@ -105,7 +105,7 @@ class TestInternalAPIClient(unittest.TestCase):
             "http://localhost:8000/test",
             params=None,
             json={"title": "Test"},
-            timeout=30,
+            timeout=60,
         )
 
     @patch("src.api.client.requests.Session")
@@ -128,7 +128,7 @@ class TestInternalAPIClient(unittest.TestCase):
             "http://localhost:8000/test/123",
             params=None,
             json={"title": "Updated"},
-            timeout=30,
+            timeout=60,
         )
 
     @patch("src.api.client.requests.Session")

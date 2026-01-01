@@ -8,7 +8,7 @@ from src.agent.enums import RiskLevel
 from src.agent.tools.goals import GOAL_TOOL_CONFIG, get_goals_tools
 from src.agent.tools.models import AgentGoalCreateArgs
 from src.api.notion.goals.models import GoalQueryRequest
-from src.notion.enums import GoalStatus, Priority
+from src.notion.enums import GoalCategory, GoalStatus, Priority
 
 
 class TestGoalsToolDefinitions(unittest.TestCase):
@@ -120,13 +120,17 @@ class TestAgentGoalCreateArgs(unittest.TestCase):
 
     def test_minimal_args(self) -> None:
         """Test creating with only required fields."""
-        args = AgentGoalCreateArgs(goal_name="Test Goal")
+        args = AgentGoalCreateArgs(
+            goal_name="Test Goal", category=GoalCategory.OTHER, due_date=date(2025, 6, 1)
+        )
 
         self.assertEqual(args.goal_name, "Test Goal")
         self.assertEqual(args.status, GoalStatus.NOT_STARTED)
         self.assertEqual(args.priority, Priority.LOW)
         self.assertEqual(args.progress, 0)
-        self.assertIsNone(args.due_date)
+        self.assertEqual(args.due_date, date(2025, 6, 1))
+        self.assertEqual(args.category, GoalCategory.OTHER)
+        self.assertIsNone(args.notes)
         self.assertIsNone(args.description)
 
     def test_full_args(self) -> None:
@@ -139,6 +143,7 @@ class TestAgentGoalCreateArgs(unittest.TestCase):
             priority=Priority.HIGH,
             progress=50,
             due_date=date(2025, 6, 1),
+            category=GoalCategory.OTHER,
         )
 
         self.assertEqual(args.goal_name, "Important Goal")
@@ -203,7 +208,9 @@ class TestGoalToolHandlers(unittest.TestCase):
         }
 
         tool = self.tool_dict["create_goals"]
-        item = AgentGoalCreateArgs(goal_name=goal_name)
+        item = AgentGoalCreateArgs(
+            goal_name=goal_name, category=GoalCategory.OTHER, due_date=date(2025, 6, 1)
+        )
         args = tool.args_model(items=[item])
         result = tool.handler(args)
 
