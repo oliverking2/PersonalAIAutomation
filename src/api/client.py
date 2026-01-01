@@ -11,7 +11,7 @@ from requests.exceptions import RequestException
 logger = logging.getLogger(__name__)
 
 # Default timeout for API requests in seconds
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 60
 
 # HTTP status code threshold for errors
 HTTP_ERROR_THRESHOLD = 400
