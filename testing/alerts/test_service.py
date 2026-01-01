@@ -52,6 +52,8 @@ class TestAlertService(unittest.TestCase):
         self.mock_telegram.send_message_sync.assert_called_once()
         mock_create.assert_called_once()
         self.mock_provider.mark_sent.assert_called_once_with("test-123")
+        # Verify commit is called after each alert
+        self.mock_session.commit.assert_called_once()
 
     @patch("src.alerts.service.was_alert_sent_today")
     def test_skips_already_sent_today(self, mock_was_sent: MagicMock) -> None:
@@ -87,6 +89,55 @@ class TestAlertService(unittest.TestCase):
         self.assertEqual(result.alerts_sent, 0)
         self.assertEqual(len(result.errors), 1)
         self.assertIn("Failed", result.errors[0])
+        # Commit is not called when send fails
+        self.mock_session.commit.assert_not_called()
+
+    @patch("src.alerts.service.was_alert_sent_today")
+    @patch("src.alerts.service.create_sent_alert")
+    def test_commit_preserves_progress_on_partial_failure(
+        self, mock_create: MagicMock, mock_was_sent: MagicMock
+    ) -> None:
+        """Test that commits after each alert preserve progress when later alerts fail.
+
+        This is a regression test for the issue where transaction rollback would
+        undo all progress when a later alert failed.
+        """
+        mock_was_sent.return_value = False
+
+        # First alert succeeds, second fails
+        self.mock_telegram.send_message_sync.side_effect = [
+            SendMessageResult(message_id=1, chat_id=456),
+            TelegramClientError("Second alert failed"),
+        ]
+
+        # Provider returns two pending alerts
+        self.mock_provider.get_pending_alerts.return_value = [
+            AlertData(
+                alert_type=AlertType.NEWSLETTER,
+                source_id="test-1",
+                title="First",
+                items=[],
+            ),
+            AlertData(
+                alert_type=AlertType.NEWSLETTER,
+                source_id="test-2",
+                title="Second",
+                items=[],
+            ),
+        ]
+
+        service = AlertService(
+            session=self.mock_session,
+            telegram_client=self.mock_telegram,
+            providers=[self.mock_provider],
+        )
+
+        result = service.send_alerts()
+
+        self.assertEqual(result.alerts_sent, 1)
+        self.assertEqual(len(result.errors), 1)
+        # First alert's commit was called before second alert failed
+        self.mock_session.commit.assert_called_once()
 
     def test_skips_when_no_pending_alerts(self) -> None:
         """Test that empty provider returns empty result."""

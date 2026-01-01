@@ -1,6 +1,5 @@
 """Telegram Bot API client for sending and receiving messages."""
 
-import asyncio
 import logging
 from http import HTTPStatus
 from typing import Any
@@ -247,10 +246,13 @@ class TelegramClient:
         chat_id: str | None = None,
         parse_mode: str = "HTML",
     ) -> SendMessageResult:
-        """Send a text message to a chat (synchronous wrapper).
+        """Send a text message to a chat (synchronous version).
 
         Use this method when calling from synchronous code like Dagster ops.
         For async code, use send_message() directly.
+
+        This uses a synchronous HTTP client to avoid event loop issues when
+        called multiple times in a loop (asyncio.run creates/closes loops).
 
         :param text: The message text to send.
         :param chat_id: Target chat ID. If not provided, uses the configured chat_id.
@@ -259,4 +261,50 @@ class TelegramClient:
         :raises TelegramClientError: If the API request fails.
         :raises ValueError: If no chat_id is provided or configured.
         """
-        return asyncio.run(self.send_message(text, chat_id, parse_mode))
+        target_chat_id = chat_id or self._chat_id
+        if not target_chat_id:
+            raise ValueError(
+                "No chat_id provided. Set TELEGRAM_CHAT_ID environment variable, "
+                "pass chat_id to constructor, or provide chat_id parameter."
+            )
+
+        url = f"{self._base_url}/sendMessage"
+        logger.info(f"Sending message to chat_id={target_chat_id}")
+        payload = {
+            "chat_id": target_chat_id,
+            "text": text,
+            "parse_mode": parse_mode,
+            "disable_web_page_preview": True,
+        }
+
+        try:
+            with httpx.Client(timeout=DEFAULT_REQUEST_TIMEOUT) as client:
+                response = client.post(url, json=payload)
+                if response.status_code == HTTPStatus.BAD_REQUEST:
+                    logger.info(f"Telegram API Message Error: {response.text}")
+                response.raise_for_status()
+
+                result: dict[str, Any] = response.json()
+                if not result.get("ok"):
+                    error_description = result.get("description", "Unknown error")
+                    raise TelegramClientError(f"Telegram API returned error: {error_description}")
+
+                message_data = result.get("result", {})
+                message_id = message_data.get("message_id")
+                response_chat_id = message_data.get("chat", {}).get("id")
+
+                logger.info(
+                    f"Message sent successfully: message_id={message_id}, chat_id={target_chat_id}"
+                )
+                return SendMessageResult(message_id=message_id, chat_id=response_chat_id)
+
+        except httpx.TimeoutException as e:
+            raise TelegramClientError(
+                f"Telegram API request timed out after {DEFAULT_REQUEST_TIMEOUT}s"
+            ) from e
+        except httpx.HTTPStatusError as e:
+            raise TelegramClientError(
+                f"Telegram API request failed with status {e.response.status_code}"
+            ) from e
+        except httpx.HTTPError as e:
+            raise TelegramClientError(f"Telegram API request failed: {e}") from e

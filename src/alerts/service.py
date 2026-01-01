@@ -67,6 +67,9 @@ class AlertService:
 
                 try:
                     self._send_and_track_alert(alert, provider)
+                    # Commit after each successful alert to preserve progress
+                    # if a later alert fails
+                    self._session.commit()
                     result.alerts_sent += 1
                 except TelegramClientError as e:
                     error_msg = f"Failed to send {alert.alert_type.value} alert: {e}"

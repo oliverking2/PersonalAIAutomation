@@ -437,6 +437,134 @@ class TestTelegramClientSendChatAction(unittest.IsolatedAsyncioTestCase):
             self.assertIn("timed out", str(context.exception).lower())
 
 
+class TestTelegramClientSendMessageSync(unittest.TestCase):
+    """Tests for TelegramClient.send_message_sync method."""
+
+    def test_send_message_sync_success(self) -> None:
+        """Test successful synchronous message sending."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "ok": True,
+            "result": {"message_id": 123, "chat": {"id": 12345}},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client_class.return_value = mock_client
+
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+            result = client.send_message_sync("Hello, World!")
+
+            self.assertEqual(result.message_id, 123)
+            self.assertEqual(result.chat_id, 12345)
+
+    def test_send_message_sync_without_chat_id_raises_value_error(self) -> None:
+        """Test sending message without any chat_id raises ValueError."""
+        client = TelegramClient(bot_token="test-token")
+
+        with self.assertRaises(ValueError) as context:
+            client.send_message_sync("Test message")
+
+        self.assertIn("chat_id", str(context.exception).lower())
+
+    def test_send_message_sync_api_error_raises_exception(self) -> None:
+        """Test that API error response raises TelegramClientError."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "ok": False,
+            "description": "Bad Request: chat not found",
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client_class.return_value = mock_client
+
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+
+            with self.assertRaises(TelegramClientError) as context:
+                client.send_message_sync("Test message")
+
+            self.assertIn("chat not found", str(context.exception))
+
+    def test_send_message_sync_timeout_raises_exception(self) -> None:
+        """Test that timeout raises TelegramClientError."""
+        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client_class.return_value = mock_client
+
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+
+            with self.assertRaises(TelegramClientError) as context:
+                client.send_message_sync("Test message")
+
+            self.assertIn("timed out", str(context.exception).lower())
+
+    def test_send_message_sync_http_error_raises_exception(self) -> None:
+        """Test that HTTP error raises TelegramClientError."""
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "401 Unauthorized",
+            request=MagicMock(),
+            response=mock_response,
+        )
+
+        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client_class.return_value = mock_client
+
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+
+            with self.assertRaises(TelegramClientError) as context:
+                client.send_message_sync("Test message")
+
+            self.assertIn("401", str(context.exception))
+
+    def test_send_message_sync_can_be_called_multiple_times(self) -> None:
+        """Test that send_message_sync can be called multiple times without errors.
+
+        This is a regression test for the event loop issue where asyncio.run()
+        would fail on subsequent calls.
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "ok": True,
+            "result": {"message_id": 1, "chat": {"id": 12345}},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client_class.return_value = mock_client
+
+            client = TelegramClient(bot_token="test-token", chat_id="12345")
+
+            # Call multiple times - this should not raise
+            for i in range(3):
+                result = client.send_message_sync(f"Message {i}")
+                self.assertEqual(result.message_id, 1)
+
+
 class TestTelegramClientClose(unittest.IsolatedAsyncioTestCase):
     """Tests for TelegramClient.close method."""
 
