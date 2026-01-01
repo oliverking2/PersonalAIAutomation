@@ -417,8 +417,13 @@ mock_client.get_page.return_value = build_notion_task_page(status=DEFAULT_TASK_S
 - Before writing new code, look for an existing pattern and match it.
 - If a change could be breaking, propose a non-breaking alternative first.
 - When uncertain about an existing convention, ask a targeted question instead of guessing.
-- Review `ROADMAP.md` before starting work and update it when completing features or making significant changes
-- Review existing PRDs in `.claude/prds/` before implementing new features
+- Review `ROADMAP.md` before starting work and update it when completing features or making significant changes.
+- Review existing PRDs in `.claude/prds/` before implementing new features.
+
+### Planning for Extensibility
+- **Check for planned features**: Before implementing a new feature, check `ROADMAP.md` and PRDs for similar or related planned features. If a planned feature would benefit from shared abstractions, design for extensibility upfront rather than creating duplicated code that will need refactoring later.
+- **Don't bodge solutions**: If implementing a feature properly requires changes outside the immediate scope (e.g., creating shared base classes, refactoring existing code), stop and ask the user before proceeding. A quick hack that creates technical debt is worse than taking time to do it right.
+- **Propose architectural changes early**: If you notice that a requested feature would be better served by a different architecture (e.g., adding a base class that multiple implementations could share), propose this before writing any code.
 
 ## Validation Requirements
 - All changes must pass `ruff check` and `ruff format --check`.
