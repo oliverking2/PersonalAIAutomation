@@ -10,7 +10,8 @@ from src.dagster.alerts.jobs import (
 )
 from src.dagster.alerts.schedules import (
     overdue_task_alert_schedule,
-    personal_task_alert_schedule,
+    personal_task_alert_weekday_schedule,
+    personal_task_alert_weekend_schedule,
     weekly_goal_alert_schedule,
     weekly_reading_alert_schedule,
     work_task_alert_schedule,
@@ -26,7 +27,8 @@ defs = Definitions(
     ],
     schedules=[
         work_task_alert_schedule,
-        personal_task_alert_schedule,
+        personal_task_alert_weekday_schedule,
+        personal_task_alert_weekend_schedule,
         overdue_task_alert_schedule,
         weekly_goal_alert_schedule,
         weekly_reading_alert_schedule,

@@ -16,10 +16,17 @@ work_task_alert_schedule = ScheduleDefinition(
     execution_timezone="Europe/London",
 )
 
-# Personal task alerts: 6:00 PM Europe/London daily
-personal_task_alert_schedule = ScheduleDefinition(
+# Personal tasks - Weekday alerts: 6:00 PM Mon-Fri
+personal_task_alert_weekday_schedule = ScheduleDefinition(
     job=personal_task_alerts_job,
-    cron_schedule="0 18 * * *",
+    cron_schedule="0 18 * * 1-5",
+    execution_timezone="Europe/London",
+)
+
+# Personal tasks - Weekend alerts: 8:00 AM Sat-Sun
+personal_task_alert_weekend_schedule = ScheduleDefinition(
+    job=personal_task_alerts_job,
+    cron_schedule="0 8 * * 0,6",
     execution_timezone="Europe/London",
 )
 
