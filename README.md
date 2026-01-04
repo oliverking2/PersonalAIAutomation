@@ -1,18 +1,31 @@
-# Personal AI Automation
+# Personal AI Assistant
+
+A locally-hosted AI assistant that automates personal workflows through natural language conversation. 
+Built as a practical exploration of agentic AI patterns, this project combines an LLM-powered reasoning loop with a modular 
+tool registry to handle tasks, goals, and content curation autonomously.
+
+**Key highlights:**
+
+- **Agentic architecture** - Multi-step reasoning loop with AWS Bedrock (Claude Sonnet/Haiku) that dynamically selects and executes tools based on user intent
+- **Tool registry pattern** - 12 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
+- **Telegram integration** - Two-way conversational interface with session persistence, enabling both proactive alerts and interactive requests
+- **Production-ready infrastructure** - Dagster orchestration, PostgreSQL persistence, FastAPI REST layer, and comprehensive observability
+
+---
 
 ## Project Goal
 This project is a personal, cloud-hosted AI assistant designed to automate day-to-day information workflows through a single conversational interface.
 
-The assistant is accessed via a private 1:1 Telegram chat, where it can both proactively send notifications and respond interactively to questions and follow-up requests. It is intended to act as a persistent, context-aware assistant rather than a stateless chatbot.
+The assistant is accessed via a private 1:1 Telegram chat, where it can both proactively send notifications and respond interactively to questions and follow-up requests. 
+It is intended to act as a persistent, context-aware assistant rather than a stateless chatbot.
 
 The primary use cases include:
 - summarising blog posts and articles received via email
 - scraping and summarising daily content such as Medium digests
 - answering questions and performing small automated tasks via natural language reducing manual overhead in recurring personal workflows
+- connect to Notion data sources to help manage tasks and goals
 
 The system maintains conversational context across sessions using persisted history and summaries, allowing it to build continuity over time.
-
-This project also contains some reference information for why decisions where made/architectural patterns used.
 
 ## Architecture Overview
 
@@ -33,12 +46,13 @@ This section provides a high-level overview of how the system works, intended as
 │                              AI AGENT LAYER                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ToolSelector          │  AgentRunner            │  ToolRegistry            │
-│  (AI-first tool        │  (Bedrock Converse      │  (12 tools across        │
-│   selection)           │   reasoning loop)       │   3 domains)             │
+│  (AI-first tool        │  (Bedrock Converse      │  (16 tools across        │
+│   selection)           │   reasoning loop)       │   4 domains)             │
 │                        │                         │                          │
 │  • Analyses intent     │  • Multi-step execution │  • Tasks: CRUD           │
 │  • Picks relevant      │  • HITL confirmation    │  • Goals: CRUD           │
 │    tools (≤5)          │  • Max 5 steps/run      │  • Reading List: CRUD    │
+│                        │                         │  • Ideas: CRUD           │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -143,13 +157,15 @@ The codebase uses a layered class-based approach for scalability and testability
 ```
 src/
 ├── agent/           # AI agent runtime (Bedrock, tools, registry)
+├── alerts/          # Alert service with pluggable providers
 ├── api/             # FastAPI endpoints (thin HTTP layer)
 ├── dagster/         # Orchestration jobs and schedules
 ├── database/        # SQLAlchemy models and operations
 ├── graph/           # Microsoft Graph API client
-├── newsletters/     # Content extraction (TLDR email, Substack)
+├── newsletters/     # Content extraction (TLDR, Medium)
 ├── notion/          # Notion API client and models
 ├── observability/   # Error tracking (Sentry/GlitchTip)
+├── substack/        # Substack API client and parsing
 ├── telegram/        # Telegram Bot client and service
 └── utils/           # Logging configuration
 ```
@@ -270,13 +286,14 @@ Features:
 Proactive Telegram notifications using a provider-based architecture. All alerts are tracked in the `sent_alerts` table to prevent duplicates.
 
 #### Alert Types
-| Type           | Schedule             | Description                                                  |
-|----------------|----------------------|--------------------------------------------------------------|
-| Newsletter     | Hourly (8-21 UTC)    | Article summaries from TLDR newsletters                      |
-| Substack       | Hourly (8-21 UTC)    | New posts from Substack publications, grouped by publication |
-| Daily Task     | 8:00 AM daily        | Overdue tasks, due today, high priority this week            |
-| Monthly Goal   | 1st of month 9:00 AM | Active goals with progress status                            |
-| Weekly Reading | Sunday 6:00 PM       | High priority and stale reading items                        |
+| Type           | Schedule                      | Description                                                  |
+|----------------|-------------------------------|--------------------------------------------------------------|
+| Newsletter     | Hourly (configurable)         | Article summaries from TLDR newsletters                      |
+| Substack       | Hourly (configurable)         | New posts from Substack publications, grouped by publication |
+| Medium         | Hourly (configurable)         | Articles from Medium daily digests                           |
+| Task           | Multiple daily (configurable) | Overdue tasks, due today, high priority items                |
+| Goal           | Weekly (configurable)         | Active goals with progress status                            |
+| Reading        | Weekly (configurable)         | High priority and stale reading items                        |
 
 #### Architecture
 The alert system uses a provider pattern:
@@ -287,18 +304,13 @@ The alert system uses a provider pattern:
 Providers:
 - `NewsletterAlertProvider` - Queries database for unsent TLDR newsletters
 - `SubstackAlertProvider` - Queries database for unsent Substack posts
+- `MediumAlertProvider` - Queries database for unsent Medium digests
 - `TaskAlertProvider` - Queries API for overdue/due tasks
 - `GoalAlertProvider` - Queries API for active goals
 - `ReadingAlertProvider` - Queries API for high priority/stale reading items
 
 ### Telegram Chat
 Two-way conversational interface for interacting with the AI agent via Telegram. Supports multi-turn conversations with session persistence.
-
-#### Running the Bot
-Start the polling bot:
-```bash
-poetry run python -m src.telegram
-```
 
 #### Features
 - **Session Management**: Conversations persist for 10 minutes of inactivity (configurable)
@@ -354,16 +366,6 @@ poetry run dagster dev
 
 This uses SQLite storage and doesn't require PostgreSQL.
 
-#### Manual Job Execution
-Trigger jobs manually via the Dagster UI at http://localhost:3000 or via Python:
-
-```python
-from src.dagster.newsletters.jobs import newsletter_pipeline_job
-
-# Execute the job
-newsletter_pipeline_job.execute_in_process()
-```
-
 ### REST API
 FastAPI REST API for health checks and future endpoints.
 
@@ -373,11 +375,6 @@ FastAPI REST API for health checks and future endpoints.
 
 #### Running with Docker
 The API service starts automatically with docker-compose. Access OpenAPI documentation at http://localhost:8000/docs.
-
-#### Running Locally
-```bash
-poetry run uvicorn src.api.app:app --reload
-```
 
 #### Endpoints
 
@@ -418,8 +415,16 @@ poetry run uvicorn src.api.app:app --reload
 |--------|----------------------------|------|--------------------------------------------|
 | POST   | /notion/reading-list/query | Yes  | Query reading items with fuzzy name search |
 | GET    | /notion/reading-list/{id}  | Yes  | Retrieve a reading item                    |
-| POST   | /notion/reading            | Yes  | Create a reading item with validated enums |
+| POST   | /notion/reading-list       | Yes  | Create a reading item with validated enums |
 | PATCH  | /notion/reading-list/{id}  | Yes  | Update a reading item                      |
+
+##### Ideas
+| Method | Path                 | Auth | Description                               |
+|--------|----------------------|------|-------------------------------------------|
+| POST   | /notion/ideas/query  | Yes  | Query ideas with fuzzy name search        |
+| GET    | /notion/ideas/{id}   | Yes  | Retrieve an idea                          |
+| POST   | /notion/ideas        | Yes  | Create an idea with validated enum fields |
+| PATCH  | /notion/ideas/{id}   | Yes  | Update an idea                            |
 
 ##### Fuzzy Name Search
 All query endpoints support fuzzy name matching via `name_filter` parameter. Results are scored using `partial_ratio` matching and returned with a quality indicator:
@@ -427,10 +432,7 @@ All query endpoints support fuzzy name matching via `name_filter` parameter. Res
 - `fuzzy_match_quality: "weak"` - No matches above threshold (best guesses)
 - `fuzzy_match_quality: null` - No name filter provided (unfiltered results)
 
-By default, completed items are excluded from queries. Use the include flags to search all items:
-- Tasks: `include_done: true`
-- Goals: `include_done: true`
-- Reading List: `include_completed: true`
+By default, completed items are excluded from queries. Use the `include_done` or `include_completed` flags to search all items.
 
 ### AI Agent
 Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely execute internal tools. The agent provides structured tool calling via LLMs with validation and safety guardrails.
@@ -454,15 +456,9 @@ Standalone AI agent layer that uses AWS Bedrock Converse with tool use to safely
 - **Sensitive**: Destructive or irreversible operations (e.g., create, update, delete)
 
 #### Name Validation
-When creating items, the agent validates names to ensure they are descriptive and findable later:
-
-| Domain       | Min Length | Min Specific Words | Example Rejections                    |
-|--------------|------------|--------------------|-----------------------------------------|
-| Tasks        | 15 chars   | 2 words            | "email task", "fix bug", "meeting"      |
-| Goals        | 15 chars   | 2 words            | "fitness goal", "work stuff"            |
-| Reading List | 8 chars    | 1 word             | "article", "link", "book"               |
-
-If validation fails, the tool returns `needs_clarification: true` with the validation rules. The LLM knows these rules and will prompt for a more specific name. Users can override by insisting on the original name.
+When creating items, the agent validates names to ensure they are descriptive and findable later. Each domain has configurable minimum length and word requirements. 
+If validation fails, the tool returns `needs_clarification: true` with the validation rules. The LLM will prompt for a more specific name. 
+Users can override by insisting on the original name.
 
 #### Structured Content
 When creating items, the agent provides structured inputs that are automatically formatted into page content:
@@ -472,17 +468,19 @@ When creating items, the agent provides structured inputs that are automatically
 | Tasks        | `description`   | `notes`         | Description section + notes + footer   |
 | Goals        | `description`   | `notes`         | Description section + notes + footer   |
 | Reading List | -               | `notes`         | Notes section + footer                 |
+| Ideas        | `notes`         | -               | Notes section + footer                 |
 
 The agent cannot create arbitrary content - it must use these structured fields, which are then formatted via templates with an "AI Agent" attribution footer. This ensures consistent, well-structured page content.
 
 #### Available Tools
-The agent has 12 built-in tools organised by domain:
+The agent has 16 built-in tools organised by domain:
 
 | Domain       | Tools                                                                          |
 |--------------|--------------------------------------------------------------------------------|
-| Reading List | query_reading_list, get_reading_item, create_reading_item, update_reading_item |
-| Goals        | query_goals, get_goal, create_goal, update_goal                                |
 | Tasks        | query_tasks, get_task, create_task, update_task                                |
+| Goals        | query_goals, get_goal, create_goal, update_goal                                |
+| Reading List | query_reading_list, get_reading_item, create_reading_item, update_reading_item |
+| Ideas        | query_ideas, get_idea, create_idea, update_idea                                |
 
 #### Agent Runner
 The AgentRunner executes the reasoning and tool-calling loop with safety guardrails:
@@ -571,59 +569,6 @@ flowchart TD
     E -->|NEW_INTENT| H[Re-select tools<br/>Process new request]
 ```
 
-#### Usage
-```python
-from src.agent import (
-    AgentRunner,
-    BedrockClient,
-    create_default_registry,
-)
-from src.database.agent_tracking import create_agent_conversation
-from src.database.connection import get_session
-
-# Create registry with all tools
-registry = create_default_registry()
-runner = AgentRunner(registry=registry, client=BedrockClient())
-
-# Run the agent with database session (required for state management)
-with get_session() as session:
-    conversation = create_agent_conversation(session)
-    conversation_id = conversation.id
-
-    # First run - tool selection happens automatically
-    result = runner.run("Create a task to review the Q4 report", session, conversation_id)
-
-    # Multi-turn conversation loop
-    while True:
-        print(f"\nAgent: {result.response}")
-
-        # Show confirmation prompt if required
-        if result.stop_reason == "confirmation_required" and result.confirmation_request:
-            print(f"⚠️  Confirm: {result.confirmation_request.action_summary}")
-
-        # Get user input (conversation state is preserved across runs)
-        user_input = input("\nYou: ").strip()
-        if not user_input:
-            break
-
-        # Continue with same conversation_id - full context is maintained
-        result = runner.run(user_input, session, conversation_id)
-
-    # Session auto-commits on exit
-```
-
-Example conversation flow:
-```
-Agent: I need a few more details - what's the due date and task group?
-You: Work task, due 2025-01-15
-
-Agent: [requests create_task tool]
-⚠️  Confirm: Create task 'Review the Q4 report' in Work group, due 2025-01-15
-You: yes
-
-Agent: Task created successfully!
-```
-
 The agent:
 - Automatically selects relevant tools using Haiku and executes with Sonnet
 - Maintains conversation context across multiple runs
@@ -643,25 +588,6 @@ Tracking data is organised in three tables:
 - **agent_runs**: Individual executions with user message, response, and step count
 - **llm_calls**: Individual Bedrock API calls with full request/response data
 
-##### Tracking Data
-Since the session is required, tracking data is always persisted:
-
-```python
-from src.agent import AgentRunner, create_default_registry
-from src.database.agent_tracking import create_agent_conversation
-from src.database.connection import get_session
-
-runner = AgentRunner(registry=create_default_registry())
-
-with get_session() as session:
-    # Creates conversation and agent_run records automatically
-    conversation = create_agent_conversation(session)
-    result = runner.run("Show my tasks", session, conversation.id)
-
-    # Access totals from the conversation record (session auto-commits on exit)
-    print(f"Total cost: ${conversation.total_cost_usd}")
-```
-
 ##### Model Pricing
 Costs are estimated per 1,000 tokens:
 
@@ -672,55 +598,15 @@ Costs are estimated per 1,000 tokens:
 | Opus   | $0.005  | $0.025  | $0.0005    |
 
 ### Notion Integration
-API wrapper for Notion to query and manage tasks, goals, and reading items. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.
+API wrapper for Notion to query and manage tasks, goals, reading items, and ideas. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.
 
 #### Configuration
 - `NOTION_INTEGRATION_SECRET`: Notion integration token from https://www.notion.so/my-integrations
-- `NOTION_DATABASE_ID`: Database ID for the task tracker (legacy, not used)
 - `NOTION_TASK_DATA_SOURCE_ID`: Data source ID for the task tracker
 - `NOTION_GOALS_DATA_SOURCE_ID`: Data source ID for the goals tracker
 - `NOTION_READING_LIST_DATA_SOURCE_ID`: Data source ID for the reading list
+- `NOTION_IDEAS_DATA_SOURCE_ID`: Data source ID for the ideas tracker
 
-#### Task Fields
-Task endpoints validate field values using enums:
-- **Status**: Not started, In progress, Done
-- **Priority**: High, Medium, Low
-- **Effort level**: Small, Medium, Large
-- **Task Group**: Personal, Work, Photography
-
-#### Goal Fields
-Goal endpoints validate field values using enums:
-- **Status**: Not started, In progress, Done
-- **Priority**: High, Medium, Low
-- **Progress**: 0-100 (numeric)
-
-#### Reading List Fields
-Reading list endpoints validate field values using enums:
-- **Status**: To Read, Reading Now, Completed
-- **Priority**: High, Medium, Low
-- **Category**: Data Analytics, Data Science, Data Engineering, AI
-
-#### Usage
-Query tasks:
-```bash
-curl -X POST http://localhost:8000/notion/tasks/query \
-  -H "Authorization: Bearer $API_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"filter": {"property": "Status", "status": {"does_not_equal": "Done"}}}'
-```
-
-Create a task:
-```bash
-curl -X POST http://localhost:8000/notion/tasks \
-  -H "Authorization: Bearer $API_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"task_name": "New Task", "status": "Not started", "priority": "High"}'
-```
-
-Update a task:
-```bash
-curl -X PATCH http://localhost:8000/notion/tasks/{task_id} \
-  -H "Authorization: Bearer $API_AUTH_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "Done"}'
-```
+#### Field Validation
+All Notion endpoints validate field values using enums defined in `src/notion/enums.py`. Each domain (Tasks, Goals, Reading List, Ideas) has 
+its own set of valid values for fields like status, priority, and category. Invalid values are rejected with descriptive error messages.
