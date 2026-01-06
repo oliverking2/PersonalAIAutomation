@@ -10,7 +10,7 @@ Beyond writing code, Claude should act as a thoughtful collaborator:
 - **Present options with trade-offs**: When multiple paths exist, lay them out with clear pros/cons rather than picking one silently.
 - **Be direct about bad ideas**: If something is a bad idea, say so and explain why. Don't sugarcoat or go along with poor decisions to be agreeable.
 - **Be realistic about complexity**: Don't oversell or undersell difficulty. Be honest about what's straightforward vs what will be tricky.
-- **Explain the "why"**: Don't just implement - explain why we're choosing one approach over another (e.g., "why Parquet over CSV?", "why this library over that one?").
+- **Explain the "why"**: Don't just implement - explain why we're choosing one approach over another.
 - **Teach, don't just deliver**: Help understand what code is doing so it can be modified later. The goal is knowledge transfer, not just working code.
 
 ## Build Commands
@@ -30,10 +30,10 @@ make test      # Unit tests only
 make coverage  # Tests with coverage (80% threshold)
 
 # Run single test file
-poetry run python -m unittest testing/api/test_health.py
+poetry run python -m unittest testing/path/to/test_file.py
 
 # Run single test method
-poetry run python -m unittest testing.api.test_health.TestHealthEndpoint.test_health_check_returns_200
+poetry run python -m unittest testing.path.to.test_file.TestClass.test_method
 
 # Database migrations
 poetry run alembic upgrade head
@@ -51,24 +51,21 @@ make clean
 ## Architecture
 
 ### Data Flow
+
 1. **Email Ingestion**: `src/graph/` fetches emails via Microsoft Graph API
-2. **Newsletter Parsing**: `src/newsletters/tldr/` extracts articles from HTML
-3. **Storage**: `src/database/newsletters/` persists to PostgreSQL via SQLAlchemy
-4. **Alerting**: `src/telegram/` sends formatted messages to Telegram
+2. **Newsletter Parsing**: `src/newsletters/` extracts articles from HTML
+3. **Storage**: `src/database/` persists to PostgreSQL via SQLAlchemy
+4. **Alerting**: `src/alerts/` sends formatted messages via configured providers
 5. **Orchestration**: `src/dagster/` schedules jobs via Dagster
 6. **API**: `src/api/` exposes FastAPI endpoints
-
-### Key Patterns
-- **Service layer**: Business logic in `*Service` classes (e.g., `NewsletterService`, `TelegramService`)
-- **Database operations**: Functions in `src/database/*/operations.py`, not in services
-- **Pydantic models**: Used for API schemas and parsed data (not ORM)
-- **SQLAlchemy models**: ORM in `src/database/*/models.py`
-- **Dependency injection**: Services take `Session` and clients as constructor args
+7. **Agent**: `src/agent/` provides AI-powered tool calling via AWS Bedrock
 
 ### Module Responsibilities
+
 | Module               | Purpose                                        |
 |----------------------|------------------------------------------------|
 | `src/agent/`         | AI agent runtime with Bedrock tool calling     |
+| `src/alerts/`        | Alert service with pluggable providers         |
 | `src/api/`           | FastAPI REST endpoints with HTTPBearer auth    |
 | `src/dagster/`       | Dagster jobs, ops, schedules, and resources    |
 | `src/database/`      | SQLAlchemy models and database operations      |
@@ -79,15 +76,17 @@ make clean
 | `src/telegram/`      | Telegram Bot API client, polling, and chat     |
 | `src/utils/`         | Shared utilities (logging configuration)       |
 
+### Key Patterns
+
+- **Domain logic in domain modules**: `src/notion/`, `src/telegram/`, etc. contain all business logic, models, clients, and parsing
+- **Consumer layers are thin wrappers**: `src/api/`, `src/agent/`, `src/dagster/` orchestrate domain modules without duplicating logic
+- **Database operations in dedicated files**: Functions in `src/database/*/operations.py`, not scattered across services
+- **Pydantic models for boundaries**: Used for API schemas, parsed data, and configuration
+- **SQLAlchemy models for persistence**: ORM in `src/database/*/models.py`
+
 ### Separation of Concerns
 
 **Domain logic belongs in domain modules, not in consumers.**
-
-The project follows a strict separation where:
-- **Domain modules** (`src/notion/`, `src/telegram/`, etc.) contain all business logic, models, clients, and parsing
-- **Consumer layers** (`src/api/`, `src/agent/`, `src/dagster/`) are thin wrappers that orchestrate domain modules
-
-#### Example: Notion Integration
 
 ```
 src/notion/           <- Domain logic lives here
@@ -102,7 +101,7 @@ src/api/notion/       <- Thin HTTP wrapper
     └── models.py     # Request/response models (can reuse from src/notion/)
 
 src/agent/tools/      <- Thin tool wrapper
-└── tasks.py          # Tool handlers that call NotionClient
+└── tasks.py          # Tool definitions using CRUD factory
 ```
 
 #### Rules for Consumer Layers
@@ -113,336 +112,74 @@ src/agent/tools/      <- Thin tool wrapper
    - Input/output transformation specific to that interface (HTTP, tool spec, etc.)
    - Orchestration of domain operations
    - Interface-specific error handling
-4. **Shared models**: If the same model is needed across API and Agent, place it in the domain module (`src/notion/models.py`) or create a shared location
 
-#### Agent Tools Pattern
+### Agent Tools Pattern
 
-Agent tools in `src/agent/tools/` are thin HTTP wrappers that call the API:
+Agent tools call API endpoints via HTTP, not domain clients directly:
 
 ```
 User Request → Agent → Tool Handler → HTTP → API Endpoint → Domain Logic
 ```
 
-Agent tools should:
-- Call API endpoints via HTTP (localhost in development)
-- Use a shared API client for authentication and base URL
-- Only define tool-specific metadata (name, description, risk level)
-- Return API responses directly (already serialised)
+Tools use `InternalAPIClient` from `src/api/client.py`:
 
 ```python
-# Good: Thin wrapper calling the API
-from src.agent.api_client import AgentAPIClient
+# Good: Thin wrapper calling the API via CRUD factory
+from src.api.client import InternalAPIClient
 
-
-def create_reading_item(args: CreateReadingItemArgs) -> dict[str, Any]:
-    client = AgentAPIClient()
-    response = client.post("/notion/reading-list", json=args.model_dump())
-    return response
-
-
-# Bad: Calling domain clients directly (duplicates API logic)
-def create_reading_item(args: CreateReadingItemArgs) -> dict[str, Any]:
-    # DON'T: Call NotionClient directly - use the API instead
-    client = NotionClient()
-    properties = build_reading_properties(...)
+with InternalAPIClient() as client:
+    response = client.post("/notion/tasks/query", json=args.model_dump())
 ```
 
-This pattern ensures:
+This ensures:
 - **Single source of truth**: All validation and business logic lives in the API
 - **No duplication**: Models, validation, and error handling defined once
 - **Consistent behaviour**: Agent and external clients use the same code path
-- **Easy testing**: Mock HTTP calls, not domain internals
-
-## Project Rules
-
-### Core Principles
-- Optimise for clarity, maintainability, and consistency with existing project patterns.
-- Preserve existing public APIs and behaviours unless explicitly instructed otherwise.
-- Prefer small, testable units. Avoid cleverness.
-
-## Python & Tooling Baseline
-- Target Python 3.12 and above.
-- Use type annotations everywhere (public and internal). Avoid `Any` unless there is a clear, documented reason.
-- Mypy strictness: aim for "as close to strict as the project permits". Do not silence errors with broad ignores.
-- Dependency management must use Poetry only:
-  - If a dependency is required, mention `poetry add <package>` (and nothing else).
-- Do not introduce alternative env managers or install flows (pip, conda, uv, etc).
 
 ## Project Structure
-- Source code lives under `src/`. Place new code in the correct existing package/module, following current patterns.
+
+- Source code lives under `src/`. Place new code in the correct existing package/module.
 - Tests live under `testing/` and mirror `src/` structure.
 - Do not create new top-level folders unless explicitly asked.
-
-### API File Structure
-API endpoints follow a modular structure organised by resource:
-
-```
-src/api/<domain>/
-├── __init__.py           # Exports router
-├── router.py             # Combines sub-routers
-├── dependencies.py       # FastAPI dependencies (shared across resources)
-├── common/
-│   ├── __init__.py
-│   ├── models.py         # Shared response models
-│   └── utils.py          # Shared utility functions
-└── <resource>/           # One directory per resource (e.g., tasks, pages)
-    ├── __init__.py
-    ├── endpoints.py      # FastAPI route handlers
-    └── models.py         # Request/response Pydantic models
-```
-
-Guidelines:
-- **One resource per directory**: Keep endpoints, models, and logic for each resource together.
-- **Separate concerns**: `endpoints.py` handles HTTP, `models.py` defines schemas.
-- **Shared code in `common/`**: Put reusable models and utilities in the `common/` subdirectory.
-- **Dependencies at domain level**: Place FastAPI dependencies (e.g., `get_notion_client`) in `dependencies.py`.
-- **Avoid monolithic files**: Do not put all endpoints in a single `endpoints.py` file.
-
-### Core Module File Structure
-Core modules (non-API) follow a simpler structure:
-
-```
-src/<module>/
-├── __init__.py           # Exports public API
-├── client.py             # External API client (if applicable)
-├── models.py             # Pydantic models for data
-├── parser.py             # Data transformation functions
-├── enums.py              # StrEnum definitions (if applicable)
-├── exceptions.py         # Custom exceptions
-└── utils/                # Internal utilities (optional, for larger modules)
-```
-
-Notes:
-- Larger modules (agent, telegram) use a `utils/` subdirectory for internal helpers
-- Configuration classes using `pydantic-settings` go in `utils/config.py`
-
-### Agent Module Structure
-
-The agent module provides AI-powered tool calling via AWS Bedrock:
-
-```
-src/agent/
-├── __init__.py              # Exports public API
-├── api_client.py            # AgentAPIClient for calling internal API
-├── bedrock_client.py        # BedrockClient for AWS Converse API
-├── enums.py                 # RiskLevel enum
-├── exceptions.py            # Agent-specific exceptions
-├── models.py                # AgentRunResult, ConfirmationRequest
-├── runner.py                # AgentRunner orchestrates agent execution
-├── tools/                   # Tool definitions by domain
-│   ├── factory.py           # CRUD tool factory for reusable patterns
-│   ├── models.py            # ToolDef, argument models
-│   ├── tasks.py             # Task management tools
-│   ├── goals.py             # Goal management tools
-│   └── reading_list.py      # Reading list tools
-└── utils/                   # Agent utilities
-    ├── config.py            # AgentConfig, MODEL_PRICING
-    ├── call_tracking.py     # LLM call tracking and persistence
-    ├── confirmation_classifier.py  # HITL confirmation logic
-    ├── context_manager.py   # Conversation context management
-    ├── pricing.py           # Token cost calculation
-    ├── templates.py         # System prompt templates
-    └── tools/
-        ├── registry.py      # ToolRegistry for tool management
-        └── selector.py      # ToolSelector (AI-first with fallback)
-```
-
-**Important**: Tool handlers in `src/agent/tools/` must be thin wrappers:
-- Reuse argument models from domain modules where possible
-- Call API endpoints via HTTP, not domain clients directly
-- Only add tool-specific concerns (ToolDef metadata, serialisation)
-
-### Agent Configuration
-
-All agent configuration is centralised in `src/agent/utils/config.py`:
-
-- `AgentConfig`: Frozen dataclass with all tuneable parameters
-- `DEFAULT_AGENT_CONFIG`: Default configuration singleton
-- `MODEL_PRICING`: Per-model token pricing
-
-When adding new configuration:
-1. Add the field to `AgentConfig` with a sensible default
-2. Update consuming code to use `config.field_name`
-3. Document the field in the class docstring
-
-### Telegram Module Structure
-
-The telegram module handles bot interactions and newsletter alerts:
-
-```
-src/telegram/
-├── __init__.py           # Exports public API
-├── client.py             # TelegramClient for Bot API
-├── handler.py            # MessageHandler for processing messages
-├── models.py             # Pydantic models (TelegramUpdate, etc.)
-├── polling.py            # PollingRunner for long-polling loop
-├── service.py            # TelegramService for newsletter alerts
-└── utils/
-    ├── config.py         # TelegramSettings (pydantic-settings)
-    ├── session_manager.py # SessionManager for chat sessions
-    └── misc.py           # Utility functions
-```
-
-Key patterns:
-- Configuration uses `pydantic-settings` for environment variable loading
-- Polling groups multiple messages from the same chat before agent invocation
-- Sessions link Telegram chats to AgentConversations in the database
-
-## Coding Style
-- Ruff compatible formatting. Follow settings in `pyproject.toml`.
-- British English spelling in comments, docstrings, user-facing text, and error messages.
-- Prefer small, composable functions (aim: <50 lines, low branching).
-- Avoid deeply nested logic. Use guard clauses and helper functions.
-- Never use bare `except:`. Catch specific exceptions.
-- Raise exceptions with clear messages that explain:
-  - what failed
-  - the relevant identifier(s)
-  - the expected shape/state
-
-## Code Comments
-- Add comments to explain **why**, not **what** - the code shows what, comments explain reasoning.
-- Only add comments for non-obvious logic: complex algorithms, business rules, workarounds, or edge cases.
-- Avoid commenting self-explanatory code - if the code is clear, no comment is needed.
-- Keep comments concise and up-to-date with the code they describe.
-- Use inline comments sparingly; prefer a brief comment above the block when needed.
-- Good comment examples:
-  - `# Group messages by chat to avoid multiple agent calls for rapid-fire messages`
-  - `# Telegram API requires offset to be one greater than the last update_id`
-  - `# Retry with backoff - Notion rate limits at 3 requests/second`
-- Bad comment examples (avoid these):
-  - `# Increment counter` (obvious from code)
-  - `# Loop through items` (obvious from code)
-  - `# Set x to 5` (obvious from code)
-
-## Enums
-- Use `StrEnum` for any parameter or field with a defined set of valid string values.
-- Never use string literals where an enum exists (e.g., use `CallType.CHAT` not `"chat"`).
-- Define enums in `enums.py` within the relevant module (e.g., `src/agent/enums.py`, `src/notion/enums.py`).
-- StrEnum values automatically convert to strings for database storage and JSON serialisation.
-
-## Logging
-- Use the standard library `logging` module.
-- Use module-level loggers: `logger = logging.getLogger(__name__)`.
-- Use f-strings for all string formatting, including log messages.
-- Log actionable context (ids, counts, timings) but never secrets or personal data.
-- Prefer structured-ish logging via consistent key/value wording even if using plain logging.
-- Do not `print()` in production code.
-
-## Pydantic
-- Use Pydantic models for data validation and boundaries (API schemas, configs where applicable).
-- Keep models typed precisely (avoid `dict[str, object]` when a model or `TypedDict` is clearer).
-- Prefer explicit field constraints and meaningful names over ad-hoc validation sprinkled in handlers.
-
-## Imports & Naming
-- Use absolute imports within `src` unless the project clearly prefers relative imports.
-- Keep naming explicit and domain-aligned; avoid vague verbs like `handle`, `do`, `process` without context.
-- Constants: `UPPER_SNAKE_CASE`. Public API should be stable and documented.
-
-## Docstrings & Documentation
-- Public functions/classes must include Sphinx-style docstrings using `:param:`, `:raises:`, `:returns:`.
-- If you add or change user-facing behaviour, update the relevant README/docs snippet.
-
-## README Guidelines
-- Keep documentation high-level and concise.
-- Focus on what things do, not implementation details.
-- Document configuration options (environment variables, settings).
-- No code examples unless essential for usage.
-
-## Environment Configuration
-- Use `.env` for local development (never commit).
-- Document all required variables in `.env_example`.
-- Access via `python-dotenv` and `os.environ`.
-
-## Data & I/O Safety
-- Never hard-code secrets. Use environment variables or existing configuration patterns.
-- Do not log credentials, tokens, or full payloads containing personal data.
-- Prefer `pathlib.Path` over `os.path`.
-- When interacting with external systems (HTTP, DB, S3, APIs):
-  - use timeouts
-  - handle retryable errors explicitly where appropriate
-  - ensure failures are actionable (good error messages)
-
-## AWS (boto3)
-- Use typed stubs from `boto3-stubs`.
-- Always use explicit resource/client types.
-- Handle AWS exceptions specifically (e.g., `botocore.exceptions.ClientError`).
-
-## Testing (unittest)
-- All new behaviour must include `unittest` tests under `testing/`.
-- Tests should cover:
-  - the happy path
-  - at least one edge case
-  - at least one failure mode (if applicable)
-- Keep tests readable and deterministic. Avoid network calls unless the project already uses integration tests/mocking patterns.
-- Aim for at least 80% test coverage.
-- Leverage `setUp`/`setUpClass` and `tearDown`/`tearDownClass` to avoid boilerplate.
-
-### Dynamic Enum Testing
-When testing code that uses enums representing external picklists (e.g., Notion dropdown fields), avoid hardcoding specific enum values. Instead:
-
-1. **Use shared fixtures** in `testing/api/notion/fixtures.py` that derive values from actual enums
-2. **Use helper functions** like `first_value(EnumClass)` to get valid enum values dynamically
-3. **Use fixture builders** like `build_notion_task_page()` instead of inline dicts with hardcoded values
-
-This prevents tests from breaking when enum values are added, removed, or reordered in Notion.
-
-```python
-# Bad: Hardcoded enum values break when Notion changes
-mock_client.get_page.return_value = {
-    "properties": {"Status": {"status": {"name": "To Do"}}}  # Breaks if "To Do" is renamed
-}
-
-# Good: Dynamic values from actual enums
-from testing.api.notion.fixtures import DEFAULT_TASK_STATUS, build_notion_task_page
-
-mock_client.get_page.return_value = build_notion_task_page(status=DEFAULT_TASK_STATUS)
-```
-
-## Static Analysis (mypy)
-- Generated code must pass mypy according to the project's configured strictness.
-- Prefer precise types over broad ones (use `TypedDict`, `Protocol`, `Literal`, `NewType` where helpful).
-- Avoid `# type: ignore` unless it is narrowly scoped and justified with a reason comment.
-- Add type stubs for third-party libraries where possible. Add them to the poetry `dev` group.
-
-## Project-Specific Prohibitions
-
-### Avoid These Anti-Patterns
-1. **Broad exception catches**: Never use bare `except:` or `except Exception:` without re-raising or specific handling. Catch specific exceptions to enable proper error recovery.
-2. **Duplicating domain logic**: If logic exists in a domain module (`src/notion/`, `src/telegram/`, etc.), import and use it. Never duplicate validation, parsing, or business rules in API endpoints or agent tools.
-3. **Missing timeouts**: All HTTP calls to external services (Notion, Telegram, Bedrock) must include explicit timeouts.
-4. **Configuration in code**: Never hard-code configuration values. Use environment variables via `os.environ` with sensible defaults where appropriate.
-5. **Inline type ignores without reason**: If `# type: ignore` is necessary, include a reason comment explaining why.
-
-## Change Discipline
-- Before writing new code, look for an existing pattern and match it.
-- If a change could be breaking, propose a non-breaking alternative first.
-- When uncertain about an existing convention, ask a targeted question instead of guessing.
-- Review `ROADMAP.md` before starting work and update it when completing features or making significant changes.
+- Review `ROADMAP.md` before starting work and update it when completing features.
 - Review existing PRDs in `.claude/prds/` before implementing new features.
 
-### Planning for Extensibility
-- **Check for planned features**: Before implementing a new feature, check `ROADMAP.md` and PRDs for similar or related planned features. If a planned feature would benefit from shared abstractions, design for extensibility upfront rather than creating duplicated code that will need refactoring later.
-- **Don't bodge solutions**: If implementing a feature properly requires changes outside the immediate scope (e.g., creating shared base classes, refactoring existing code), stop and ask the user before proceeding. A quick hack that creates technical debt is worse than taking time to do it right.
-- **Propose architectural changes early**: If you notice that a requested feature would be better served by a different architecture (e.g., adding a base class that multiple implementations could share), propose this before writing any code.
+## Coding Standards
+
+Detailed coding standards are in `.claude/rules/`:
+
+### Core Standards
+- **Python Style**: `.claude/rules/python-style.md` - Types, formatting, naming, docstrings
+- **Testing**: `.claude/rules/testing.md` - unittest patterns, fixtures, coverage
+- **Change Discipline**: `.claude/rules/change-discipline.md` - How to approach changes
+
+### Architecture
+- **Module Structure**: `.claude/rules/module-structure.md` - File organisation patterns
+- **API Patterns**: `.claude/rules/api-patterns.md` - FastAPI endpoints, models, auth
+- **Database**: `.claude/rules/database.md` - SQLAlchemy models, operations, migrations
+
+### External Services
+- **HTTP Clients**: `.claude/rules/http-clients.md` - Retries, timeouts, connection pooling
+- **AWS Patterns**: `.claude/rules/aws-patterns.md` - boto3, Bedrock, S3, SSM
+- **Caching**: `.claude/rules/caching.md` - lru_cache, TTL, invalidation
+
+### Quality & Safety
+- **Error Handling & Logging**: `.claude/rules/error-handling.md` - Exceptions, logging
+- **Observability**: `.claude/rules/observability.md` - Sentry, structured logging, metrics
+- **Security**: `.claude/rules/security.md` - Input validation, auth, OWASP
+- **Data Validation**: `.claude/rules/data-validation.md` - Pydantic, sanitisation
+- **Configuration**: `.claude/rules/configuration.md` - Environment variables, secrets
 
 ## Validation Requirements
-- All changes must pass `ruff check` and `ruff format --check`.
-- All changes must pass `mypy` with no errors.
-- All changes must pass tests in the `testing/` folder with at least 80% coverage.
-- For all changes, update the `README.md` to reflect new or modified behaviour.
 
-## Validation Commands
-- All checks: `make check`
-- Lint: `make lint`
-- Format: `make format`
-- Types: `make types`
-- Tests with coverage: `make coverage`
+All changes must pass before considering work complete:
 
-## Self-Check Before Final Output
-- Confirm imports are correct and minimal.
-- Confirm types line up (no obvious mypy failures).
-- Confirm tests match the behaviour and run in isolation.
-- Confirm no secrets, tokens, or private data are introduced.
-- Run `make check` before considering work complete.
-- Make sure `README.md` is up to date with any changes.
-- Update `ROADMAP.md` to reflect completed features or progress on roadmap items.
+```bash
+make check  # Runs lint, format, types, coverage
+```
+
+- All changes must pass `ruff check` and `ruff format --check`
+- All changes must pass `mypy` with no errors
+- All changes must pass tests with at least 80% coverage
+- Update `README.md` to reflect new or modified behaviour
+- Update `ROADMAP.md` to reflect completed features
