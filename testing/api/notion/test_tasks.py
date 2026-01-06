@@ -3,7 +3,6 @@
 import os
 
 # Set required environment variables before importing API modules
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("API_AUTH_TOKEN", "test-auth-token")
 os.environ.setdefault("NOTION_INTEGRATION_SECRET", "test-notion-token")
 os.environ.setdefault("NOTION_TASK_DATA_SOURCE_ID", "test-data-source-id")
