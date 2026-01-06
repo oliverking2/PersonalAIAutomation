@@ -6,7 +6,7 @@ import concurrent.futures
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
@@ -65,16 +65,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Default system prompt for the agent (use {current_date} placeholder)
-DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, reading lists, and ideas.
+# Default system prompt for the agent (use {current_datetime} placeholder)
+DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, reading lists, ideas, and reminders.
 
 You can:
 - Query, get, create, and update tasks (including changing due dates, status, priority)
 - Query, get, create, and update goals
 - Query, get, create, and update reading list items
 - Query, get, create, and update ideas
+- Create, query, and cancel reminders (one-time or recurring)
 
-Today's date is {current_date}.
+The current date and time is {current_datetime}.
 
 When using tools:
 1. Analyse the user's request carefully
@@ -811,8 +812,10 @@ class AgentRunner:
         tool_config: ToolConfigurationTypeDef | None,
     ) -> dict[str, Any]:
         """Call the LLM and return the response."""
-        # Format system prompt with current date
-        formatted_prompt = self.system_prompt.format(current_date=date.today().isoformat())
+        # Format system prompt with current datetime
+        formatted_prompt = self.system_prompt.format(
+            current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M %Z").strip()
+        )
 
         try:
             return self.client.converse(

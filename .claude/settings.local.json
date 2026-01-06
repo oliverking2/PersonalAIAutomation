@@ -16,7 +16,11 @@
       "WebFetch",
       "WebSearch",
       "Bash(tree:*)",
-      "Bash(poetry run coverage:*)"
+      "Bash(poetry run coverage:*)",
+      "Bash(poetry run mypy:*)",
+      "Bash(poetry run ruff:*)",
+      "Bash(make lint:*)",
+      "Bash(make format:*)"
     ]
   }
 }

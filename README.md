@@ -7,7 +7,7 @@ tool registry to handle tasks, goals, and content curation autonomously.
 **Key highlights:**
 
 - **Agentic architecture** - Multi-step reasoning loop with AWS Bedrock (Claude Sonnet/Haiku) that dynamically selects and executes tools based on user intent
-- **Tool registry pattern** - 12 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
+- **Tool registry pattern** - 19 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
 - **Telegram integration** - Two-way conversational interface with session persistence, enabling both proactive alerts and interactive requests
 - **Production-ready infrastructure** - Dagster orchestration, PostgreSQL persistence, FastAPI REST layer, and comprehensive observability
 
@@ -46,13 +46,15 @@ This section provides a high-level overview of how the system works, intended as
 │                              AI AGENT LAYER                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ToolSelector          │  AgentRunner            │  ToolRegistry            │
-│  (AI-first tool        │  (Bedrock Converse      │  (16 tools across        │
-│   selection)           │   reasoning loop)       │   4 domains)             │
+│  (AI-first tool        │  (Bedrock Converse      │  (19 tools across        │
+│   selection)           │   reasoning loop)       │   5 domains)             │
 │                        │                         │                          │
 │  • Analyses intent     │  • Multi-step execution │  • Tasks: CRUD           │
 │  • Picks relevant      │  • HITL confirmation    │  • Goals: CRUD           │
 │    tools (≤5)          │  • Max 5 steps/run      │  • Reading List: CRUD    │
 │                        │                         │  • Ideas: CRUD           │
+│                        │                         │  • Reminders: create,    │
+│                        │                         │    query, cancel         │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -99,6 +101,13 @@ User Message → PollingRunner → MessageHandler → SessionManager
     → AgentRunner (ToolSelector + reasoning loop)
     → Tool Execution → API → Domain Client → External API
     → AgentRunner (continue/finish) → Response to User
+```
+
+**4. Reminder Pipeline (Scheduled)**
+```
+Dagster Schedule (5min) → ReminderService → Check due schedules
+    → Create instances → Send via Telegram (with inline buttons)
+    → User taps button → Callback handler → Acknowledge/Snooze → Update database
 ```
 
 ### Key Design Decisions
@@ -336,6 +345,35 @@ Sessions are stored in PostgreSQL with the following tables:
 - `telegram_messages`: Audit log of all messages (user and assistant)
 - `telegram_polling_cursor`: Persisted update_id for reliable polling
 
+### User Reminders
+Set one-time and recurring reminders via the AI agent, delivered via Telegram with acknowledgement buttons.
+
+#### Features
+- **One-time reminders**: Trigger at a specific date/time ("remind me to call Mum at 7pm")
+- **Recurring reminders**: Cron-based schedules ("remind me every weekday at 9am")
+- **Persistent nudging**: Re-sends every 30 minutes until acknowledged (max 3 attempts)
+- **Inline buttons**: Acknowledge or snooze reminders directly in Telegram
+- **Snooze options**: 1 hour, 3 hours, or tomorrow morning
+
+#### Agent Commands
+- "Remind me to take vitamins at 8am tomorrow"
+- "Set a reminder for standup every weekday at 9:30am"
+- "Show me my active reminders"
+- "Cancel the standup reminder"
+
+#### Architecture
+Reminders use a two-table model:
+- `reminder_schedules`: Defines when reminders should trigger (one-time or recurring via cron)
+- `reminder_instances`: Tracks each triggered instance awaiting acknowledgement
+
+A Dagster job runs every 5 minutes to:
+1. Check for schedules due to trigger
+2. Create new instances for due schedules
+3. Send pending instances via Telegram with inline buttons
+4. Expire instances that have exceeded max send attempts
+
+When users tap inline buttons, a dedicated callback handler processes acknowledgement/snooze actions without triggering the AI agent.
+
 ### Scheduled Processing
 Newsletter processing and alerting runs automatically using Dagster for orchestration.
 
@@ -426,6 +464,14 @@ The API service starts automatically with docker-compose. Access OpenAPI documen
 | POST   | /notion/ideas        | Yes  | Create an idea with validated enum fields |
 | PATCH  | /notion/ideas/{id}   | Yes  | Update an idea                            |
 
+##### Reminders
+| Method | Path                 | Auth | Description                                      |
+|--------|----------------------|------|--------------------------------------------------|
+| POST   | /reminders/query     | Yes  | Query reminders with optional filters            |
+| GET    | /reminders/{id}      | Yes  | Retrieve a reminder schedule                     |
+| POST   | /reminders           | Yes  | Create a one-time or recurring reminder          |
+| DELETE | /reminders/{id}      | Yes  | Cancel (deactivate) a reminder                   |
+
 ##### Fuzzy Name Search
 All query endpoints support fuzzy name matching via `name_filter` parameter. Results are scored using `partial_ratio` matching and returned with a quality indicator:
 - `fuzzy_match_quality: "good"` - Best match score >= 60 (confident matches)
@@ -473,14 +519,15 @@ When creating items, the agent provides structured inputs that are automatically
 The agent cannot create arbitrary content - it must use these structured fields, which are then formatted via templates with an "AI Agent" attribution footer. This ensures consistent, well-structured page content.
 
 #### Available Tools
-The agent has 16 built-in tools organised by domain:
+The agent has 19 built-in tools organised by domain:
 
 | Domain       | Tools                                                                          |
 |--------------|--------------------------------------------------------------------------------|
-| Tasks        | query_tasks, get_task, create_task, update_task                                |
-| Goals        | query_goals, get_goal, create_goal, update_goal                                |
-| Reading List | query_reading_list, get_reading_item, create_reading_item, update_reading_item |
-| Ideas        | query_ideas, get_idea, create_idea, update_idea                                |
+| Tasks        | query_tasks, get_task, create_tasks, update_task                               |
+| Goals        | query_goals, get_goal, create_goals, update_goal                               |
+| Reading List | query_reading_list, get_reading_item, create_reading_list, update_reading_item |
+| Ideas        | query_ideas, get_idea, create_ideas, update_idea                               |
+| Reminders    | create_reminder, query_reminders, cancel_reminder                              |
 
 #### Agent Runner
 The AgentRunner executes the reasoning and tool-calling loop with safety guardrails:

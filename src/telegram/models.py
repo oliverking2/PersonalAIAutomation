@@ -1,6 +1,43 @@
 """Pydantic models for Telegram integration."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
+
+
+class InlineKeyboardButton(BaseModel):
+    """A button in an inline keyboard."""
+
+    text: str
+    callback_data: str | None = None
+    url: str | None = None
+
+
+class InlineKeyboardMarkup(BaseModel):
+    """Inline keyboard markup for messages."""
+
+    inline_keyboard: list[list[InlineKeyboardButton]]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict for Telegram API.
+
+        Only includes non-None fields as Telegram rejects null values.
+        """
+        return {
+            "inline_keyboard": [
+                [self._button_to_dict(btn) for btn in row] for row in self.inline_keyboard
+            ]
+        }
+
+    @staticmethod
+    def _button_to_dict(btn: InlineKeyboardButton) -> dict[str, str]:
+        """Convert a button to dict, excluding None values."""
+        result: dict[str, str] = {"text": btn.text}
+        if btn.callback_data is not None:
+            result["callback_data"] = btn.callback_data
+        if btn.url is not None:
+            result["url"] = btn.url
+        return result
 
 
 class TelegramUser(BaseModel):
@@ -78,11 +115,24 @@ class TelegramMessageInfo(BaseModel):
         return result
 
 
+class CallbackQuery(BaseModel):
+    """Telegram callback query from inline keyboard button press."""
+
+    id: str
+    from_user: TelegramUser | None = Field(default=None, alias="from")
+    message: TelegramMessageInfo | None = None
+    chat_instance: str | None = None
+    data: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
 class TelegramUpdate(BaseModel):
     """Telegram update from getUpdates API."""
 
     update_id: int
     message: TelegramMessageInfo | None = None
+    callback_query: CallbackQuery | None = None
 
 
 class SendMessageResult(BaseModel):

@@ -93,6 +93,7 @@ End-to-end conversation flow testing.
 
 | PRD    | Description                                        | Date       |
 |--------|----------------------------------------------------|------------|
+| PRD23  | User-Configurable Reminders (Phases 1-4)           | 2025-01-06 |
 | PRD05A | Substack Integration                               | 2025-12-29 |
 | PRD18  | Bedrock toolUseId Validation                       | 2025-12-28 |
 | PRD22  | API Logging Improvements                           | 2024-12-28 |

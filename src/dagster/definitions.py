@@ -3,6 +3,7 @@
 from dagster import Definitions, EnvVar
 from src.dagster.alerts.definitions import defs as alerts_defs
 from src.dagster.newsletters.definitions import defs as newsletters_defs
+from src.dagster.reminders.definitions import defs as reminders_defs
 from src.dagster.resources import TelegramResource
 from src.dagster.utils.sensors import util_sensor_defs
 
@@ -19,4 +20,4 @@ core_defs = Definitions(
     },
 )
 
-defs = Definitions.merge(newsletters_defs, alerts_defs, util_sensor_defs)
+defs = Definitions.merge(newsletters_defs, alerts_defs, reminders_defs, util_sensor_defs)

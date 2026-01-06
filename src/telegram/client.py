@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from src.telegram.models import SendMessageResult, TelegramUpdate
+from src.telegram.models import InlineKeyboardMarkup, SendMessageResult, TelegramUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +73,14 @@ class TelegramClient:
         text: str,
         chat_id: str | None = None,
         parse_mode: str = "HTML",
+        reply_markup: InlineKeyboardMarkup | None = None,
     ) -> SendMessageResult:
         """Send a text message to a chat.
 
         :param text: The message text to send.
         :param chat_id: Target chat ID. If not provided, uses the configured chat_id.
         :param parse_mode: Message parse mode (HTML or Markdown).
+        :param reply_markup: Optional inline keyboard markup for the message.
         :returns: Result containing message_id and chat_id.
         :raises TelegramClientError: If the API request fails.
         :raises ValueError: If no chat_id is provided or configured.
@@ -92,12 +94,15 @@ class TelegramClient:
 
         url = f"{self._base_url}/sendMessage"
         logger.info(f"Sending message to chat_id={target_chat_id}")
-        payload = {
+        payload: dict[str, Any] = {
             "chat_id": target_chat_id,
             "text": text,
             "parse_mode": parse_mode,
             "disable_web_page_preview": True,
         }
+
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup.to_dict()
 
         try:
             client = await self._get_client()
@@ -245,6 +250,7 @@ class TelegramClient:
         text: str,
         chat_id: str | None = None,
         parse_mode: str = "HTML",
+        reply_markup: InlineKeyboardMarkup | None = None,
     ) -> SendMessageResult:
         """Send a text message to a chat (synchronous version).
 
@@ -257,6 +263,7 @@ class TelegramClient:
         :param text: The message text to send.
         :param chat_id: Target chat ID. If not provided, uses the configured chat_id.
         :param parse_mode: Message parse mode (HTML or Markdown).
+        :param reply_markup: Optional inline keyboard markup for the message.
         :returns: Result containing message_id and chat_id.
         :raises TelegramClientError: If the API request fails.
         :raises ValueError: If no chat_id is provided or configured.
@@ -270,12 +277,15 @@ class TelegramClient:
 
         url = f"{self._base_url}/sendMessage"
         logger.info(f"Sending message to chat_id={target_chat_id}")
-        payload = {
+        payload: dict[str, Any] = {
             "chat_id": target_chat_id,
             "text": text,
             "parse_mode": parse_mode,
             "disable_web_page_preview": True,
         }
+
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup.to_dict()
 
         try:
             with httpx.Client(timeout=DEFAULT_REQUEST_TIMEOUT) as client:
@@ -297,6 +307,216 @@ class TelegramClient:
                     f"Message sent successfully: message_id={message_id}, chat_id={target_chat_id}"
                 )
                 return SendMessageResult(message_id=message_id, chat_id=response_chat_id)
+
+        except httpx.TimeoutException as e:
+            raise TelegramClientError(
+                f"Telegram API request timed out after {DEFAULT_REQUEST_TIMEOUT}s"
+            ) from e
+        except httpx.HTTPStatusError as e:
+            raise TelegramClientError(
+                f"Telegram API request failed with status {e.response.status_code}"
+            ) from e
+        except httpx.HTTPError as e:
+            raise TelegramClientError(f"Telegram API request failed: {e}") from e
+
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        text: str | None = None,
+        show_alert: bool = False,
+    ) -> bool:
+        """Answer a callback query from an inline keyboard button.
+
+        :param callback_query_id: The ID of the callback query to answer.
+        :param text: Optional text to show to the user (toast notification).
+        :param show_alert: If True, show an alert instead of a toast.
+        :returns: True if successful.
+        :raises TelegramClientError: If the API request fails.
+        """
+        url = f"{self._base_url}/answerCallbackQuery"
+        payload: dict[str, Any] = {
+            "callback_query_id": callback_query_id,
+            "show_alert": show_alert,
+        }
+
+        if text is not None:
+            payload["text"] = text
+
+        try:
+            client = await self._get_client()
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+
+            result: dict[str, Any] = response.json()
+            if not result.get("ok"):
+                error_description = result.get("description", "Unknown error")
+                raise TelegramClientError(f"Telegram API returned error: {error_description}")
+
+            logger.debug(f"Answered callback query: id={callback_query_id}")
+            return True
+
+        except httpx.TimeoutException as e:
+            raise TelegramClientError(
+                f"Telegram API request timed out after {DEFAULT_REQUEST_TIMEOUT}s"
+            ) from e
+        except httpx.HTTPStatusError as e:
+            raise TelegramClientError(
+                f"Telegram API request failed with status {e.response.status_code}"
+            ) from e
+        except httpx.HTTPError as e:
+            raise TelegramClientError(f"Telegram API request failed: {e}") from e
+
+    async def edit_message_text(
+        self,
+        text: str,
+        chat_id: str | None = None,
+        message_id: int | None = None,
+        parse_mode: str = "HTML",
+        reply_markup: InlineKeyboardMarkup | None = None,
+    ) -> bool:
+        """Edit the text of a message.
+
+        :param text: New text for the message.
+        :param chat_id: Target chat ID. Required if message_id is provided.
+        :param message_id: ID of the message to edit.
+        :param parse_mode: Message parse mode (HTML or Markdown).
+        :param reply_markup: Optional new inline keyboard markup.
+        :returns: True if successful.
+        :raises TelegramClientError: If the API request fails.
+        :raises ValueError: If required parameters are missing.
+        """
+        target_chat_id = chat_id or self._chat_id
+        if not target_chat_id or not message_id:
+            raise ValueError("Both chat_id and message_id are required for editing messages")
+
+        url = f"{self._base_url}/editMessageText"
+        payload: dict[str, Any] = {
+            "chat_id": target_chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": parse_mode,
+        }
+
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup.to_dict()
+
+        try:
+            client = await self._get_client()
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+
+            result: dict[str, Any] = response.json()
+            if not result.get("ok"):
+                error_description = result.get("description", "Unknown error")
+                raise TelegramClientError(f"Telegram API returned error: {error_description}")
+
+            logger.info(f"Edited message: chat_id={target_chat_id}, message_id={message_id}")
+            return True
+
+        except httpx.TimeoutException as e:
+            raise TelegramClientError(
+                f"Telegram API request timed out after {DEFAULT_REQUEST_TIMEOUT}s"
+            ) from e
+        except httpx.HTTPStatusError as e:
+            raise TelegramClientError(
+                f"Telegram API request failed with status {e.response.status_code}"
+            ) from e
+        except httpx.HTTPError as e:
+            raise TelegramClientError(f"Telegram API request failed: {e}") from e
+
+    def answer_callback_query_sync(
+        self,
+        callback_query_id: str,
+        text: str | None = None,
+        show_alert: bool = False,
+    ) -> bool:
+        """Answer a callback query from an inline keyboard button (synchronous version).
+
+        :param callback_query_id: The ID of the callback query to answer.
+        :param text: Optional text to show to the user (toast notification).
+        :param show_alert: If True, show an alert instead of a toast.
+        :returns: True if successful.
+        :raises TelegramClientError: If the API request fails.
+        """
+        url = f"{self._base_url}/answerCallbackQuery"
+        payload: dict[str, Any] = {
+            "callback_query_id": callback_query_id,
+            "show_alert": show_alert,
+        }
+
+        if text is not None:
+            payload["text"] = text
+
+        try:
+            with httpx.Client(timeout=DEFAULT_REQUEST_TIMEOUT) as client:
+                response = client.post(url, json=payload)
+                response.raise_for_status()
+
+                result: dict[str, Any] = response.json()
+                if not result.get("ok"):
+                    error_description = result.get("description", "Unknown error")
+                    raise TelegramClientError(f"Telegram API returned error: {error_description}")
+
+                logger.debug(f"Answered callback query: id={callback_query_id}")
+                return True
+
+        except httpx.TimeoutException as e:
+            raise TelegramClientError(
+                f"Telegram API request timed out after {DEFAULT_REQUEST_TIMEOUT}s"
+            ) from e
+        except httpx.HTTPStatusError as e:
+            raise TelegramClientError(
+                f"Telegram API request failed with status {e.response.status_code}"
+            ) from e
+        except httpx.HTTPError as e:
+            raise TelegramClientError(f"Telegram API request failed: {e}") from e
+
+    def edit_message_text_sync(
+        self,
+        text: str,
+        chat_id: str | None = None,
+        message_id: int | None = None,
+        parse_mode: str = "HTML",
+        reply_markup: InlineKeyboardMarkup | None = None,
+    ) -> bool:
+        """Edit the text of a message (synchronous version).
+
+        :param text: New text for the message.
+        :param chat_id: Target chat ID. Required if message_id is provided.
+        :param message_id: ID of the message to edit.
+        :param parse_mode: Message parse mode (HTML or Markdown).
+        :param reply_markup: Optional new inline keyboard markup.
+        :returns: True if successful.
+        :raises TelegramClientError: If the API request fails.
+        :raises ValueError: If required parameters are missing.
+        """
+        target_chat_id = chat_id or self._chat_id
+        if not target_chat_id or not message_id:
+            raise ValueError("Both chat_id and message_id are required for editing messages")
+
+        url = f"{self._base_url}/editMessageText"
+        payload: dict[str, Any] = {
+            "chat_id": target_chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": parse_mode,
+        }
+
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup.to_dict()
+
+        try:
+            with httpx.Client(timeout=DEFAULT_REQUEST_TIMEOUT) as client:
+                response = client.post(url, json=payload)
+                response.raise_for_status()
+
+                result: dict[str, Any] = response.json()
+                if not result.get("ok"):
+                    error_description = result.get("description", "Unknown error")
+                    raise TelegramClientError(f"Telegram API returned error: {error_description}")
+
+                logger.info(f"Edited message: chat_id={target_chat_id}, message_id={message_id}")
+                return True
 
         except httpx.TimeoutException as e:
             raise TelegramClientError(

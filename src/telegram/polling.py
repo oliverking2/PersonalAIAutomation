@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from src.database.connection import get_session
 from src.database.telegram import get_or_create_polling_cursor, update_polling_cursor
 from src.paths import PROJECT_ROOT
+from src.telegram.callbacks import process_callback_query
 from src.telegram.client import TelegramClient, TelegramClientError
 from src.telegram.handler import MessageHandler, UnauthorisedChatError
 from src.telegram.models import TelegramMessageInfo, TelegramUpdate
@@ -131,8 +132,14 @@ class PollingRunner:
                 if not updates:
                     continue
 
-                # Group updates by chat_id to process multiple messages together
-                grouped = self._group_updates_by_chat(updates)
+                # Process callback queries first (button presses)
+                callback_updates = [u for u in updates if u.callback_query is not None]
+                for update in callback_updates:
+                    await self._process_callback_query(update)
+
+                # Group message updates by chat_id to process multiple messages together
+                message_updates = [u for u in updates if u.message is not None]
+                grouped = self._group_updates_by_chat(message_updates)
 
                 for chat_id, chat_updates in grouped.items():
                     await self._process_chat_updates(chat_id, chat_updates)
@@ -286,6 +293,20 @@ class PollingRunner:
             if update.message:
                 chat_id = str(update.message.chat.id)
                 await self._send_error_response(chat_id)
+
+    async def _process_callback_query(self, update: TelegramUpdate) -> None:
+        """Process a callback query (inline keyboard button press).
+
+        :param update: The Telegram update containing a callback query.
+        """
+        if not update.callback_query:
+            return
+
+        try:
+            await process_callback_query(self._client, update.callback_query)
+            logger.debug(f"Processed callback query: id={update.callback_query.id}")
+        except Exception:
+            logger.exception(f"Error processing callback query: id={update.callback_query.id}")
 
     async def _send_response(self, chat_id: str, text: str) -> None:
         """Send a response message to a chat.
