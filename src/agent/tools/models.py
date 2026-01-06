@@ -252,8 +252,8 @@ class AgentIdeaCreateArgs(BaseModel):
         default=IdeaStatus.NOT_STARTED,
         description=f"Idea status (default: {IdeaStatus.NOT_STARTED})",
     )
-    idea_group: IdeaGroup | None = Field(
-        None,
+    idea_group: IdeaGroup = Field(
+        ...,
         description=f"Idea group ({', '.join(IdeaGroup)})",
     )
 

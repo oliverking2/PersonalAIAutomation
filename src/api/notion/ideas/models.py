@@ -25,7 +25,7 @@ class IdeaCreateRequest(BaseModel):
         default=IdeaStatus.NOT_STARTED,
         description=f"Idea status (default: {IdeaStatus.NOT_STARTED}) ({', '.join(IdeaStatus)})",
     )
-    idea_group: IdeaGroup | None = Field(None, description=f"Idea group ({', '.join(IdeaGroup)})")
+    idea_group: IdeaGroup = Field(..., description=f"Idea group ({', '.join(IdeaGroup)})")
     content: str | None = Field(None, description="Markdown content for the idea page body")
 
 

@@ -110,13 +110,14 @@ class TestAgentIdeaCreateArgs(unittest.TestCase):
         args = AgentIdeaCreateArgs(
             idea="Mobile app for habit tracking",
             notes="This app would help users build good habits using gamification",
+            idea_group=IdeaGroup.PERSONAL,
         )
 
         self.assertEqual(args.idea, "Mobile app for habit tracking")
         self.assertEqual(
             args.notes, "This app would help users build good habits using gamification"
         )
-        self.assertIsNone(args.idea_group)
+        self.assertEqual(args.idea_group, IdeaGroup.PERSONAL)
 
     def test_full_args(self) -> None:
         """Test creating with all fields."""
@@ -186,6 +187,7 @@ class TestIdeasToolHandlers(unittest.TestCase):
         item = AgentIdeaCreateArgs(
             idea="New Idea",
             notes="Some details about this idea",
+            idea_group=IdeaGroup.PERSONAL,
         )
         args = tool.args_model(items=[item])
         result = tool.handler(args)

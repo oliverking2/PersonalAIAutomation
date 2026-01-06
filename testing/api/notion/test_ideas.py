@@ -194,7 +194,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
             "properties": {
                 "Idea": {"title": [{"plain_text": "Minimal idea"}]},
                 "Status": {"status": {"name": DEFAULT_IDEA_STATUS}},
-                "Idea Group": {"select": None},
+                "Idea Group": {"select": {"name": DEFAULT_IDEA_GROUP}},
             },
         }
         mock_client_class.return_value = mock_client
@@ -202,7 +202,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json=[build_idea_create_payload(idea="Minimal idea")],
+            json=[build_idea_create_payload(idea="Minimal idea", idea_group=DEFAULT_IDEA_GROUP)],
         )
 
         self.assertEqual(response.status_code, 201)
@@ -250,7 +250,7 @@ class TestCreateIdeaEndpoint(unittest.TestCase):
         response = self.client.post(
             "/notion/ideas",
             headers=self.auth_headers,
-            json=[build_idea_create_payload(idea="existing idea")],
+            json=[build_idea_create_payload(idea="existing idea", idea_group=DEFAULT_IDEA_GROUP)],
         )
 
         self.assertEqual(response.status_code, 201)
