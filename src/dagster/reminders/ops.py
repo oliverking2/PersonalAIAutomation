@@ -119,7 +119,9 @@ def _format_reminder_message(schedule: ReminderSchedule, instance: ReminderInsta
     :param instance: The reminder instance.
     :returns: Formatted HTML message.
     """
-    send_info = f"(Send {instance.send_count}/{instance.max_sends})"
+    # send_count is incremented after sending, so add 1 for display
+    send_number = instance.send_count + 1
+    send_info = f"(Send {send_number}/{instance.max_sends})"
 
     return f"<b>Reminder</b> {send_info}\n\n{schedule.message}"
 
