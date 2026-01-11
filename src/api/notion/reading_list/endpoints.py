@@ -16,7 +16,11 @@ from src.api.notion.reading_list.models import (
     ReadingQueryRequest,
     ReadingQueryResponse,
 )
-from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
+from src.notion.blocks import (
+    UnsupportedBlockTypeError,
+    blocks_to_markdown,
+    markdown_to_blocks,
+)
 from src.notion.client import NotionClient
 from src.notion.enums import ReadingStatus
 from src.notion.exceptions import NotionClientError
@@ -111,6 +115,9 @@ def get_reading_item(
         )
 
         return _reading_to_response(item, content=content)
+    except UnsupportedBlockTypeError as e:
+        logger.warning(f"Get reading item failed - unsupported blocks: id={item_id}, error={e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except NotionClientError as e:
         logger.exception(f"Failed to get reading item: id={item_id}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -227,6 +234,12 @@ def update_reading_item(
                 detail="No properties or content to update.",
             )
 
+        # Check for unsupported blocks before replacing content
+        if request.content is not None:
+            existing_blocks = client.get_page_content(item_id)
+            if existing_blocks:
+                blocks_to_markdown(existing_blocks)  # Raises if unsupported
+
         # Update properties if any
         if properties:
             data = client.update_page(page_id=item_id, properties=properties)
@@ -254,6 +267,9 @@ def update_reading_item(
         )
 
         return _reading_to_response(item, content=content)
+    except UnsupportedBlockTypeError as e:
+        logger.warning(f"Update reading item failed - unsupported blocks: id={item_id}, error={e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except NotionClientError as e:
         logger.exception(f"Failed to update reading item: id={item_id}, fields={fields}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e

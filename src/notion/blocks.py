@@ -6,8 +6,107 @@ Notion block objects, supporting a subset of common block types.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
+
+from markdown_it import MarkdownIt
+
+logger = logging.getLogger(__name__)
+
+# Markdown token types we can convert to Notion blocks
+SUPPORTED_MARKDOWN_TOKENS = {
+    # Structure
+    "heading_open",
+    "heading_close",
+    "paragraph_open",
+    "paragraph_close",
+    "bullet_list_open",
+    "bullet_list_close",
+    "ordered_list_open",
+    "ordered_list_close",
+    "list_item_open",
+    "list_item_close",
+    # Content
+    "inline",
+    "text",
+    "softbreak",
+    "hardbreak",
+    # Divider
+    "hr",
+}
+
+# Human-readable names for unsupported token types
+TOKEN_DISPLAY_NAMES = {
+    # Tables (all table-related tokens map to "table")
+    "table_open": "table",
+    "table_close": "table",
+    "thead_open": "table",
+    "thead_close": "table",
+    "tbody_open": "table",
+    "tbody_close": "table",
+    "tr_open": "table",
+    "tr_close": "table",
+    "th_open": "table",
+    "th_close": "table",
+    "td_open": "table",
+    "td_close": "table",
+    # Code blocks
+    "code_block": "code block",
+    "fence": "code block",
+    # Links
+    "link_open": "link",
+    "link_close": "link",
+    # Other unsupported
+    "image": "image",
+    "blockquote_open": "blockquote",
+    "blockquote_close": "blockquote",
+    "html_block": "HTML",
+    "html_inline": "HTML",
+}
+
+# Block types supported for conversion to markdown
+SUPPORTED_BLOCK_TYPES = {
+    "heading_2",
+    "heading_3",
+    "paragraph",
+    "bulleted_list_item",
+    "numbered_list_item",
+    "to_do",
+    "divider",
+}
+
+
+class UnsupportedBlockTypeError(Exception):
+    """Raised when page contains blocks that cannot be safely converted."""
+
+    def __init__(self, unsupported_types: set[str]) -> None:
+        """Initialise with the set of unsupported block types.
+
+        :param unsupported_types: Set of block type names that are not supported.
+        """
+        self.unsupported_types = unsupported_types
+        types_str = ", ".join(sorted(unsupported_types))
+        super().__init__(
+            f"Page contains unsupported block types: {types_str}. "
+            "Please edit this item directly in Notion to avoid data loss."
+        )
+
+
+class UnsupportedMarkdownError(Exception):
+    """Raised when markdown contains constructs that cannot be properly converted."""
+
+    def __init__(self, unsupported_constructs: set[str]) -> None:
+        """Initialise with the set of unsupported markdown constructs.
+
+        :param unsupported_constructs: Set of markdown construct names found.
+        """
+        self.unsupported_constructs = unsupported_constructs
+        constructs_str = ", ".join(sorted(unsupported_constructs))
+        super().__init__(
+            f"Content contains unsupported markdown: {constructs_str}. "
+            "These would not render correctly in Notion."
+        )
 
 
 def markdown_to_blocks(markdown: str) -> list[dict[str, Any]]:
@@ -25,9 +124,13 @@ def markdown_to_blocks(markdown: str) -> list[dict[str, Any]]:
 
     :param markdown: Markdown formatted text.
     :returns: List of Notion block objects.
+    :raises UnsupportedMarkdownError: If unsupported markdown constructs are found.
     """
     if not markdown or not markdown.strip():
         return []
+
+    # Validate markdown before converting
+    _validate_markdown(markdown)
 
     blocks: list[dict[str, Any]] = []
     lines = markdown.split("\n")
@@ -38,6 +141,36 @@ def markdown_to_blocks(markdown: str) -> list[dict[str, Any]]:
             blocks.append(block)
 
     return blocks
+
+
+def _validate_markdown(markdown: str) -> None:
+    """Validate markdown for unsupported constructs using markdown-it-py.
+
+    Parses markdown into tokens and checks for any token types we don't support.
+
+    :param markdown: Markdown text to validate.
+    :raises UnsupportedMarkdownError: If unsupported constructs are found.
+    """
+    md = MarkdownIt("commonmark").enable("table")
+    tokens = md.parse(markdown)
+
+    unsupported: set[str] = set()
+
+    def check_token(token: Any) -> None:
+        """Check a token and its children for unsupported types."""
+        if token.type not in SUPPORTED_MARKDOWN_TOKENS:
+            display_name = TOKEN_DISPLAY_NAMES.get(token.type, token.type)
+            unsupported.add(display_name)
+        # Check children (e.g., images are children of inline tokens)
+        if token.children:
+            for child in token.children:
+                check_token(child)
+
+    for token in tokens:
+        check_token(token)
+
+    if unsupported:
+        raise UnsupportedMarkdownError(unsupported)
 
 
 def blocks_to_markdown(blocks: list[dict[str, Any]]) -> str:
@@ -54,15 +187,24 @@ def blocks_to_markdown(blocks: list[dict[str, Any]]) -> str:
 
     :param blocks: List of Notion block objects.
     :returns: Markdown formatted text.
+    :raises UnsupportedBlockTypeError: If any blocks have unsupported types.
     """
     if not blocks:
         return ""
 
     lines: list[str] = []
     numbered_counter = 1
+    unsupported_types: set[str] = set()
 
     for block in blocks:
         block_type = block.get("type", "")
+
+        if block_type and block_type not in SUPPORTED_BLOCK_TYPES:
+            unsupported_types.add(block_type)
+            block_id = block.get("id", "unknown")
+            logger.warning(f"Unsupported block skipped: type={block_type}, id={block_id}")
+            continue
+
         line = _block_to_line(block, block_type, numbered_counter)
         if line is not None:
             lines.append(line)
@@ -70,6 +212,9 @@ def blocks_to_markdown(blocks: list[dict[str, Any]]) -> str:
                 numbered_counter += 1
             else:
                 numbered_counter = 1
+
+    if unsupported_types:
+        raise UnsupportedBlockTypeError(unsupported_types)
 
     return "\n".join(lines)
 
