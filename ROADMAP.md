@@ -10,30 +10,11 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ## Backlog
 
-### Features
-
-#### PRD03B: Telegram Webhook Mode
-Production deployment with webhook instead of polling.
-- FastAPI endpoint with secret token validation
-- Lower latency, better resource efficiency
-- Mode switching via `TELEGRAM_MODE` config
-
-### Infrastructure
-
-#### PRD06: CI/CD Pipeline
-GitHub Actions for automated testing and deployment.
-- Run `make check` on PR and push to main
-- Docker image builds on main merge
-- Deployment on release tags
-
 #### PRD11: Agent Integration Testing
 End-to-end conversation flow testing.
 - Multi-turn scenarios (clarification, confirmation, denial)
 - Mock infrastructure for deterministic tests
 - Conversation simulator helper
-
-### Misc Improvements
-- TLDR summaries don't seem to be working - e.g. lots of ... rather than summarising the description with AI
 
 ### Telegram Improvements
 
@@ -58,6 +39,8 @@ End-to-end conversation flow testing.
 | Tool usage analytics        | Track tool success rates, latencies, usage patterns      |
 | Smart reminders             | AI-powered prioritisation of what to highlight           |
 | Running Integration         | Integrate with Strava/Garmin to track running activities |
+| CI/CD Integration           | Integrate with GitHub Actions for CI/CD pipelines        |
+
 ---
 
 ## Completed
