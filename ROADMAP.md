@@ -6,10 +6,6 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ## Up Next
 
-#### PRD05B: Medium Integration
-Extend newsletter extraction to Medium.
-- Medium Daily Digest parser (requires auth handling)
-
 ---
 
 ## Backlog
@@ -21,12 +17,6 @@ Production deployment with webhook instead of polling.
 - FastAPI endpoint with secret token validation
 - Lower latency, better resource efficiency
 - Mode switching via `TELEGRAM_MODE` config
-
-#### PRD07: GlitchTip Telegram Webhook
-Forward error alerts to Telegram.
-- Webhook endpoint at `/webhooks/glitchtip`
-- Error formatting and rate limiting
-- Severity filtering
 
 ### Infrastructure
 
@@ -45,17 +35,6 @@ End-to-end conversation flow testing.
 ### Misc Improvements
 - TLDR summaries don't seem to be working - e.g. lots of ... rather than summarising the description with AI
 
-### Agent Improvements
-
-| ID        | Description                                                                                             | Priority |
-|-----------|---------------------------------------------------------------------------------------------------------|----------|
-| AGENT-007 | Replace `list[Any]` with `MessageTypeDef` in runner state                                               | Medium   |
-| AGENT-009 | Remove synthetic "I understand" message from context                                                    | Medium   |
-| AGENT-013 | Validate `tool_names` is a list in selector response                                                    | Medium   |
-| AGENT-015 | Standardise error return formats in tools                                                               | Low      |
-| AGENT-017 | Add request ID propagation to API client                                                                | Low      |
-| AGENT-020 | Improve BedrockClient error context (partial: has error code/message extraction, needs request context) | Low      |
-
 ### Telegram Improvements
 
 | ID       | Description                                                                                                           | Priority |
@@ -63,7 +42,6 @@ End-to-end conversation flow testing.
 | TELE-010 | Migrate alert formatters to Markdown/MarkdownV2                                                                       | Medium   |
 | TELE-005 | Structured logging with chat_id, session_id <br/>(partial: some context in logs, needs systematic use of contextvars) | Medium   |
 | TELE-009 | Integration test suite                                                                                                | Medium   |
-| TELE-004 | Connection pooling for httpx client (configure Limits for max connections/keepalive)                                  | Low      |
 
 ### Technical Debt
 
@@ -77,7 +55,6 @@ End-to-end conversation flow testing.
 
 | Idea                        | Description                                              |
 |-----------------------------|----------------------------------------------------------|
-| Async tool execution        | Convert tool handlers to async for parallel execution    |
 | Tool usage analytics        | Track tool success rates, latencies, usage patterns      |
 | Smart reminders             | AI-powered prioritisation of what to highlight           |
 | Running Integration         | Integrate with Strava/Garmin to track running activities |
@@ -153,5 +130,5 @@ End-to-end conversation flow testing.
 ## Notes
 
 - **Personal project**: No multi-user considerations needed
-- **Hosting**: Currently local Docker setup, future AWS deployment
-- **PRDs**: Detailed specs in `.claude/prds/`
+- **Hosting**: Currently local Docker setup
+- **PRDs**: Detailed specs in `prds/`
