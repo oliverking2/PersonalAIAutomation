@@ -275,6 +275,14 @@ class AsyncInternalAPIClient:
         result = await self._request("PATCH", path, json=json)
         return cast(dict[str, Any], result)
 
+    async def delete(self, path: str) -> None:
+        """Make a DELETE request to the API.
+
+        :param path: API endpoint path.
+        :raises InternalAPIClientError: If the request fails.
+        """
+        await self._request("DELETE", path)
+
     async def _request(
         self,
         method: str,

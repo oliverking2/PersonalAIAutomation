@@ -105,7 +105,7 @@ class TestAgentRunner(unittest.TestCase):
         with patch.dict("os.environ", {"BEDROCK_MODEL_ID": "test-model"}):
             runner = AgentRunner(registry=self.registry)
 
-            self.assertEqual(runner.system_prompt, DEFAULT_SYSTEM_PROMPT)
+            self.assertEqual(runner._base_system_prompt, DEFAULT_SYSTEM_PROMPT)
             self.assertEqual(runner._config.max_steps, DEFAULT_AGENT_CONFIG.max_steps)
             self.assertTrue(runner.require_confirmation)
 
@@ -120,7 +120,7 @@ class TestAgentRunner(unittest.TestCase):
             config=custom_config,
         )
 
-        self.assertEqual(runner.system_prompt, "Custom prompt")
+        self.assertEqual(runner._base_system_prompt, "Custom prompt")
         self.assertEqual(runner._config.max_steps, 10)
         self.assertEqual(runner._config.max_tokens, 8192)
         self.assertFalse(runner.require_confirmation)

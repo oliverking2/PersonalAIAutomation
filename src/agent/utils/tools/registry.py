@@ -9,6 +9,7 @@ from src.agent.models import ToolDef, ToolMetadata
 from src.agent.tools import (
     get_goals_tools,
     get_ideas_tools,
+    get_memory_tools,
     get_reading_list_tools,
     get_reminders_tools,
     get_tasks_tools,
@@ -29,6 +30,10 @@ def create_default_registry() -> "ToolRegistry":
     :returns: ToolRegistry instance with all tools registered.
     """
     registry = ToolRegistry()
+
+    # Register system tools (always available)
+    for tool in get_memory_tools():
+        registry.register(tool)
 
     # Register all tool groups
     for tool in get_reading_list_tools():
@@ -138,28 +143,28 @@ class ToolRegistry:
         """
         return [tool for tool in self._tools.values() if tool.risk_level == risk_level]
 
-    def get_standard_tools(self) -> list[ToolDef]:
-        """Get tools tagged as 'standard'.
+    def get_system_tools(self) -> list[ToolDef]:
+        """Get tools tagged as 'system'.
 
-        Standard tools are always included in agent runs and are intended
-        to be cached in the system prompt for cost efficiency.
+        System tools are always available and bypass normal tool selection.
+        They are core agent capabilities like memory management.
 
-        :returns: List of standard tool definitions.
+        :returns: List of system tool definitions.
         """
-        return self.filter_by_tags({"standard"})
+        return self.filter_by_tags({"system"})
 
     def get_selectable_tools(self) -> list[ToolDef]:
-        """Get tools that are NOT tagged as 'standard'.
+        """Get tools that are NOT tagged as 'system'.
 
         These are domain-specific tools that should be selected per-request
         by the ToolSelector based on user intent.
 
-        :returns: List of selectable (non-standard) tool definitions.
+        :returns: List of selectable (non-system) tool definitions.
         """
-        return [tool for tool in self._tools.values() if "standard" not in tool.tags]
+        return [tool for tool in self._tools.values() if "system" not in tool.tags]
 
     def list_selectable_metadata(self) -> list[ToolMetadata]:
-        """List metadata for selectable (non-standard) tools.
+        """List metadata for selectable tools.
 
         Used by ToolSelector to present only domain tools for selection.
 

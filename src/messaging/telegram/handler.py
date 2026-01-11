@@ -6,9 +6,10 @@ import asyncio
 import contextlib
 import logging
 import re
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.agent.models import AgentRunResult, ConfirmationRequest, PendingToolAction
 from src.agent.runner import AgentRunner
@@ -195,6 +196,7 @@ class MessageHandler:
         # Command dispatch table - add new commands here
         handlers: dict[str, str] = {
             "newchat": "_cmd_newchat",
+            "memory": "_cmd_memory",
             # Add future commands here, e.g.:
             # "help": "_cmd_help",
             # "status": "_cmd_status",
@@ -264,6 +266,134 @@ class MessageHandler:
 
         logger.info(f"Session reset via /newchat: chat_id={chat_id}")
         return response
+
+    async def _cmd_memory(
+        self,
+        db_session: Session,
+        chat_id: str,
+        telegram_message_id: int,
+        args: str | None,
+    ) -> str:
+        """Handle the /memory command for viewing and deleting memories.
+
+        Usage:
+        - /memory or /memory list: List all memories
+        - /memory delete <id>: Delete a specific memory by ID
+
+        :param db_session: Database session.
+        :param chat_id: Telegram chat ID.
+        :param telegram_message_id: Telegram message ID.
+        :param args: Command arguments (e.g., "list", "delete <id>").
+        :returns: Response message.
+        """
+        telegram_session, _ = await asyncio.to_thread(
+            self._session_manager.get_or_create_session,
+            db_session,
+            chat_id,
+        )
+
+        # Record the command in message history
+        command_text = f"/memory{' ' + args if args else ''}"
+        await asyncio.to_thread(
+            create_telegram_message,
+            db_session,
+            telegram_session,
+            "user",
+            command_text,
+            telegram_message_id,
+        )
+
+        # Parse subcommand
+        subcommand = "list"
+        memory_id = None
+
+        if args:
+            parts = args.strip().split(maxsplit=1)
+            subcommand = parts[0].lower()
+            if len(parts) > 1:
+                memory_id = parts[1].strip()
+
+        # Handle subcommands
+        try:
+            if subcommand == "delete":
+                if not memory_id:
+                    response = "Usage: /memory delete <id>"
+                else:
+                    response = await self._delete_memory(memory_id)
+            else:
+                # Default to list (handles /memory, /memory list, and unknown subcommands)
+                response = await self._list_memories()
+
+        except InternalAPIClientError as e:
+            logger.error(f"Memory command failed: {e}")
+            response = f"Error: {e}"
+
+        # Record response
+        await asyncio.to_thread(
+            create_telegram_message,
+            db_session,
+            telegram_session,
+            "assistant",
+            response,
+        )
+
+        logger.info(f"Memory command executed: chat_id={chat_id}, subcommand={subcommand}")
+        return response
+
+    async def _list_memories(self) -> str:
+        """List all active memories.
+
+        :returns: Formatted list of memories grouped by category.
+        """
+        async with AsyncInternalAPIClient() as client:
+            response = await client.get("/memory")
+
+        memories = response.get("memories", [])
+        total = response.get("total", 0)
+
+        if total == 0:
+            return "No memories stored yet."
+
+        # Group by category
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for mem in memories:
+            grouped[mem["category"]].append(mem)
+
+        # Build response
+        lines = ["Your memories:"]
+
+        for category in sorted(grouped.keys()):
+            lines.append(f"\n**{category.title()}**")
+            for mem in grouped[category]:
+                subject_prefix = f"[{mem['subject']}] " if mem.get("subject") else ""
+                lines.append(f"• [{mem['id']}] {subject_prefix}{mem['content']}")
+
+        lines.append("\nUse /memory delete <id> to remove a memory.")
+
+        return "\n".join(lines)
+
+    async def _delete_memory(self, memory_id: str) -> str:
+        """Delete a specific memory by ID.
+
+        :param memory_id: The 8-character memory ID.
+        :returns: Confirmation message.
+        """
+        async with AsyncInternalAPIClient() as client:
+            # First get the memory to show what was deleted
+            try:
+                memory_response = await client.get(f"/memory/{memory_id}")
+                memory = memory_response
+                deleted_content = (
+                    memory["versions"][-1]["content"] if memory.get("versions") else "memory"
+                )
+            except InternalAPIClientError:
+                # If we can't fetch it, proceed with delete anyway
+                deleted_content = "memory"
+
+            # Delete it
+            await client.delete(f"/memory/{memory_id}")
+
+        return f"Deleted: '{deleted_content}'"
 
     async def _handle_message(
         self,

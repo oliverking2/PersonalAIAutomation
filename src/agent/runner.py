@@ -48,6 +48,7 @@ from src.agent.utils.context_manager import (
     set_pending_confirmation,
 )
 from src.agent.utils.formatting import format_action
+from src.agent.utils.memory import build_memory_context
 from src.agent.utils.tools.registry import ToolRegistry
 from src.agent.utils.tools.selector import ToolSelector
 from src.database.agent_tracking import (
@@ -56,6 +57,7 @@ from src.database.agent_tracking import (
     create_agent_run,
     get_agent_conversation_by_id,
 )
+from src.database.memory import get_active_memories
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime.type_defs import (
@@ -78,6 +80,7 @@ You can work with:
 - **Reading List**: Query, get, create, and update reading list items
 - **Ideas**: Query, get, create, and update ideas
 - **Reminders**: Create, query, update, and cancel reminders (one-time or recurring)
+- **Memory**: Store and update important information for future conversations
 
 ## Dynamic Tool Selection
 
@@ -103,6 +106,14 @@ When using tools:
 7. Before calling create tools, check if the name/title is specific enough to find later. If vague (e.g., "Send email", "Meeting"), nudge the user for more details
 
 IMPORTANT: Before saying you cannot do something, check your available tools. If you have a tool that could accomplish the task, use it.
+
+## Memory Management
+
+You have persistent memory across conversations. Store facts about people, user preferences, and recurring context - but not transient details.
+
+**Storing new memories:** Ask confirmation first ("Should I remember that?"), then use add_to_memory with an appropriate category (person, preference, context, project).
+
+**Updating memories:** Use update_memory with the memory ID shown as [id:xxxxxxxx]. No confirmation needed for updates.
 
 ## Response Formatting
 
@@ -181,9 +192,12 @@ class AgentRunner:
         """
         self.registry = registry
         self.client = client or BedrockClient()
-        self.system_prompt = system_prompt
+        self._base_system_prompt = system_prompt
         self.require_confirmation = require_confirmation
         self._config = config
+
+        # Run-scoped system prompt (set at start of each run, includes memory context)
+        self._run_system_prompt: str = ""
 
         # Executor for tool timeout handling (single worker for sequential execution)
         self._tool_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -197,10 +211,27 @@ class AgentRunner:
         # Create internal tool selector
         self._selector = ToolSelector(registry=registry, client=self.client)
 
-        # Cache standard tool names (always included)
-        self._standard_tool_names = [t.name for t in registry.get_standard_tools()]
-        if self._standard_tool_names:
-            logger.debug(f"Standard tools cached: {self._standard_tool_names}")
+        # Cache system tool names (always available, bypass selection)
+        self._system_tool_names = [t.name for t in registry.get_system_tools()]
+        if self._system_tool_names:
+            logger.debug(f"System tools cached: {self._system_tool_names}")
+
+    def _build_system_prompt(self, session: Session) -> None:
+        """Build and store the run-scoped system prompt with memory context.
+
+        Loads active memories from the database and appends them to the base
+        system prompt. Memory ordering is deterministic for prompt caching.
+        The result is stored in `_run_system_prompt` for access during the run.
+
+        :param session: Database session.
+        """
+        memories = get_active_memories(session)
+        memory_context = build_memory_context(memories)
+
+        if memory_context:
+            self._run_system_prompt = f"{self._base_system_prompt}\n\n{memory_context}"
+        else:
+            self._run_system_prompt = self._base_system_prompt
 
     def run(
         self,
@@ -242,6 +273,9 @@ class AgentRunner:
             conversation = create_agent_conversation(session)
             db_conversation_id = conversation.id
             conv_state = ConversationState(conversation_id=db_conversation_id)
+
+        # Build system prompt with memory context (loaded once per run)
+        self._build_system_prompt(session)
 
         agent_run = create_agent_run(
             session, conversation_id=db_conversation_id, user_message=user_message
@@ -495,7 +529,9 @@ class AgentRunner:
         # Use domains from conv_state for incremental tool caching
         domains = conv_state.selected_domains if conv_state else None
         return self._run_agent_loop(
-            state, self._build_tool_config(all_tool_names, domains), conv_state
+            state,
+            self._build_tool_config(all_tool_names, domains),
+            conv_state,
         )
 
     def _handle_partial_confirmation(
@@ -771,7 +807,7 @@ class AgentRunner:
         self,
         user_message: str,
         tool_names: list[str] | None,
-        conv_state: ConversationState | None = None,
+        conv_state: ConversationState | None,
     ) -> AgentRunResult:
         """Execute the agent run logic.
 
@@ -782,8 +818,8 @@ class AgentRunner:
         """
         resolved = self._resolve_tools(user_message, tool_names, conv_state)
 
-        # Merge standard tools with selected tools (deduplicated)
-        all_tool_names = list(dict.fromkeys(self._standard_tool_names + resolved.tool_names))
+        # Merge system tools with selected tools (deduplicated)
+        all_tool_names = list(dict.fromkeys(self._system_tool_names + resolved.tool_names))
 
         # Check for domain changes and build notification
         domain_notification = self._build_domain_change_notification(conv_state, resolved.domains)
@@ -929,12 +965,17 @@ class AgentRunner:
         messages: list[MessageTypeDef],
         tool_config: ToolConfigurationTypeDef | None,
     ) -> dict[str, Any]:
-        """Call the LLM and return the response."""
+        """Call the LLM and return the response.
+
+        :param messages: Conversation messages.
+        :param tool_config: Tool configuration for Bedrock.
+        :returns: LLM response.
+        """
         try:
             return self.client.converse(
                 messages=messages,
                 model_id=self._config.chat_model,
-                system_prompt=self.system_prompt,
+                system_prompt=self._run_system_prompt,
                 tool_config=tool_config,
                 max_tokens=self._config.max_tokens,
                 cache_system_prompt=True,

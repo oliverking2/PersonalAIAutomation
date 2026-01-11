@@ -60,3 +60,18 @@ class ConfidenceLevel(StrEnum):
 
     EXPLICIT = "explicit"
     NEEDS_CONFIRMATION = "needs_confirmation"
+
+
+class MemoryCategory(StrEnum):
+    """Categories for agent memory entries.
+
+    PERSON: Information about people (e.g., "Alec is my boss at TechCorp").
+    PREFERENCE: User preferences (e.g., "I prefer tasks due on Friday").
+    CONTEXT: Recurring context (e.g., "I work on the Platform team").
+    PROJECT: Project-specific info (e.g., "Project X uses Python 3.12").
+    """
+
+    PERSON = "person"
+    PREFERENCE = "preference"
+    CONTEXT = "context"
+    PROJECT = "project"

@@ -243,42 +243,42 @@ class TestToolRegistry(unittest.TestCase):
         self.registry.register(self.tool)
         self.assertEqual(len(self.registry), 1)
 
-    def test_get_standard_tools_empty(self) -> None:
-        """Test get_standard_tools returns empty when no standard tools."""
-        self.registry.register(self.tool)  # Not tagged as standard
+    def test_get_system_tools_empty(self) -> None:
+        """Test get_system_tools returns empty when no system tools."""
+        self.registry.register(self.tool)  # Not tagged as system
 
-        standard = self.registry.get_standard_tools()
+        system = self.registry.get_system_tools()
 
-        self.assertEqual(len(standard), 0)
+        self.assertEqual(len(system), 0)
 
-    def test_get_standard_tools(self) -> None:
-        """Test get_standard_tools returns tools tagged with 'standard'."""
-        standard_tool = ToolDef(
-            name="standard_tool",
-            description="A standard tool",
-            tags=frozenset({"standard", "utility"}),
+    def test_get_system_tools(self) -> None:
+        """Test get_system_tools returns tools tagged with 'system'."""
+        system_tool = ToolDef(
+            name="system_tool",
+            description="A system tool",
+            tags=frozenset({"system", "utility"}),
             args_model=DummyArgs,
             handler=dummy_handler,
         )
-        self.registry.register(self.tool)  # Not standard
-        self.registry.register(standard_tool)
+        self.registry.register(self.tool)  # Not system
+        self.registry.register(system_tool)
 
-        standard = self.registry.get_standard_tools()
+        system = self.registry.get_system_tools()
 
-        self.assertEqual(len(standard), 1)
-        self.assertEqual(standard[0].name, "standard_tool")
+        self.assertEqual(len(system), 1)
+        self.assertEqual(system[0].name, "system_tool")
 
     def test_get_selectable_tools(self) -> None:
-        """Test get_selectable_tools excludes standard tools."""
-        standard_tool = ToolDef(
-            name="standard_tool",
-            description="A standard tool",
-            tags=frozenset({"standard"}),
+        """Test get_selectable_tools excludes system tools."""
+        system_tool = ToolDef(
+            name="system_tool",
+            description="A system tool",
+            tags=frozenset({"system"}),
             args_model=DummyArgs,
             handler=dummy_handler,
         )
         self.registry.register(self.tool)  # Selectable
-        self.registry.register(standard_tool)  # Not selectable
+        self.registry.register(system_tool)  # Not selectable
 
         selectable = self.registry.get_selectable_tools()
 
@@ -286,16 +286,16 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(selectable[0].name, "test_tool")
 
     def test_list_selectable_metadata(self) -> None:
-        """Test list_selectable_metadata excludes standard tools."""
-        standard_tool = ToolDef(
-            name="standard_tool",
-            description="A standard tool",
-            tags=frozenset({"standard"}),
+        """Test list_selectable_metadata excludes system tools."""
+        system_tool = ToolDef(
+            name="system_tool",
+            description="A system tool",
+            tags=frozenset({"system"}),
             args_model=DummyArgs,
             handler=dummy_handler,
         )
         self.registry.register(self.tool)
-        self.registry.register(standard_tool)
+        self.registry.register(system_tool)
 
         metadata = self.registry.list_selectable_metadata()
 
@@ -498,8 +498,9 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         """Test that create_default_registry creates a populated registry."""
         registry = create_default_registry()
 
-        # Should have 20 tools: 4 reading + 4 goals + 4 tasks + 4 ideas + 4 reminders
-        self.assertEqual(len(registry), 20)
+        # Should have 22 tools:
+        # 2 memory (system) + 4 reading + 4 goals + 4 tasks + 4 ideas + 4 reminders
+        self.assertEqual(len(registry), 22)
 
     def test_contains_reading_list_tools(self) -> None:
         """Test that registry contains reading list tools."""
