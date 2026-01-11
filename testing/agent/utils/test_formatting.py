@@ -190,6 +190,30 @@ class TestFormatAction(unittest.TestCase):
         )
         self.assertEqual(result, "unknown tool")
 
+    def test_update_content_only(self) -> None:
+        """Test formatting a content-only update."""
+        result = format_action(
+            "update_task",
+            "My task",
+            {"task_id": "abc-123", "content": "## Description\n\nSome text here"},
+        )
+        self.assertEqual(result, 'update the description for "My task"')
+
+    def test_update_long_content_truncated(self) -> None:
+        """Test that long content is truncated in multi-field updates."""
+        long_content = "## Description\n\n" + "A" * 100
+        result = format_action(
+            "update_task",
+            "My task",
+            {"task_id": "abc-123", "content": long_content, "status": "Done"},
+        )
+        self.assertIn('update "My task"', result)
+        self.assertIn("status: Done", result)
+        self.assertIn("content:", result)
+        self.assertIn("...", result)
+        # Full content should not appear
+        self.assertNotIn("A" * 100, result)
+
 
 class TestFormatConfirmationMessage(unittest.TestCase):
     """Tests for format_confirmation_message function."""

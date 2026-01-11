@@ -14,6 +14,9 @@ from src.agent.models import PendingToolAction
 # Length to truncate reminder IDs to when displaying fallback
 SHORT_ID_LENGTH = 8
 
+# Maximum length for content before truncation in HITL messages
+CONTENT_TRUNCATION_LENGTH = 50
+
 
 def format_date_human(iso_date: str) -> str:
     """Convert ISO date to human-readable format with ordinal day.
@@ -83,6 +86,10 @@ def _format_value(key: str, value: Any) -> str:
     if key in ("trigger_at", "next_trigger_at") and value:
         return format_datetime_human(value)
 
+    # Truncate long content fields
+    if key == "content" and isinstance(value, str) and len(value) > CONTENT_TRUNCATION_LENGTH:
+        return f"{value[:CONTENT_TRUNCATION_LENGTH].strip()}..."
+
     # Return as-is for other types
     return str(value)
 
@@ -107,6 +114,7 @@ def _format_single_field_update(
         "due_date": f'update the due date for "{entity_name}" to {formatted_value}',
         "status": f'mark "{entity_name}" as {formatted_value}',
         "priority": f'change the priority of "{entity_name}" to {formatted_value}',
+        "content": f'update the description for "{entity_name}"',
     }
 
     return field_templates.get(field, f'update "{entity_name}" ({field}: {formatted_value})')
