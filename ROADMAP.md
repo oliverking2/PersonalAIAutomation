@@ -6,6 +6,13 @@ Personal automation system for task management, newsletter processing, and AI-po
 
 ## Up Next
 
+#### PRD29: Agent Memory System
+Persistent memory across chat sessions.
+- PostgreSQL memory table with categories (person, preference, context, project, correction)
+- `add_to_memory` tool for agent to explicitly store important facts
+- Memory loaded into cached prompt prefix at conversation start
+- Agent clarifies ambiguous info before storing
+
 #### PRD05B: Medium Integration
 Extend newsletter extraction to Medium.
 - Medium Daily Digest parser (requires auth handling)
