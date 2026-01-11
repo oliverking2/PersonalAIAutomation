@@ -17,6 +17,23 @@ from src.alerts.models import AlertData, AlertItem
 class TestFormatNewsletterAlert(unittest.TestCase):
     """Tests for format_newsletter_alert."""
 
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that formatter returns (text, parse_mode) tuple."""
+        alert = AlertData(
+            alert_type=AlertType.NEWSLETTER,
+            source_id="abc-123",
+            title="TLDR AI",
+            items=[],
+        )
+
+        result = format_newsletter_alert(alert)
+
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIsInstance(text, str)
+
     def test_formats_newsletter_with_articles(self) -> None:
         """Test formatting a newsletter with articles."""
         alert = AlertData(
@@ -37,13 +54,14 @@ class TestFormatNewsletterAlert(unittest.TestCase):
             ],
         )
 
-        result = format_newsletter_alert(alert)
+        text, parse_mode = format_newsletter_alert(alert)
 
-        self.assertIn("<b>TLDR AI - Latest news</b>", result)
-        self.assertIn("<b>New GPT-5 Announced</b>", result)
-        self.assertIn("OpenAI announces GPT-5", result)
-        self.assertIn('<a href="https://example.com/gpt5">example.com</a>', result)
-        self.assertIn("<b>Claude Gets Smarter</b>", result)
+        self.assertEqual(parse_mode, "MarkdownV2")
+        # Content should be present (MarkdownV2 escapes special chars)
+        self.assertIn("TLDR AI", text)
+        self.assertIn("GPT", text)
+        self.assertIn("OpenAI announces GPT", text)
+        self.assertIn("Claude Gets Smarter", text)
 
     @patch("src.alerts.formatters.formatters.summarise_description")
     def test_summarises_long_descriptions(self, mock_summarise: MagicMock) -> None:
@@ -61,14 +79,29 @@ class TestFormatNewsletterAlert(unittest.TestCase):
             ],
         )
 
-        result = format_newsletter_alert(alert)
+        text, _parse_mode = format_newsletter_alert(alert)
 
         mock_summarise.assert_called_once_with(long_desc, max_length=150)
-        self.assertIn("Summarised content", result)
+        self.assertIn("Summarised content", text)
 
 
 class TestFormatTaskAlert(unittest.TestCase):
     """Tests for format_task_alert."""
+
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that formatter returns (text, parse_mode) tuple."""
+        alert = AlertData(
+            alert_type=AlertType.DAILY_TASK_WORK,
+            source_id="2025-01-15-work",
+            title="Work Tasks",
+            items=[],
+        )
+
+        result = format_task_alert(alert)
+
+        self.assertIsInstance(result, tuple)
+        _text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
 
     def test_formats_sections(self) -> None:
         """Test that tasks are organised into sections."""
@@ -88,14 +121,16 @@ class TestFormatTaskAlert(unittest.TestCase):
             ],
         )
 
-        result = format_task_alert(alert)
+        text, parse_mode = format_task_alert(alert)
 
-        self.assertIn("<b>OVERDUE (1)</b>", result)
-        self.assertIn("Overdue task (3 days)", result)
-        self.assertIn("<b>DUE TODAY (1)</b>", result)
-        self.assertIn("Today task", result)
-        self.assertIn("<b>HIGH PRIORITY THIS WEEK (1)</b>", result)
-        self.assertIn("Important task (Due: 2025-01-18)", result)
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("OVERDUE", text)
+        self.assertIn("Overdue task", text)
+        self.assertIn("3 days", text)
+        self.assertIn("DUE TODAY", text)
+        self.assertIn("Today task", text)
+        self.assertIn("HIGH PRIORITY THIS WEEK", text)
+        self.assertIn("Important task", text)
 
     def test_empty_sections_not_shown(self) -> None:
         """Test that empty sections are not rendered."""
@@ -106,15 +141,30 @@ class TestFormatTaskAlert(unittest.TestCase):
             items=[AlertItem(name="Today task", metadata={"section": "due_today"})],
         )
 
-        result = format_task_alert(alert)
+        text, _parse_mode = format_task_alert(alert)
 
-        self.assertNotIn("OVERDUE", result)
-        self.assertNotIn("HIGH PRIORITY", result)
-        self.assertIn("DUE TODAY", result)
+        self.assertNotIn("OVERDUE", text)
+        self.assertNotIn("HIGH PRIORITY", text)
+        self.assertIn("DUE TODAY", text)
 
 
 class TestFormatGoalAlert(unittest.TestCase):
     """Tests for format_goal_alert."""
+
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that formatter returns (text, parse_mode) tuple."""
+        alert = AlertData(
+            alert_type=AlertType.WEEKLY_GOAL,
+            source_id="2025-W03",
+            title="Weekly Goal Review",
+            items=[],
+        )
+
+        result = format_goal_alert(alert)
+
+        self.assertIsInstance(result, tuple)
+        _text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
 
     def test_formats_goals_with_progress(self) -> None:
         """Test that goals show progress bars."""
@@ -134,18 +184,34 @@ class TestFormatGoalAlert(unittest.TestCase):
             ],
         )
 
-        result = format_goal_alert(alert)
+        text, parse_mode = format_goal_alert(alert)
 
-        self.assertIn("<b>Weekly Goal Review</b>", result)
-        self.assertIn("IN PROGRESS (1)", result)
-        self.assertIn("Learn Spanish", result)
-        self.assertIn("75%", result)
-        self.assertIn("NOT STARTED (1)", result)
-        self.assertIn("Read 24 books", result)
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Weekly Goal Review", text)
+        self.assertIn("IN PROGRESS", text)
+        self.assertIn("Learn Spanish", text)
+        self.assertIn("75%", text)
+        self.assertIn("NOT STARTED", text)
+        self.assertIn("Read 24 books", text)
 
 
 class TestFormatReadingAlert(unittest.TestCase):
     """Tests for format_reading_alert."""
+
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that formatter returns (text, parse_mode) tuple."""
+        alert = AlertData(
+            alert_type=AlertType.WEEKLY_READING,
+            source_id="2025-W03",
+            title="Weekly Reading List Reminder",
+            items=[],
+        )
+
+        result = format_reading_alert(alert)
+
+        self.assertIsInstance(result, tuple)
+        _text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
 
     def test_formats_reading_sections(self) -> None:
         """Test reading items organised by section."""
@@ -162,17 +228,33 @@ class TestFormatReadingAlert(unittest.TestCase):
             ],
         )
 
-        result = format_reading_alert(alert)
+        text, parse_mode = format_reading_alert(alert)
 
-        self.assertIn("<b>Weekly Reading List Reminder</b>", result)
-        self.assertIn("HIGH PRIORITY (1)", result)
-        self.assertIn("Important Article [Article]", result)
-        self.assertIn("GETTING STALE (1)", result)
-        self.assertIn("Old Book [Book]", result)
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Weekly Reading List Reminder", text)
+        self.assertIn("HIGH PRIORITY", text)
+        self.assertIn("Important Article", text)
+        self.assertIn("GETTING STALE", text)
+        self.assertIn("Old Book", text)
 
 
 class TestFormatAlert(unittest.TestCase):
     """Tests for format_alert dispatcher."""
+
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that format_alert returns (text, parse_mode) tuple."""
+        alert = AlertData(
+            alert_type=AlertType.NEWSLETTER,
+            source_id="1",
+            title="Newsletter",
+            items=[],
+        )
+
+        result = format_alert(alert)
+
+        self.assertIsInstance(result, tuple)
+        _text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
 
     def test_dispatches_to_correct_formatter(self) -> None:
         """Test that format_alert calls the right formatter."""
@@ -189,11 +271,11 @@ class TestFormatAlert(unittest.TestCase):
             items=[],
         )
 
-        newsletter_result = format_alert(newsletter)
-        task_result = format_alert(task)
+        newsletter_text, _ = format_alert(newsletter)
+        task_text, _ = format_alert(task)
 
-        self.assertIn("Newsletter", newsletter_result)
-        self.assertIn("Tasks", task_result)
+        self.assertIn("Newsletter", newsletter_text)
+        self.assertIn("Tasks", task_text)
 
 
 if __name__ == "__main__":

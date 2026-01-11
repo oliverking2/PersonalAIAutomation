@@ -413,9 +413,11 @@ class TestLookupEntityName(unittest.IsolatedAsyncioTestCase):
             _env_file=None,
         )
         self.mock_session_manager = MagicMock()
+        self.mock_agent_runner = MagicMock()
         self.handler = MessageHandler(
             settings=self.settings,
             session_manager=self.mock_session_manager,
+            agent_runner=self.mock_agent_runner,
         )
 
     @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")

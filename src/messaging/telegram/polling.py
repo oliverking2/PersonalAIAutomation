@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 
+from src.agent.runner import AgentRunner
+from src.agent.utils.tools.registry import create_default_registry
 from src.database.connection import get_session
 from src.database.telegram import get_or_create_polling_cursor, update_polling_cursor
 from src.messaging.telegram.callbacks import process_callback_query
@@ -46,12 +48,14 @@ class PollingRunner:
         client: TelegramClient | None = None,
         settings: TelegramConfig | None = None,
         handler: MessageHandler | None = None,
+        agent_runner: AgentRunner | None = None,
     ) -> None:
         """Initialise the polling runner.
 
         :param client: Telegram client. If not provided, creates one from env.
         :param settings: Telegram settings. If not provided, loads from env.
         :param handler: Message handler. If not provided, creates default one.
+        :param agent_runner: Agent runner. If not provided, creates default one.
         """
         self._settings = settings or get_telegram_settings()
         self._client = client or TelegramClient(
@@ -61,9 +65,17 @@ class PollingRunner:
         self._session_manager = SessionManager(
             session_timeout_minutes=self._settings.session_timeout_minutes
         )
+
+        # Create agent runner if not provided
+        if agent_runner is None:
+            registry = create_default_registry()
+            agent_runner = AgentRunner(registry=registry)
+            logger.info("Created default AgentRunner")
+
         self._handler = handler or MessageHandler(
             settings=self._settings,
             session_manager=self._session_manager,
+            agent_runner=agent_runner,
             telegram_client=self._client,
         )
         self._running = False

@@ -97,12 +97,12 @@ def receive_glitchtip_webhook(
     logger.info("Received GlitchTip webhook")
 
     # Format the alert for Telegram
-    message = format_glitchtip_alert(alert)
+    message, parse_mode = format_glitchtip_alert(alert)
 
     # Send to Telegram
     try:
         client = _get_telegram_client()
-        client.send_message_sync(message)
+        client.send_message_sync(message, parse_mode=parse_mode)
         logger.info("GlitchTip alert forwarded to Telegram")
     except ValueError as e:
         logger.error(f"Telegram configuration error: {e}")
@@ -140,12 +140,12 @@ def send_test_alert(
     logger.info("Sending GlitchTip test alert")
 
     # Generate test message
-    message = format_test_alert()
+    message, parse_mode = format_test_alert()
 
     # Send to Telegram
     try:
         client = _get_telegram_client()
-        client.send_message_sync(message)
+        client.send_message_sync(message, parse_mode=parse_mode)
         logger.info("GlitchTip test alert sent to Telegram")
     except ValueError as e:
         logger.error(f"Telegram configuration error: {e}")

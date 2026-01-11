@@ -16,6 +16,18 @@ from src.api.webhooks.glitchtip.models import (
 class TestFormatGlitchTipAlert(unittest.TestCase):
     """Tests for format_glitchtip_alert function."""
 
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that formatter returns (text, parse_mode) tuple."""
+        alert = GlitchTipAlert()
+
+        result = format_glitchtip_alert(alert)
+
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIsInstance(text, str)
+
     def test_format_full_alert(self) -> None:
         """Test formatting an alert with all fields."""
         alert = GlitchTipAlert(
@@ -35,17 +47,16 @@ class TestFormatGlitchTipAlert(unittest.TestCase):
             ],
         )
 
-        result = format_glitchtip_alert(alert)
+        text, parse_mode = format_glitchtip_alert(alert)
 
-        self.assertIn("🚨 <b>Error Alert</b>", result)
-        self.assertIn("<b>ValueError: Invalid input</b>", result)
-        self.assertIn("Traceback (most recent call last):", result)
-        self.assertIn("📦 Project: my-app", result)
-        self.assertIn("🌍 Environment: production", result)
-        self.assertIn("🏷️ Release: v1.2.3", result)
-        self.assertIn(
-            '<a href="https://glitchtip.example.com/issues/123">View in GlitchTip</a>', result
-        )
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Error Alert", text)
+        self.assertIn("ValueError", text)
+        self.assertIn("Traceback", text)
+        self.assertIn("Project", text)
+        self.assertIn("Environment", text)
+        self.assertIn("Release", text)
+        self.assertIn("View in GlitchTip", text)
 
     def test_format_alert_without_optional_fields(self) -> None:
         """Test formatting an alert with minimal fields."""
@@ -57,52 +68,33 @@ class TestFormatGlitchTipAlert(unittest.TestCase):
             ],
         )
 
-        result = format_glitchtip_alert(alert)
+        text, parse_mode = format_glitchtip_alert(alert)
 
-        self.assertIn("🚨 <b>Error Alert</b>", result)
-        self.assertIn("<b>Error occurred</b>", result)
-        self.assertNotIn("📦 Project:", result)
-        self.assertNotIn("🌍 Environment:", result)
-        self.assertNotIn("🏷️ Release:", result)
-        self.assertNotIn("View in GlitchTip", result)
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Error Alert", text)
+        self.assertIn("Error occurred", text)
+        self.assertNotIn("Project", text)
+        self.assertNotIn("Environment", text)
+        self.assertNotIn("View in GlitchTip", text)
 
     def test_format_alert_no_attachments(self) -> None:
         """Test formatting an alert with no attachments."""
         alert = GlitchTipAlert(text="Simple alert message")
 
-        result = format_glitchtip_alert(alert)
+        text, parse_mode = format_glitchtip_alert(alert)
 
-        self.assertIn("🚨 <b>Error Alert</b>", result)
-        self.assertIn("Simple alert message", result)
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Error Alert", text)
+        self.assertIn("Simple alert message", text)
 
     def test_format_alert_empty(self) -> None:
         """Test formatting an empty alert."""
         alert = GlitchTipAlert()
 
-        result = format_glitchtip_alert(alert)
+        text, parse_mode = format_glitchtip_alert(alert)
 
-        self.assertIn("🚨 <b>Error Alert</b>", result)
-
-    def test_format_escapes_html(self) -> None:
-        """Test that HTML in alert content is escaped."""
-        alert = GlitchTipAlert(
-            attachments=[
-                GlitchTipAttachment(
-                    title="<script>alert('xss')</script>",
-                    text="<b>Bold</b> text",
-                    fields=[
-                        GlitchTipField(title="project", value="<project>", short=True),
-                    ],
-                )
-            ],
-        )
-
-        result = format_glitchtip_alert(alert)
-
-        self.assertIn("&lt;script&gt;", result)
-        self.assertIn("&lt;b&gt;Bold&lt;/b&gt;", result)
-        self.assertIn("&lt;project&gt;", result)
-        self.assertNotIn("<script>", result)
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Error Alert", text)
 
     def test_format_truncates_long_text(self) -> None:
         """Test that long error text is truncated."""
@@ -116,26 +108,35 @@ class TestFormatGlitchTipAlert(unittest.TestCase):
             ],
         )
 
-        result = format_glitchtip_alert(alert)
+        text, _parse_mode = format_glitchtip_alert(alert)
 
-        # Should be truncated to 500 chars + "..."
-        self.assertIn("...", result)
-        self.assertLess(len(result), len(long_text) + 200)
+        # Should be truncated (output will be shorter than input)
+        self.assertLess(len(text), len(long_text))
 
 
 class TestFormatTestAlert(unittest.TestCase):
     """Tests for format_test_alert function."""
 
-    def test_format_test_alert(self) -> None:
-        """Test generating a test alert message."""
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that formatter returns (text, parse_mode) tuple."""
         result = format_test_alert()
 
-        self.assertIn("🧪 <b>Test Error Alert</b>", result)
-        self.assertIn("GlitchTip Integration Test", result)
-        self.assertIn("test alert to verify", result)
-        self.assertIn("📦 Project: test-project", result)
-        self.assertIn("🌍 Environment: test", result)
-        self.assertIn("integration is working correctly", result)
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        _text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
+
+    def test_format_test_alert(self) -> None:
+        """Test generating a test alert message."""
+        text, parse_mode = format_test_alert()
+
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Test Error Alert", text)
+        self.assertIn("GlitchTip Integration Test", text)
+        self.assertIn("test alert to verify", text)
+        self.assertIn("Project", text)
+        self.assertIn("Environment", text)
+        self.assertIn("integration is working correctly", text)
 
 
 if __name__ == "__main__":

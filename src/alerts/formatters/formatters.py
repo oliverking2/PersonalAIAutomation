@@ -5,27 +5,29 @@ from urllib.parse import urlparse
 from src.alerts.enums import AlertType
 from src.alerts.formatters.summariser import summarise_description
 from src.alerts.models import AlertData, AlertItem
+from src.messaging.telegram.utils.formatting import format_message
 
 
-def format_newsletter_alert(alert: AlertData) -> str:
-    """Format a newsletter alert as HTML for Telegram.
+def format_newsletter_alert(alert: AlertData) -> tuple[str, str]:
+    """Format a newsletter alert as Markdown for Telegram.
 
     :param alert: The alert data to format.
-    :returns: HTML-formatted message string.
+    :returns: Tuple of (formatted_text, parse_mode).
     """
-    lines = [f"<b>{alert.title}</b>", ""]
+    lines = [f"**{alert.title}**", ""]
 
     for item in alert.items:
-        lines.append(f"<b>{item.name}</b>")
+        lines.append(f"**{item.name}**")
         description = item.metadata.get("description", "")
         if description:
             lines.append(summarise_description(description, max_length=150))
         if item.url:
             domain = urlparse(item.url).netloc
-            lines.append(f'<a href="{item.url}">{domain}</a>')
+            lines.append(f"[{domain}]({item.url})")
         lines.append("")
 
-    return "\n".join(lines).strip()
+    markdown = "\n".join(lines).strip()
+    return format_message(markdown)
 
 
 def _format_task_section(
@@ -45,7 +47,7 @@ def _format_task_section(
     if not items:
         return []
 
-    lines = [f"<b>{header} ({len(items)})</b>"]
+    lines = [f"**{header} ({len(items)})**"]
     for item in items:
         suffix = ""
         if include_days_overdue:
@@ -59,13 +61,13 @@ def _format_task_section(
     return lines
 
 
-def format_task_alert(alert: AlertData) -> str:
-    """Format a task reminder alert as HTML.
+def format_task_alert(alert: AlertData) -> tuple[str, str]:
+    """Format a task reminder alert as Markdown.
 
     Organises tasks into sections based on their metadata.
 
     :param alert: The alert data to format.
-    :returns: HTML-formatted message string.
+    :returns: Tuple of (formatted_text, parse_mode).
     """
     # Group items by section
     sections: dict[str, list[AlertItem]] = {}
@@ -73,7 +75,7 @@ def format_task_alert(alert: AlertData) -> str:
         section = item.metadata.get("section", "unknown")
         sections.setdefault(section, []).append(item)
 
-    lines = [f"<b>{alert.title}</b>", ""]
+    lines = [f"**{alert.title}**", ""]
 
     # Format each section in order
     lines.extend(
@@ -108,25 +110,26 @@ def format_task_alert(alert: AlertData) -> str:
         )
     )
 
-    return "\n".join(lines).strip()
+    markdown = "\n".join(lines).strip()
+    return format_message(markdown)
 
 
-def format_goal_alert(alert: AlertData) -> str:
-    """Format a goal review alert as HTML.
+def format_goal_alert(alert: AlertData) -> tuple[str, str]:
+    """Format a goal review alert as Markdown.
 
     Shows progress bars and status for each goal.
 
     :param alert: The alert data to format.
-    :returns: HTML-formatted message string.
+    :returns: Tuple of (formatted_text, parse_mode).
     """
-    lines = [f"<b>{alert.title}</b>", ""]
+    lines = [f"**{alert.title}**", ""]
 
     # Separate by status
     in_progress = [i for i in alert.items if i.metadata.get("status") == "In progress"]
     not_started = [i for i in alert.items if i.metadata.get("status") == "Not started"]
 
     if in_progress:
-        lines.append(f"<b>IN PROGRESS ({len(in_progress)})</b>")
+        lines.append(f"**IN PROGRESS ({len(in_progress)})**")
         for item in in_progress:
             progress = int(item.metadata.get("progress", 0))
             bar = _progress_bar(progress)
@@ -136,12 +139,13 @@ def format_goal_alert(alert: AlertData) -> str:
         lines.append("")
 
     if not_started:
-        lines.append(f"<b>NOT STARTED ({len(not_started)})</b>")
+        lines.append(f"**NOT STARTED ({len(not_started)})**")
         for item in not_started:
             lines.append(f"  • {item.name}")
         lines.append("")
 
-    return "\n".join(lines).strip()
+    markdown = "\n".join(lines).strip()
+    return format_message(markdown)
 
 
 def _progress_bar(progress: int, width: int = 10) -> str:
@@ -156,21 +160,21 @@ def _progress_bar(progress: int, width: int = 10) -> str:
     return "━" * filled + "░" * empty
 
 
-def format_reading_alert(alert: AlertData) -> str:
-    """Format a weekly reading list reminder as HTML.
+def format_reading_alert(alert: AlertData) -> tuple[str, str]:
+    """Format a weekly reading list reminder as Markdown.
 
     Shows high priority and stale items.
 
     :param alert: The alert data to format.
-    :returns: HTML-formatted message string.
+    :returns: Tuple of (formatted_text, parse_mode).
     """
     high_priority = [i for i in alert.items if i.metadata.get("section") == "high_priority"]
     stale = [i for i in alert.items if i.metadata.get("section") == "stale"]
 
-    lines = [f"<b>{alert.title}</b>", ""]
+    lines = [f"**{alert.title}**", ""]
 
     if high_priority:
-        lines.append(f"<b>HIGH PRIORITY ({len(high_priority)})</b>")
+        lines.append(f"**HIGH PRIORITY ({len(high_priority)})**")
         for item in high_priority:
             item_type = item.metadata.get("item_type", "")
             type_str = f" [{item_type}]" if item_type else ""
@@ -178,72 +182,75 @@ def format_reading_alert(alert: AlertData) -> str:
         lines.append("")
 
     if stale:
-        lines.append(f"<b>GETTING STALE ({len(stale)})</b>")
+        lines.append(f"**GETTING STALE ({len(stale)})**")
         for item in stale:
             item_type = item.metadata.get("item_type", "")
             type_str = f" [{item_type}]" if item_type else ""
             lines.append(f"  • {item.name}{type_str}")
         lines.append("")
 
-    return "\n".join(lines).strip()
+    markdown = "\n".join(lines).strip()
+    return format_message(markdown)
 
 
-def format_substack_alert(alert: AlertData) -> str:
-    """Format a Substack posts alert as HTML for Telegram.
+def format_substack_alert(alert: AlertData) -> tuple[str, str]:
+    """Format a Substack posts alert as Markdown for Telegram.
 
     Each alert contains posts from a single publication.
     Format: Publication name as title, then each post with link + subtitle.
 
     :param alert: The alert data to format.
-    :returns: HTML-formatted message string.
+    :returns: Tuple of (formatted_text, parse_mode).
     """
-    lines = [f"<b>{alert.title}</b>", ""]
+    lines = [f"**{alert.title}**", ""]
 
     for item in alert.items:
         # Title as link, with (Paid) indicator for paywalled posts
         is_paywalled = item.metadata.get("is_paywalled") == "true"
         paid_suffix = " (Paid)" if is_paywalled else ""
         if item.url:
-            lines.append(f'<a href="{item.url}">{item.name}</a>{paid_suffix}')
+            lines.append(f"[{item.name}]({item.url}){paid_suffix}")
         else:
-            lines.append(f"<b>{item.name}</b>{paid_suffix}")
+            lines.append(f"**{item.name}**{paid_suffix}")
 
         # Subtitle if present
         subtitle = item.metadata.get("subtitle", "")
         if subtitle:
-            lines.append(f"<i>{subtitle}</i>")
+            lines.append(f"_{subtitle}_")
 
         lines.append("")
 
-    return "\n".join(lines).strip()
+    markdown = "\n".join(lines).strip()
+    return format_message(markdown)
 
 
-def format_medium_alert(alert: AlertData) -> str:
-    """Format a Medium digest alert as HTML for Telegram.
+def format_medium_alert(alert: AlertData) -> tuple[str, str]:
+    """Format a Medium digest alert as Markdown for Telegram.
 
     :param alert: The alert data to format.
-    :returns: HTML-formatted message string.
+    :returns: Tuple of (formatted_text, parse_mode).
     """
-    lines = [f"<b>{alert.title}</b>", ""]
+    lines = [f"**{alert.title}**", ""]
 
     for item in alert.items:
-        lines.append(f"<b>{item.name}</b>")
+        lines.append(f"**{item.name}**")
         description = item.metadata.get("description", "")
         if description:
             lines.append(summarise_description(description, max_length=150))
         if item.url:
             domain = urlparse(item.url).netloc
-            lines.append(f'<a href="{item.url}">{domain}</a>')
+            lines.append(f"[{domain}]({item.url})")
         lines.append("")
 
-    return "\n".join(lines).strip()
+    markdown = "\n".join(lines).strip()
+    return format_message(markdown)
 
 
-def format_alert(alert: AlertData) -> str:
+def format_alert(alert: AlertData) -> tuple[str, str]:
     """Format any alert based on its type.
 
     :param alert: The alert data to format.
-    :returns: HTML-formatted message string.
+    :returns: Tuple of (formatted_text, parse_mode).
     :raises ValueError: If alert type is unknown.
     """
     formatters = {

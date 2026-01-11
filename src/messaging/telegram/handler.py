@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 from src.agent.models import AgentRunResult, ConfirmationRequest, PendingToolAction
 from src.agent.runner import AgentRunner
 from src.agent.utils.formatting import format_confirmation_message
-from src.agent.utils.tools.registry import create_default_registry
 from src.api.client import AsyncInternalAPIClient, InternalAPIClientError
 from src.database.telegram import create_telegram_message
 
@@ -102,34 +101,20 @@ class MessageHandler:
         self,
         settings: TelegramConfig,
         session_manager: SessionManager,
-        agent_runner: AgentRunner | None = None,
+        agent_runner: AgentRunner,
         telegram_client: TelegramClient | None = None,
     ) -> None:
         """Initialise the message handler.
 
         :param settings: Telegram settings.
         :param session_manager: Session manager for session lifecycle.
-        :param agent_runner: Optional agent runner. If not provided, one will
-            be created with the default tool registry.
+        :param agent_runner: The agent runner for processing messages.
         :param telegram_client: Optional Telegram client for sending typing indicators.
         """
         self._settings = settings
         self._session_manager = session_manager
         self._agent_runner = agent_runner
         self._telegram_client = telegram_client
-
-    def _get_agent_runner(self) -> AgentRunner:
-        """Get or create the agent runner.
-
-        Lazily creates the agent runner to avoid initialisation issues.
-
-        :returns: The agent runner instance.
-        """
-        if self._agent_runner is None:
-            registry = create_default_registry()
-            self._agent_runner = AgentRunner(registry=registry)
-            logger.info("Created default AgentRunner")
-        return self._agent_runner
 
     async def handle_update(
         self,
@@ -545,12 +530,10 @@ class MessageHandler:
         :param text: User message text.
         :returns: Agent response text.
         """
-        agent_runner = self._get_agent_runner()
-
         try:
             # Run sync agent in thread pool to avoid blocking event loop
             result: AgentRunResult = await asyncio.to_thread(
-                agent_runner.run,
+                self._agent_runner.run,
                 text,
                 db_session,
                 telegram_session.agent_conversation_id,

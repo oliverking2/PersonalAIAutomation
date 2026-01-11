@@ -1,6 +1,6 @@
 # PRD32: Telegram Formatting and Logging Improvements
 
-**Status: PROPOSED**
+**Status: COMPLETED**
 
 **Roadmap Reference**:
 - TELE-010: Migrate alert formatters to Markdown/MarkdownV2
@@ -221,31 +221,31 @@ Wherever `MessageHandler` is instantiated, ensure an `AgentRunner` is provided:
 
 ### Part 1: Alert Formatter Migration
 
-1. [ ] Update `format_newsletter_alert` to return `(text, parse_mode)` tuple
-2. [ ] Update `format_task_alert` to return tuple
-3. [ ] Update `format_goal_alert` to return tuple
-4. [ ] Update `format_reading_alert` to return tuple
-5. [ ] Update `format_substack_alert` to return tuple
-6. [ ] Update `format_medium_alert` to return tuple
-7. [ ] Update `format_glitchtip_alert` to return tuple
-8. [ ] Update `format_test_alert` to return tuple
-9. [ ] Update `AlertService.send_alert()` to use parse_mode from formatter
-10. [ ] Update GlitchTip webhook endpoints to use parse_mode
-11. [ ] Update all formatter tests for new return type
+1. [x] Update `format_newsletter_alert` to return `(text, parse_mode)` tuple
+2. [x] Update `format_task_alert` to return tuple
+3. [x] Update `format_goal_alert` to return tuple
+4. [x] Update `format_reading_alert` to return tuple
+5. [x] Update `format_substack_alert` to return tuple
+6. [x] Update `format_medium_alert` to return tuple
+7. [x] Update `format_glitchtip_alert` to return tuple
+8. [x] Update `format_test_alert` to return tuple
+9. [x] Update `AlertService.send_alert()` to use parse_mode from formatter
+10. [x] Update GlitchTip webhook endpoints to use parse_mode
+11. [x] Update all formatter tests for new return type
 12. [ ] Manual testing of each alert type in Telegram
 
 ### Part 2: Consistent Logging
 
-1. [ ] Review `src/messaging/telegram/handler.py` - add session_id to logs missing it
-2. [ ] Review `src/messaging/telegram/polling.py` - add session_id to response logs
-3. [ ] Verify key operations log both chat_id and session_id
+1. [x] Review `src/messaging/telegram/handler.py` - add session_id to logs missing it
+2. [x] Review `src/messaging/telegram/polling.py` - add session_id to response logs
+3. [x] Verify key operations log both chat_id and session_id
 
 ### Part 3: Agent Runner Injection
 
-1. [ ] Remove lazy init fallback from `MessageHandler.__init__`
-2. [ ] Make `agent_runner` a required parameter
-3. [ ] Update all call sites to provide the runner
-4. [ ] Update tests to inject mock runner
+1. [x] Remove lazy init fallback from `MessageHandler.__init__`
+2. [x] Make `agent_runner` a required parameter
+3. [x] Update all call sites to provide the runner
+4. [x] Update tests to inject mock runner
 
 ## Files to Modify
 

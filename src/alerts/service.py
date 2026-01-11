@@ -95,8 +95,8 @@ class AlertService:
         :param provider: The provider that generated the alert.
         :raises TelegramClientError: If sending fails.
         """
-        content = format_alert(alert)
-        send_result = self._telegram.send_message_sync(content)
+        content, parse_mode = format_alert(alert)
+        send_result = self._telegram.send_message_sync(content, parse_mode=parse_mode)
 
         # Record in sent_alerts table
         create_sent_alert(
