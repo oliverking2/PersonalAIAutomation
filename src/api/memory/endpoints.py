@@ -201,6 +201,7 @@ def update_memory_endpoint(memory_id: str, request: UpdateMemoryRequest) -> Memo
                 session=session,
                 memory_id=memory_id,
                 content=request.content,
+                subject=request.subject,
             )
         except NoResultFound:
             raise HTTPException(

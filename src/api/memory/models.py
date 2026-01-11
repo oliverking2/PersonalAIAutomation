@@ -36,6 +36,11 @@ class UpdateMemoryRequest(BaseModel):
         max_length=500,
         description="The updated content for this memory",
     )
+    subject: str | None = Field(
+        None,
+        max_length=200,
+        description="Optional updated subject/entity (use when the subject itself changes)",
+    )
 
 
 class MemoryResponse(BaseModel):

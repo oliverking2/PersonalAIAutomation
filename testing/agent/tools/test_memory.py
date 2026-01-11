@@ -194,6 +194,36 @@ class TestUpdateMemoryHandler(unittest.TestCase):
         self.assertEqual(result["version"], 2)
 
     @patch("src.agent.tools.memory.InternalAPIClient")
+    def test_update_memory_with_subject_change(self, mock_client_class: MagicMock) -> None:
+        """Test updating memory with subject change."""
+        mock_client = MagicMock()
+        mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_client.patch.return_value = {
+            "id": "mem12345",
+            "content": "Seabrook is my boss",
+            "subject": "Seabrook",
+            "version": 2,
+        }
+
+        args = UpdateMemoryArgs(
+            memory_id="mem12345",
+            content="Seabrook is my boss",
+            subject="Seabrook",
+        )
+
+        result = UPDATE_MEMORY_TOOL.handler(args)
+
+        self.assertTrue(result["updated"])
+        self.assertEqual(result["id"], "mem12345")
+        # Verify subject was included in request
+        mock_client.patch.assert_called_once_with(
+            "/memory/mem12345",
+            json={"content": "Seabrook is my boss", "subject": "Seabrook"},
+        )
+
+    @patch("src.agent.tools.memory.InternalAPIClient")
     def test_update_memory_not_found(self, mock_client_class: MagicMock) -> None:
         """Test handling of memory not found."""
         mock_client = MagicMock()

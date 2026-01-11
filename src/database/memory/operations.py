@@ -110,6 +110,7 @@ def update_memory(
     session: Session,
     memory_id: str,
     content: str,
+    subject: str | None = None,
     source_conversation_id: uuid.UUID | None = None,
 ) -> AgentMemory:
     """Update a memory by creating a new version.
@@ -117,6 +118,7 @@ def update_memory(
     :param session: Database session.
     :param memory_id: The 8-character memory ID.
     :param content: The new content.
+    :param subject: Optional new subject (updates memory metadata if provided).
     :param source_conversation_id: Optional source conversation ID.
     :returns: The updated memory with new version.
     :raises NoResultFound: If memory not found.
@@ -126,6 +128,10 @@ def update_memory(
     if not memory.is_active:
         msg = f"Cannot update deleted memory: {memory_id}"
         raise ValueError(msg)
+
+    # Update subject if provided
+    if subject is not None:
+        memory.subject = subject
 
     # Get the current version number
     current_version_number = memory.current_version.version_number if memory.current_version else 0

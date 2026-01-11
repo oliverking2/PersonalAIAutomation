@@ -198,6 +198,24 @@ class TestUpdateMemory(unittest.TestCase):
             update_memory(session, "mem12345", "New content")
 
     @patch("src.database.memory.operations.get_memory_with_versions")
+    def test_updates_subject_when_provided(self, mock_get: MagicMock) -> None:
+        """Should update subject when provided."""
+        memory = AgentMemory(id="mem12345", category=MemoryCategory.PERSON, subject="Alec")
+        version1 = AgentMemoryVersion(
+            memory_id="mem12345",
+            version_number=1,
+            content="Alec is my boss",
+        )
+        memory.versions = [version1]
+        mock_get.return_value = memory
+
+        session = MagicMock()
+
+        update_memory(session, "mem12345", "Seabrook is my boss", subject="Seabrook")
+
+        self.assertEqual(memory.subject, "Seabrook")
+
+    @patch("src.database.memory.operations.get_memory_with_versions")
     def test_includes_source_conversation(self, mock_get: MagicMock) -> None:
         """Should include source conversation ID in new version."""
         memory = AgentMemory(id="mem12345", category=MemoryCategory.PERSON)
@@ -212,7 +230,7 @@ class TestUpdateMemory(unittest.TestCase):
         session = MagicMock()
         conversation_id = uuid.uuid4()
 
-        update_memory(session, "mem12345", "New content", conversation_id)
+        update_memory(session, "mem12345", "New content", source_conversation_id=conversation_id)
 
         new_version = session.add.call_args[0][0]
         self.assertEqual(new_version.source_conversation_id, conversation_id)

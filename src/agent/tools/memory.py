@@ -50,6 +50,11 @@ class UpdateMemoryArgs(BaseModel):
         min_length=5,
         max_length=500,
     )
+    subject: str | None = Field(
+        None,
+        description="Optional new subject/entity if the subject itself has changed (e.g., when the boss changes from 'Alec' to 'Sarah')",
+        max_length=200,
+    )
 
 
 def _get_client() -> InternalAPIClient:
@@ -115,10 +120,15 @@ def _update_memory_handler(args: BaseModel) -> dict[str, Any]:
     logger.info(f"Update memory: id={update_args.memory_id}, content={update_args.content[:50]}...")
 
     try:
+        # Build request body, including subject only if provided
+        request_body: dict[str, Any] = {"content": update_args.content}
+        if update_args.subject is not None:
+            request_body["subject"] = update_args.subject
+
         with _get_client() as client:
             response = client.patch(
                 f"/memory/{update_args.memory_id}",
-                json={"content": update_args.content},
+                json=request_body,
             )
 
         logger.info(f"Memory updated: id={response['id']}, version={response['version']}")
@@ -165,7 +175,9 @@ UPDATE_MEMORY_TOOL = ToolDef(
     description=(
         "Update an existing memory when information has changed. Use this instead of "
         "creating a new memory when correcting outdated information. The memory ID "
-        "can be found in the system prompt memory section (e.g., [id:a1b2c3d4])."
+        "can be found in the system prompt memory section (e.g., [id:a1b2c3d4]). "
+        "If the subject itself has changed (e.g., boss changed from Alec to Sarah), "
+        "include the new subject to update the memory's subject field."
     ),
     args_model=UpdateMemoryArgs,
     handler=_update_memory_handler,

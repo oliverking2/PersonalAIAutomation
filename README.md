@@ -7,7 +7,7 @@ tool registry to handle tasks, goals, and content curation autonomously.
 **Key highlights:**
 
 - **Agentic architecture** - Multi-step reasoning loop with AWS Bedrock (Claude Sonnet/Haiku) that dynamically selects and executes tools based on user intent
-- **Tool registry pattern** - 20 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
+- **Tool registry pattern** - 22 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
 - **Telegram integration** - Two-way conversational interface with session persistence, enabling both proactive alerts and interactive requests
 - **Production-ready infrastructure** - Dagster orchestration, PostgreSQL persistence, FastAPI REST layer, and comprehensive observability
 
@@ -46,15 +46,15 @@ This section provides a high-level overview of how the system works, intended as
 │                              AI AGENT LAYER                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ToolSelector          │  AgentRunner            │  ToolRegistry            │
-│  (AI-first tool        │  (Bedrock Converse      │  (20 tools across        │
-│   selection)           │   reasoning loop)       │   5 domains)             │
+│  (AI-first tool        │  (Bedrock Converse      │  (22 tools across        │
+│   selection)           │   reasoning loop)       │   6 domains)             │
 │                        │                         │                          │
 │  • Analyses intent     │  • Multi-step execution │  • Tasks: CRUD           │
 │  • Picks relevant      │  • HITL confirmation    │  • Goals: CRUD           │
 │    tools (≤5)          │  • Max 5 steps/run      │  • Reading List: CRUD    │
 │                        │                         │  • Ideas: CRUD           │
 │                        │                         │  • Reminders: CRUD       │
-│                        │                         │    + cancel              │
+│                        │                         │  • Memory: add/update    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -346,6 +346,38 @@ Sessions are stored in PostgreSQL with the following tables:
 - `telegram_messages`: Audit log of all messages (user and assistant)
 - `telegram_polling_cursor`: Persisted update_id for reliable polling
 
+### Persistent Memory
+The agent maintains persistent memory across conversations, allowing it to recall facts, preferences, and context from previous sessions.
+
+#### Features
+- **Proactive learning**: Agent notices information worth remembering and asks before storing
+- **Memory categories**: Person (people), Preference (user preferences), Context (recurring context), Project (project-specific info)
+- **Version history**: Updates create new versions, preserving full history of changes
+- **Token-efficient IDs**: Short 8-character alphanumeric IDs instead of UUIDs
+- **Prompt caching**: Memory loaded once per conversation with deterministic ordering
+
+#### How It Works
+1. User shares information ("Alec is my boss")
+2. Agent asks for confirmation ("Should I remember that for future conversations?")
+3. User confirms → memory stored with category and optional subject
+4. In future conversations, memory is included in the system prompt
+5. Agent can update memories when information changes (no confirmation needed for updates)
+
+#### Memory Format in Context
+Memories are grouped by category and include IDs for reference:
+```
+### Person
+- [id:a1b2c3d4] [Alec] Alec is my boss at TechCorp
+
+### Preference
+- [id:e5f6g7h8] User prefers tasks due on Fridays
+```
+
+#### Storage
+Memory uses two PostgreSQL tables:
+- `agent_memories`: Memory metadata (id, category, subject, lifecycle)
+- `agent_memory_versions`: Content history with version tracking
+
 ### User Reminders
 Set one-time and recurring reminders via the AI agent, delivered via Telegram with acknowledgement buttons.
 
@@ -474,6 +506,15 @@ The API service starts automatically with docker-compose. Access OpenAPI documen
 | PATCH  | /reminders/{id}      | Yes  | Update a reminder schedule                       |
 | DELETE | /reminders/{id}      | Yes  | Cancel (deactivate) a reminder                   |
 
+##### Memory
+| Method | Path             | Auth | Description                                      |
+|--------|------------------|------|--------------------------------------------------|
+| GET    | /memory          | Yes  | List all active memories                         |
+| GET    | /memory/{id}     | Yes  | Retrieve a memory with version history           |
+| POST   | /memory          | Yes  | Create a new memory entry                        |
+| PATCH  | /memory/{id}     | Yes  | Update a memory (creates new version)            |
+| DELETE | /memory/{id}     | Yes  | Soft-delete a memory                             |
+
 ##### Fuzzy Name Search
 All query endpoints support fuzzy name matching via `name_filter` parameter. Results are scored using `partial_ratio` matching and returned with a quality indicator:
 - `fuzzy_match_quality: "good"` - Best match score >= 60 (confident matches)
@@ -521,7 +562,7 @@ When creating items, the agent provides structured inputs that are automatically
 The agent cannot create arbitrary content - it must use these structured fields, which are then formatted via templates with an "AI Agent" attribution footer. This ensures consistent, well-structured page content.
 
 #### Available Tools
-The agent has 20 built-in tools organised by domain:
+The agent has 22 built-in tools organised by domain:
 
 | Domain       | Tools                                                                          |
 |--------------|--------------------------------------------------------------------------------|
@@ -530,6 +571,7 @@ The agent has 20 built-in tools organised by domain:
 | Reading List | query_reading_list, get_reading_item, create_reading_list, update_reading_item |
 | Ideas        | query_ideas, get_idea, create_ideas, update_idea                               |
 | Reminders    | create_reminder, query_reminders, update_reminder, cancel_reminder             |
+| Memory       | add_to_memory, update_memory (system tools, always available)                  |
 
 #### Agent Runner
 The AgentRunner executes the reasoning and tool-calling loop with safety guardrails:

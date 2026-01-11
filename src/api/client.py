@@ -314,6 +314,10 @@ class AsyncInternalAPIClient:
                 )
                 raise InternalAPIClientError(error_detail, status_code=response.status_code)
 
+            # Handle 204 No Content (e.g., DELETE responses)
+            if response.status_code == HTTP_NO_CONTENT:
+                return {}
+
             result = response.json()
             return list(result) if isinstance(result, list) else dict(result)
 
