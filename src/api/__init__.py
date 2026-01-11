@@ -1,6 +1,5 @@
 """API module for Personal AI Automation."""
 
-from src.api.app import app
-from src.api.client import InternalAPIClient, InternalAPIClientError
+from src.api.client import AsyncInternalAPIClient, InternalAPIClient, InternalAPIClientError
 
-__all__ = ["InternalAPIClient", "InternalAPIClientError", "app"]
+__all__ = ["AsyncInternalAPIClient", "InternalAPIClient", "InternalAPIClientError"]
