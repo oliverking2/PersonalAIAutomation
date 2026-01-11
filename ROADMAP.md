@@ -1,17 +1,10 @@
-# Roadmap v2
+# Roadmap
 
 Personal automation system for task management, newsletter processing, and AI-powered assistance via Telegram.
 
 ---
 
 ## Up Next
-
-#### PRD29: Agent Memory System
-Persistent memory across chat sessions.
-- PostgreSQL memory table with categories (person, preference, context, project, correction)
-- `add_to_memory` tool for agent to explicitly store important facts
-- Memory loaded into cached prompt prefix at conversation start
-- Agent clarifies ambiguous info before storing
 
 #### PRD05B: Medium Integration
 Extend newsletter extraction to Medium.
@@ -50,38 +43,33 @@ End-to-end conversation flow testing.
 - Conversation simulator helper
 
 ### Misc Improvements
-- tools are currently too cautious, change it to have all tasks tools if there is a question about tasks (check the token usage for increasing this threshold)
-- substack alerts doesn't seem to be deduplicating alerts
 - TLDR summaries don't seem to be working - e.g. lots of ... rather than summarising the description with AI
 
 ### Agent Improvements
 
-| ID        | Description                                               | Priority |
-|-----------|-----------------------------------------------------------|----------|
-| AGENT-006 | Prevent LLM from repeatedly requesting unknown tools      | High     |
-| AGENT-007 | Replace `list[Any]` with `MessageTypeDef` in runner state | Medium   |
-| AGENT-009 | Remove synthetic "I understand" message from context      | Medium   |
-| AGENT-013 | Validate `tool_names` is a list in selector response      | Medium   |
-| AGENT-015 | Standardise error return formats in tools                 | Low      |
-| AGENT-017 | Add request ID propagation to API client                  | Low      |
-| AGENT-020 | Improve BedrockClient error context                       | Low      |
+| ID        | Description                                                                                             | Priority |
+|-----------|---------------------------------------------------------------------------------------------------------|----------|
+| AGENT-007 | Replace `list[Any]` with `MessageTypeDef` in runner state                                               | Medium   |
+| AGENT-009 | Remove synthetic "I understand" message from context                                                    | Medium   |
+| AGENT-013 | Validate `tool_names` is a list in selector response                                                    | Medium   |
+| AGENT-015 | Standardise error return formats in tools                                                               | Low      |
+| AGENT-017 | Add request ID propagation to API client                                                                | Low      |
+| AGENT-020 | Improve BedrockClient error context (partial: has error code/message extraction, needs request context) | Low      |
 
 ### Telegram Improvements
 
-| ID       | Description                                  | Priority |
-|----------|----------------------------------------------|----------|
-| TELE-010 | Migrate alert formatters to Markdown/MarkdownV2 | Medium |
-| TELE-005 | Structured logging with chat_id, session_id  | Medium   |
-| TELE-003 | Graceful long-poll timeout handling          | Medium   |
-| TELE-009 | Integration test suite                       | Medium   |
-| TELE-004 | Connection pooling with requests.Session     | Low      |
+| ID       | Description                                                                                                           | Priority |
+|----------|-----------------------------------------------------------------------------------------------------------------------|----------|
+| TELE-010 | Migrate alert formatters to Markdown/MarkdownV2                                                                       | Medium   |
+| TELE-005 | Structured logging with chat_id, session_id <br/>(partial: some context in logs, needs systematic use of contextvars) | Medium   |
+| TELE-009 | Integration test suite                                                                                                | Medium   |
+| TELE-004 | Connection pooling for httpx client (configure Limits for max connections/keepalive)                                  | Low      |
 
 ### Technical Debt
 
-| ID     | Location            | Issue                                    |
-|--------|---------------------|------------------------------------------|
-| TD-001 | telegram/client.py  | Remove environment variable fallback     |
-| TD-003 | telegram/handler.py | Inject agent runner instead of lazy init |
+| ID     | Location            | Issue                                                                                                             |
+|--------|---------------------|-------------------------------------------------------------------------------------------------------------------|
+| TD-003 | telegram/handler.py | Inject agent runner instead of lazy init (partial: accepts injection but falls back to lazy init if not provided) |
 
 ---
 
@@ -121,31 +109,33 @@ End-to-end conversation flow testing.
 
 ### Agent Roadmap Items
 
-| ID        | Description                                   | Date       |
-|-----------|-----------------------------------------------|------------|
-| AGENT-002 | Bedrock toolUseId validation (via PRD18)      | 2025-12-28 |
-| AGENT-001 | Tool execution timeout (via PRD17)            | 2024-12-28 |
-| AGENT-003 | CRUD tool factory (via PRD19)                 | 2024-12    |
-| AGENT-008 | Validate classification response with retries | 2024-12-25 |
-| AGENT-012 | Tool re-selection on each turn                | 2024-12-25 |
-| AGENT-016 | Centralise configuration (via PRD16)          | 2024-12    |
-| AGENT-021 | Remove unused session parameter               | 2024-12-25 |
-| AGENT-022 | BedrockClient helper methods                  | 2024-12-25 |
-| AGENT-023 | Refactor AgentRunner helpers                  | 2024-12-25 |
-| AGENT-024 | Remove unused confirmation parameters         | 2024-12-25 |
-| AGENT-025 | Fix HITL confirmation flow                    | 2024-12-25 |
-| AGENT-026 | Add today's date to system prompt             | 2024-12-25 |
-| AGENT-027 | Include confirmation message in conversation  | 2024-12-25 |
-| AGENT-028 | Handle multiple tool uses in response         | 2024-12-25 |
-| AGENT-029 | Context-aware additive tool selection         | 2024-12-25 |
-| AGENT-030 | Execute ALL tools in multi-tool response      | 2024-12-26 |
-| AGENT-031 | Fuzzy name search for query tools             | 2024-12-26 |
-| AGENT-F06 | Descriptive name validation (via PRD14)       | 2024-12    |
+| ID        | Description                                          | Date       |
+|-----------|------------------------------------------------------|------------|
+| AGENT-006 | Prevent LLM from repeatedly requesting unknown tools | 2025-01    |
+| AGENT-002 | Bedrock toolUseId validation (via PRD18)             | 2025-12-28 |
+| AGENT-001 | Tool execution timeout (via PRD17)                   | 2024-12-28 |
+| AGENT-003 | CRUD tool factory (via PRD19)                        | 2024-12    |
+| AGENT-008 | Validate classification response with retries        | 2024-12-25 |
+| AGENT-012 | Tool re-selection on each turn                       | 2024-12-25 |
+| AGENT-016 | Centralise configuration (via PRD16)                 | 2024-12    |
+| AGENT-021 | Remove unused session parameter                      | 2024-12-25 |
+| AGENT-022 | BedrockClient helper methods                         | 2024-12-25 |
+| AGENT-023 | Refactor AgentRunner helpers                         | 2024-12-25 |
+| AGENT-024 | Remove unused confirmation parameters                | 2024-12-25 |
+| AGENT-025 | Fix HITL confirmation flow                           | 2024-12-25 |
+| AGENT-026 | Add today's date to system prompt                    | 2024-12-25 |
+| AGENT-027 | Include confirmation message in conversation         | 2024-12-25 |
+| AGENT-028 | Handle multiple tool uses in response                | 2024-12-25 |
+| AGENT-029 | Context-aware additive tool selection                | 2024-12-25 |
+| AGENT-030 | Execute ALL tools in multi-tool response             | 2024-12-26 |
+| AGENT-031 | Fuzzy name search for query tools                    | 2024-12-26 |
+| AGENT-F06 | Descriptive name validation (via PRD14)              | 2024-12    |
 
 ### Telegram Roadmap Items
 
 | ID       | Description                             | Date       |
 |----------|-----------------------------------------|------------|
+| TELE-003 | Graceful long-poll timeout handling     | 2025-01    |
 | TELE-007 | Typing indicators while agent processes | 2024-12-27 |
 
 ### Other
