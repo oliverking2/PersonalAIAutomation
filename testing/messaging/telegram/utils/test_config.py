@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from src.telegram.utils.config import TelegramConfig, TelegramMode, get_telegram_settings
+from src.messaging.telegram.utils.config import TelegramConfig, TelegramMode, get_telegram_settings
 
 
 class TestTelegramSettings(unittest.TestCase):

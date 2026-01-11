@@ -20,10 +20,10 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from src.database.telegram import TelegramSession
-    from src.telegram.client import TelegramClient
-    from src.telegram.models import TelegramMessageInfo, TelegramUpdate
-    from src.telegram.utils.config import TelegramConfig
-    from src.telegram.utils.session_manager import SessionManager
+    from src.messaging.telegram.client import TelegramClient
+    from src.messaging.telegram.models import TelegramMessageInfo, TelegramUpdate
+    from src.messaging.telegram.utils.config import TelegramConfig
+    from src.messaging.telegram.utils.session_manager import SessionManager
 
 # Type alias for async typing callback: accepts chat_id as argument
 TypingCallback = Callable[[str], Awaitable[None]]

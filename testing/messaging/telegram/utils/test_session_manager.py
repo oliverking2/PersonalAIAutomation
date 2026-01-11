@@ -4,7 +4,7 @@ import unittest
 import uuid
 from unittest.mock import MagicMock, patch
 
-from src.telegram.utils.session_manager import SessionManager
+from src.messaging.telegram.utils.session_manager import SessionManager
 
 
 class TestSessionManager(unittest.TestCase):
@@ -15,9 +15,9 @@ class TestSessionManager(unittest.TestCase):
         self.session_manager = SessionManager(session_timeout_minutes=10)
         self.mock_db_session = MagicMock()
 
-    @patch("src.telegram.utils.session_manager.expire_inactive_sessions")
-    @patch("src.telegram.utils.session_manager.get_active_session_for_chat")
-    @patch("src.telegram.utils.session_manager.update_session_activity")
+    @patch("src.messaging.telegram.utils.session_manager.expire_inactive_sessions")
+    @patch("src.messaging.telegram.utils.session_manager.get_active_session_for_chat")
+    @patch("src.messaging.telegram.utils.session_manager.update_session_activity")
     def test_get_or_create_session_returns_existing(
         self,
         mock_update_activity: MagicMock,
@@ -37,9 +37,9 @@ class TestSessionManager(unittest.TestCase):
         mock_get_active.assert_called_once_with(self.mock_db_session, "12345")
         mock_update_activity.assert_called_once_with(self.mock_db_session, mock_session)
 
-    @patch("src.telegram.utils.session_manager.expire_inactive_sessions")
-    @patch("src.telegram.utils.session_manager.get_active_session_for_chat")
-    @patch("src.telegram.utils.session_manager.create_telegram_session")
+    @patch("src.messaging.telegram.utils.session_manager.expire_inactive_sessions")
+    @patch("src.messaging.telegram.utils.session_manager.get_active_session_for_chat")
+    @patch("src.messaging.telegram.utils.session_manager.create_telegram_session")
     def test_get_or_create_session_creates_new(
         self,
         mock_create_session: MagicMock,
@@ -67,9 +67,9 @@ class TestSessionManager(unittest.TestCase):
         self.assertEqual(call_kwargs["chat_id"], "12345")
         self.assertIsNone(call_kwargs["agent_conversation_id"])
 
-    @patch("src.telegram.utils.session_manager.end_telegram_session")
-    @patch("src.telegram.utils.session_manager.get_active_session_for_chat")
-    @patch("src.telegram.utils.session_manager.create_telegram_session")
+    @patch("src.messaging.telegram.utils.session_manager.end_telegram_session")
+    @patch("src.messaging.telegram.utils.session_manager.get_active_session_for_chat")
+    @patch("src.messaging.telegram.utils.session_manager.create_telegram_session")
     def test_reset_session_ends_existing(
         self,
         mock_create_session: MagicMock,
@@ -98,9 +98,9 @@ class TestSessionManager(unittest.TestCase):
         call_kwargs = mock_create_session.call_args.kwargs
         self.assertIsNone(call_kwargs["agent_conversation_id"])
 
-    @patch("src.telegram.utils.session_manager.end_telegram_session")
-    @patch("src.telegram.utils.session_manager.get_active_session_for_chat")
-    @patch("src.telegram.utils.session_manager.create_telegram_session")
+    @patch("src.messaging.telegram.utils.session_manager.end_telegram_session")
+    @patch("src.messaging.telegram.utils.session_manager.get_active_session_for_chat")
+    @patch("src.messaging.telegram.utils.session_manager.create_telegram_session")
     def test_reset_session_no_existing(
         self,
         mock_create_session: MagicMock,
@@ -119,7 +119,7 @@ class TestSessionManager(unittest.TestCase):
         self.assertEqual(session, mock_new_session)
         mock_end_session.assert_not_called()
 
-    @patch("src.telegram.utils.session_manager.create_agent_conversation")
+    @patch("src.messaging.telegram.utils.session_manager.create_agent_conversation")
     def test_ensure_agent_conversation_creates_when_missing(
         self,
         mock_create_conversation: MagicMock,

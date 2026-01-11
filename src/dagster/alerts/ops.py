@@ -15,9 +15,9 @@ from src.alerts import (
 )
 from src.api.client import InternalAPIClient
 from src.database.connection import get_session
-from src.telegram import TelegramClient
-from src.telegram.utils.config import get_telegram_settings
-from src.telegram.utils.misc import _escape_md
+from src.messaging.telegram import TelegramClient
+from src.messaging.telegram.utils.config import get_telegram_settings
+from src.messaging.telegram.utils.formatting import format_message
 
 logger = logging.getLogger(__name__)
 
@@ -65,21 +65,22 @@ def _notify_errors(context: OpExecutionContext, alert_type: str, errors: list[st
         chat_id=settings.error_chat_id,
     )
 
-    error_summary = "\n".join(f"• {_escape_md(err)}" for err in errors[:MAX_ERRORS_IN_NOTIFICATION])
+    error_summary = "\n".join(f"• {err}" for err in errors[:MAX_ERRORS_IN_NOTIFICATION])
     if len(errors) > MAX_ERRORS_IN_NOTIFICATION:
         extra = len(errors) - MAX_ERRORS_IN_NOTIFICATION
-        error_summary += f"\n\\.\\.\\. and {extra} more"
+        error_summary += f"\n... and {extra} more"
 
     text = (
-        f"*Alert Op Errors: {_escape_md(alert_type)}*\n\n"
-        f"Job: `{_escape_md(context.job_name)}`\n"
-        f"Run ID: `{_escape_md(context.run_id)}`\n"
+        f"**Alert Op Errors: {alert_type}**\n\n"
+        f"Job: `{context.job_name}`\n"
+        f"Run ID: `{context.run_id}`\n"
         f"Errors: {len(errors)}\n\n"
         f"{error_summary}"
     )
 
     try:
-        client.send_message_sync(text, parse_mode="MarkdownV2")
+        formatted_text, parse_mode = format_message(text)
+        client.send_message_sync(formatted_text, parse_mode=parse_mode)
         context.log.info(f"Error notification sent for {alert_type}: {len(errors)} errors")
     except Exception as e:
         context.log.error(f"Failed to send error notification: {e}")

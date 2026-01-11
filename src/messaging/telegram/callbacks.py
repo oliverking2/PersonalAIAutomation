@@ -13,8 +13,8 @@ from src.database.reminders import (
     get_instance_by_id,
     snooze_instance,
 )
-from src.telegram.client import TelegramClient
-from src.telegram.models import CallbackQuery
+from src.messaging.telegram.client import TelegramClient
+from src.messaging.telegram.models import CallbackQuery
 
 logger = logging.getLogger(__name__)
 

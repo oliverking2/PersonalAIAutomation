@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from src.telegram.models import InlineKeyboardMarkup, SendMessageResult, TelegramUpdate
+from src.messaging.telegram.models import InlineKeyboardMarkup, SendMessageResult, TelegramUpdate
 
 logger = logging.getLogger(__name__)
 

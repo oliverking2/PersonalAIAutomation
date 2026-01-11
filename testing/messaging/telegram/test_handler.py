@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.agent.models import PendingToolAction
 from src.api.client import InternalAPIClientError
-from src.telegram.handler import (
+from src.messaging.telegram import (
     MessageHandler,
     UnauthorisedChatError,
     parse_command,
 )
-from src.telegram.models import TelegramChat, TelegramMessageInfo, TelegramUpdate
-from src.telegram.utils.config import TelegramConfig
+from src.messaging.telegram.models import TelegramChat, TelegramMessageInfo, TelegramUpdate
+from src.messaging.telegram.utils.config import TelegramConfig
 
 
 class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
@@ -77,7 +77,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.exception.chat_id, "99999")
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_newchat_command(
         self,
         mock_create_message: MagicMock,
@@ -98,7 +98,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         # Should record both command and response
         self.assertEqual(mock_create_message.call_count, 2)
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_newchat_command_case_insensitive(
         self,
         mock_create_message: MagicMock,
@@ -113,7 +113,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("Session reset", result)
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_regular_message(
         self,
         mock_create_message: MagicMock,
@@ -140,7 +140,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         # Ensure agent conversation is lazily created
         self.mock_session_manager.ensure_agent_conversation.assert_called_once()
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_message_with_confirmation_request(
         self,
         mock_create_message: MagicMock,
@@ -173,7 +173,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         self.assertIn("confirmation", result.lower())
         self.assertIn("Buy groceries", result)
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_message_agent_error(
         self,
         mock_create_message: MagicMock,
@@ -194,7 +194,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("error", result.lower())
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_message_with_reply_context(
         self,
         mock_create_message: MagicMock,
@@ -252,7 +252,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.handler._is_chat_allowed("99999"))
         self.assertFalse(self.handler._is_chat_allowed("11111"))
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_typing_indicator_sends_with_telegram_client(
         self,
         mock_create_message: MagicMock,
@@ -285,7 +285,7 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         # Verify typing was sent at least once
         mock_telegram_client.send_chat_action.assert_called()
 
-    @patch("src.telegram.handler.create_telegram_message")
+    @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_typing_error_does_not_block_agent(
         self,
         mock_create_message: MagicMock,
@@ -403,7 +403,7 @@ class TestFormatToolAction(unittest.IsolatedAsyncioTestCase):
             session_manager=self.mock_session_manager,
         )
 
-    @patch("src.telegram.handler.AsyncInternalAPIClient")
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     async def test_format_tool_action_with_entity_name_lookup(
         self,
         mock_api_client_class: MagicMock,
@@ -428,7 +428,7 @@ class TestFormatToolAction(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "update_task: 'Review quarterly report' → due_date='2025-01-01'")
         mock_client.get.assert_called_once_with("/notion/tasks/abc-123")
 
-    @patch("src.telegram.handler.AsyncInternalAPIClient")
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     async def test_format_tool_action_with_entity_lookup_failure(
         self,
         mock_api_client_class: MagicMock,
@@ -493,7 +493,7 @@ class TestFormatToolAction(unittest.IsolatedAsyncioTestCase):
         self.assertIn("create_task:", result)
         self.assertIn("...", result)
 
-    @patch("src.telegram.handler.AsyncInternalAPIClient")
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     async def test_format_tool_action_entity_only_no_other_args(
         self,
         mock_api_client_class: MagicMock,
@@ -534,7 +534,7 @@ class TestLookupEntityName(unittest.IsolatedAsyncioTestCase):
             session_manager=self.mock_session_manager,
         )
 
-    @patch("src.telegram.handler.AsyncInternalAPIClient")
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     async def test_lookup_task_name(self, mock_api_client_class: MagicMock) -> None:
         """Test looking up task name by ID."""
         mock_client = AsyncMock()
@@ -547,7 +547,7 @@ class TestLookupEntityName(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "Review quarterly report")
         mock_client.get.assert_called_once_with("/notion/tasks/task-123")
 
-    @patch("src.telegram.handler.AsyncInternalAPIClient")
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     async def test_lookup_goal_name(self, mock_api_client_class: MagicMock) -> None:
         """Test looking up goal name by ID."""
         mock_client = AsyncMock()
@@ -560,7 +560,7 @@ class TestLookupEntityName(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "Learn Spanish")
         mock_client.get.assert_called_once_with("/notion/goals/goal-456")
 
-    @patch("src.telegram.handler.AsyncInternalAPIClient")
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     async def test_lookup_reading_item_title(self, mock_api_client_class: MagicMock) -> None:
         """Test looking up reading item title by ID."""
         mock_client = AsyncMock()
@@ -579,7 +579,7 @@ class TestLookupEntityName(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
 
-    @patch("src.telegram.handler.AsyncInternalAPIClient")
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     async def test_lookup_api_error_returns_none(
         self,
         mock_api_client_class: MagicMock,

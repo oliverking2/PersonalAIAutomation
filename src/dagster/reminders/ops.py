@@ -18,9 +18,9 @@ from src.database.reminders.operations import (
     mark_instance_sent,
     update_schedule_next_trigger,
 )
-from src.telegram import InlineKeyboardButton, InlineKeyboardMarkup, TelegramClient
-from src.telegram.utils.config import get_telegram_settings
-from src.telegram.utils.misc import _escape_md
+from src.messaging.telegram import InlineKeyboardButton, InlineKeyboardMarkup, TelegramClient
+from src.messaging.telegram.utils.config import get_telegram_settings
+from src.messaging.telegram.utils.formatting import format_message
 
 # Callback data prefix for reminder callbacks
 REMINDER_CALLBACK_PREFIX = "remind:"
@@ -72,21 +72,22 @@ def _notify_errors(context: OpExecutionContext, errors: list[str]) -> None:
         chat_id=settings.error_chat_id,
     )
 
-    error_summary = "\n".join(f"• {_escape_md(err)}" for err in errors[:MAX_ERRORS_IN_NOTIFICATION])
+    error_summary = "\n".join(f"• {err}" for err in errors[:MAX_ERRORS_IN_NOTIFICATION])
     if len(errors) > MAX_ERRORS_IN_NOTIFICATION:
         extra = len(errors) - MAX_ERRORS_IN_NOTIFICATION
-        error_summary += f"\n\\.\\.\\. and {extra} more"
+        error_summary += f"\n... and {extra} more"
 
     text = (
-        f"*Reminder Processing Errors*\n\n"
-        f"Job: `{_escape_md(context.job_name)}`\n"
-        f"Run ID: `{_escape_md(context.run_id)}`\n"
+        f"**Reminder Processing Errors**\n\n"
+        f"Job: `{context.job_name}`\n"
+        f"Run ID: `{context.run_id}`\n"
         f"Errors: {len(errors)}\n\n"
         f"{error_summary}"
     )
 
     try:
-        client.send_message_sync(text, parse_mode="MarkdownV2")
+        formatted_text, parse_mode = format_message(text)
+        client.send_message_sync(formatted_text, parse_mode=parse_mode)
         context.log.info(f"Error notification sent: {len(errors)} errors")
     except Exception as e:
         context.log.error(f"Failed to send error notification: {e}")
@@ -117,13 +118,13 @@ def _format_reminder_message(schedule: ReminderSchedule, instance: ReminderInsta
 
     :param schedule: The reminder schedule.
     :param instance: The reminder instance.
-    :returns: Formatted HTML message.
+    :returns: Formatted Markdown message.
     """
     # send_count is incremented after sending, so add 1 for display
     send_number = instance.send_count + 1
     send_info = f"(Send {send_number}/{instance.max_sends})"
 
-    return f"<b>Reminder</b> {send_info}\n\n{schedule.message}"
+    return f"**Reminder** {send_info}\n\n{schedule.message}"
 
 
 def _build_reminder_keyboard(instance_id: str) -> InlineKeyboardMarkup:
@@ -170,11 +171,12 @@ def _send_reminder(
     :param instance: The reminder instance being sent.
     """
     message = _format_reminder_message(schedule, instance)
+    formatted_message, parse_mode = format_message(message)
     keyboard = _build_reminder_keyboard(str(instance.id))
     client.send_message_sync(
-        message,
+        formatted_message,
         chat_id=str(schedule.chat_id),
-        parse_mode="HTML",
+        parse_mode=parse_mode,
         reply_markup=keyboard,
     )
 

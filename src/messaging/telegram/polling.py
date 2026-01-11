@@ -12,13 +12,14 @@ from dotenv import load_dotenv
 
 from src.database.connection import get_session
 from src.database.telegram import get_or_create_polling_cursor, update_polling_cursor
+from src.messaging.telegram.callbacks import process_callback_query
+from src.messaging.telegram.client import TelegramClient, TelegramClientError
+from src.messaging.telegram.handler import MessageHandler, UnauthorisedChatError
+from src.messaging.telegram.models import TelegramMessageInfo, TelegramUpdate
+from src.messaging.telegram.utils.config import TelegramConfig, get_telegram_settings
+from src.messaging.telegram.utils.formatting import format_message
+from src.messaging.telegram.utils.session_manager import SessionManager
 from src.paths import PROJECT_ROOT
-from src.telegram.callbacks import process_callback_query
-from src.telegram.client import TelegramClient, TelegramClientError
-from src.telegram.handler import MessageHandler, UnauthorisedChatError
-from src.telegram.models import TelegramMessageInfo, TelegramUpdate
-from src.telegram.utils.config import TelegramConfig, get_telegram_settings
-from src.telegram.utils.session_manager import SessionManager
 from src.utils.logging import configure_logging
 
 # Template for including replied-to message context (matches handler.py format)
@@ -311,11 +312,14 @@ class PollingRunner:
     async def _send_response(self, chat_id: str, text: str) -> None:
         """Send a response message to a chat.
 
+        Converts Markdown formatting to platform-specific format before sending.
+
         :param chat_id: Target chat ID.
-        :param text: Response text.
+        :param text: Response text (may contain Markdown formatting).
         """
         try:
-            await self._client.send_message(text, chat_id=chat_id, parse_mode="")
+            formatted_text, parse_mode = format_message(text)
+            await self._client.send_message(formatted_text, chat_id=chat_id, parse_mode=parse_mode)
             logger.debug(f"Sent response to chat_id={chat_id}")
         except TelegramClientError:
             logger.exception(f"Failed to send response to chat_id={chat_id}")

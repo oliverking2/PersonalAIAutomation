@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.telegram.models import (
+from src.messaging.telegram.models import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,

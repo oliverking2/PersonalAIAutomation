@@ -97,7 +97,7 @@ class TestFormatReminderMessage(unittest.TestCase):
 
         result = _format_reminder_message(schedule, instance)
 
-        self.assertIn("<b>Reminder</b>", result)
+        self.assertIn("**Reminder**", result)
         self.assertIn("(Send 2/3)", result)
         self.assertIn("Test reminder message", result)
 

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
-from src.telegram.client import (
+from src.messaging.telegram.client import (
     TelegramClient,
     TelegramClientError,
 )
@@ -55,7 +55,7 @@ class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -82,7 +82,7 @@ class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -114,7 +114,7 @@ class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -137,7 +137,7 @@ class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
             response=mock_response,
         )
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -152,7 +152,7 @@ class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
 
     async def test_send_message_timeout_raises_exception(self) -> None:
         """Test that timeout raises TelegramClientError."""
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
             mock_client.is_closed = False
@@ -167,7 +167,7 @@ class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
 
     async def test_send_message_connection_error_raises_exception(self) -> None:
         """Test that connection error raises TelegramClientError."""
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.side_effect = httpx.ConnectError("Connection refused")
             mock_client.is_closed = False
@@ -190,7 +190,7 @@ class TestTelegramClientSendMessage(unittest.IsolatedAsyncioTestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -231,7 +231,7 @@ class TestTelegramClientGetUpdates(unittest.IsolatedAsyncioTestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.get.return_value = mock_response
             mock_client.is_closed = False
@@ -256,7 +256,7 @@ class TestTelegramClientGetUpdates(unittest.IsolatedAsyncioTestCase):
         mock_response.json.return_value = {"ok": True, "result": []}
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.get.return_value = mock_response
             mock_client.is_closed = False
@@ -274,7 +274,7 @@ class TestTelegramClientGetUpdates(unittest.IsolatedAsyncioTestCase):
         mock_response.json.return_value = {"ok": True, "result": []}
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.get.return_value = mock_response
             mock_client.is_closed = False
@@ -298,7 +298,7 @@ class TestTelegramClientGetUpdates(unittest.IsolatedAsyncioTestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.get.return_value = mock_response
             mock_client.is_closed = False
@@ -313,7 +313,7 @@ class TestTelegramClientGetUpdates(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_updates_timeout_raises_error(self) -> None:
         """Test get_updates raises error on timeout."""
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.get.side_effect = httpx.TimeoutException("Connection timed out")
             mock_client.is_closed = False
@@ -337,7 +337,7 @@ class TestTelegramClientSendChatAction(unittest.IsolatedAsyncioTestCase):
         mock_response.json.return_value = {"ok": True, "result": True}
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -358,7 +358,7 @@ class TestTelegramClientSendChatAction(unittest.IsolatedAsyncioTestCase):
         mock_response.json.return_value = {"ok": True, "result": True}
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -377,7 +377,7 @@ class TestTelegramClientSendChatAction(unittest.IsolatedAsyncioTestCase):
         mock_response.json.return_value = {"ok": True, "result": True}
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -408,7 +408,7 @@ class TestTelegramClientSendChatAction(unittest.IsolatedAsyncioTestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.return_value = mock_response
             mock_client.is_closed = False
@@ -423,7 +423,7 @@ class TestTelegramClientSendChatAction(unittest.IsolatedAsyncioTestCase):
 
     async def test_send_chat_action_timeout_raises_exception(self) -> None:
         """Test that timeout raises TelegramClientError."""
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
             mock_client.is_closed = False
@@ -450,7 +450,7 @@ class TestTelegramClientSendMessageSync(unittest.TestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.Client") as mock_client_class:
             mock_client = MagicMock()
             mock_client.post.return_value = mock_response
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -482,7 +482,7 @@ class TestTelegramClientSendMessageSync(unittest.TestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.Client") as mock_client_class:
             mock_client = MagicMock()
             mock_client.post.return_value = mock_response
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -498,7 +498,7 @@ class TestTelegramClientSendMessageSync(unittest.TestCase):
 
     def test_send_message_sync_timeout_raises_exception(self) -> None:
         """Test that timeout raises TelegramClientError."""
-        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.Client") as mock_client_class:
             mock_client = MagicMock()
             mock_client.post.side_effect = httpx.TimeoutException("Connection timed out")
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -522,7 +522,7 @@ class TestTelegramClientSendMessageSync(unittest.TestCase):
             response=mock_response,
         )
 
-        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.Client") as mock_client_class:
             mock_client = MagicMock()
             mock_client.post.return_value = mock_response
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -550,7 +550,7 @@ class TestTelegramClientSendMessageSync(unittest.TestCase):
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("src.telegram.client.httpx.Client") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.Client") as mock_client_class:
             mock_client = MagicMock()
             mock_client.post.return_value = mock_response
             mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -570,7 +570,7 @@ class TestTelegramClientClose(unittest.IsolatedAsyncioTestCase):
 
     async def test_close_client(self) -> None:
         """Test closing the HTTP client."""
-        with patch("src.telegram.client.httpx.AsyncClient") as mock_client_class:
+        with patch("src.messaging.telegram.client.httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.is_closed = False
             mock_client_class.return_value = mock_client

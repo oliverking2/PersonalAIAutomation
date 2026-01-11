@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData
 from src.alerts.service import AlertService
-from src.telegram.client import TelegramClientError
-from src.telegram.models import SendMessageResult
+from src.messaging.telegram.client import TelegramClientError
+from src.messaging.telegram.models import SendMessageResult
 
 
 class TestAlertService(unittest.TestCase):

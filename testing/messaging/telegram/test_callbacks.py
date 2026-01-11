@@ -10,7 +10,7 @@ from uuid import uuid4
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/test")
 os.environ.setdefault("GRAPH_TARGET_UPN", "test@example.com")
 
-from src.telegram.callbacks import (
+from src.messaging.telegram import (
     REMINDER_CALLBACK_PREFIX,
     CallbackResult,
     ReminderAction,
@@ -195,13 +195,13 @@ class TestHandleReminderCallback(unittest.TestCase):
         self.assertEqual(result.answer_text, "Invalid callback data")
         self.assertTrue(result.show_alert)
 
-    @patch("src.telegram.callbacks.get_session")
+    @patch("src.messaging.telegram.callbacks.get_session")
     def test_reminder_not_found(self, mock_get_session: MagicMock) -> None:
         """Test handling when reminder instance not found."""
         mock_session = MagicMock()
         mock_get_session.return_value.__enter__.return_value = mock_session
 
-        with patch("src.telegram.callbacks.get_instance_by_id", return_value=None):
+        with patch("src.messaging.telegram.callbacks.get_instance_by_id", return_value=None):
             instance_id = uuid4()
             data = f"{REMINDER_CALLBACK_PREFIX}ack:{instance_id}"
 
@@ -210,7 +210,7 @@ class TestHandleReminderCallback(unittest.TestCase):
         self.assertEqual(result.answer_text, "Reminder not found")
         self.assertTrue(result.show_alert)
 
-    @patch("src.telegram.callbacks.get_session")
+    @patch("src.messaging.telegram.callbacks.get_session")
     def test_already_acknowledged(self, mock_get_session: MagicMock) -> None:
         """Test handling already acknowledged reminder."""
         mock_session = MagicMock()
@@ -219,7 +219,9 @@ class TestHandleReminderCallback(unittest.TestCase):
         mock_instance = MagicMock()
         mock_instance.status = "acknowledged"
 
-        with patch("src.telegram.callbacks.get_instance_by_id", return_value=mock_instance):
+        with patch(
+            "src.messaging.telegram.callbacks.get_instance_by_id", return_value=mock_instance
+        ):
             instance_id = uuid4()
             data = f"{REMINDER_CALLBACK_PREFIX}ack:{instance_id}"
 
@@ -228,9 +230,9 @@ class TestHandleReminderCallback(unittest.TestCase):
         self.assertIn("already acknowledged", result.answer_text)
         self.assertTrue(result.show_alert)
 
-    @patch("src.telegram.callbacks.get_session")
-    @patch("src.telegram.callbacks.acknowledge_instance")
-    @patch("src.telegram.callbacks.deactivate_schedule")
+    @patch("src.messaging.telegram.callbacks.get_session")
+    @patch("src.messaging.telegram.callbacks.acknowledge_instance")
+    @patch("src.messaging.telegram.callbacks.deactivate_schedule")
     def test_acknowledge_one_time_reminder(
         self,
         mock_deactivate: MagicMock,
@@ -251,7 +253,9 @@ class TestHandleReminderCallback(unittest.TestCase):
 
         instance_id = uuid4()
 
-        with patch("src.telegram.callbacks.get_instance_by_id", return_value=mock_instance):
+        with patch(
+            "src.messaging.telegram.callbacks.get_instance_by_id", return_value=mock_instance
+        ):
             data = f"{REMINDER_CALLBACK_PREFIX}ack:{instance_id}"
 
             result = handle_reminder_callback(data, original_text="Test message")
@@ -261,9 +265,9 @@ class TestHandleReminderCallback(unittest.TestCase):
         mock_acknowledge.assert_called_once()
         mock_deactivate.assert_called_once_with(mock_session, mock_schedule.id)
 
-    @patch("src.telegram.callbacks.get_session")
-    @patch("src.telegram.callbacks.acknowledge_instance")
-    @patch("src.telegram.callbacks.deactivate_schedule")
+    @patch("src.messaging.telegram.callbacks.get_session")
+    @patch("src.messaging.telegram.callbacks.acknowledge_instance")
+    @patch("src.messaging.telegram.callbacks.deactivate_schedule")
     def test_acknowledge_recurring_reminder(
         self,
         mock_deactivate: MagicMock,
@@ -283,7 +287,9 @@ class TestHandleReminderCallback(unittest.TestCase):
 
         instance_id = uuid4()
 
-        with patch("src.telegram.callbacks.get_instance_by_id", return_value=mock_instance):
+        with patch(
+            "src.messaging.telegram.callbacks.get_instance_by_id", return_value=mock_instance
+        ):
             data = f"{REMINDER_CALLBACK_PREFIX}ack:{instance_id}"
 
             result = handle_reminder_callback(data)
@@ -292,8 +298,8 @@ class TestHandleReminderCallback(unittest.TestCase):
         mock_acknowledge.assert_called_once()
         mock_deactivate.assert_not_called()
 
-    @patch("src.telegram.callbacks.get_session")
-    @patch("src.telegram.callbacks.snooze_instance")
+    @patch("src.messaging.telegram.callbacks.get_session")
+    @patch("src.messaging.telegram.callbacks.snooze_instance")
     def test_snooze_reminder(
         self,
         mock_snooze: MagicMock,
@@ -310,7 +316,9 @@ class TestHandleReminderCallback(unittest.TestCase):
 
         instance_id = uuid4()
 
-        with patch("src.telegram.callbacks.get_instance_by_id", return_value=mock_instance):
+        with patch(
+            "src.messaging.telegram.callbacks.get_instance_by_id", return_value=mock_instance
+        ):
             data = f"{REMINDER_CALLBACK_PREFIX}snooze:{instance_id}:60"
 
             result = handle_reminder_callback(data, original_text="Test message")

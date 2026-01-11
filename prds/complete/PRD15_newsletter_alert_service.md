@@ -96,7 +96,7 @@ from sqlalchemy.orm import Session
 
 from src.database.newsletters import Newsletter, get_unsent_newsletters, mark_newsletter_alerted
 from src.newsletters.formatters import format_newsletter_message
-from src.telegram.client import TelegramClient, TelegramClientError
+from src.messaging.telegram.client import TelegramClient, TelegramClientError
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +122,9 @@ class NewsletterAlertService:
     """
 
     def __init__(
-        self,
-        session: Session,
-        client: TelegramClient,
+            self,
+            session: Session,
+            client: TelegramClient,
     ) -> None:
         """Initialise the newsletter alert service.
 
@@ -222,8 +222,8 @@ from dagster import op, OpExecutionContext
 
 from src.database.connection import get_session
 from src.newsletters.alert_service import NewsletterAlertService
-from src.telegram.client import TelegramClient
-from src.telegram.utils.config import get_telegram_settings
+from src.messaging.telegram.client import TelegramClient
+from src.messaging.telegram.utils.config import get_telegram_settings
 
 
 @op(description="Send unsent newsletters via Telegram")

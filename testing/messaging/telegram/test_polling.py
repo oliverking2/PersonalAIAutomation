@@ -3,9 +3,9 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from src.telegram.models import TelegramChat, TelegramMessageInfo, TelegramUpdate
-from src.telegram.polling import PollingRunner
-from src.telegram.utils.config import TelegramConfig
+from src.messaging.telegram import PollingRunner
+from src.messaging.telegram.models import TelegramChat, TelegramMessageInfo, TelegramUpdate
+from src.messaging.telegram.utils.config import TelegramConfig
 
 
 class TestPollingRunnerGrouping(unittest.IsolatedAsyncioTestCase):

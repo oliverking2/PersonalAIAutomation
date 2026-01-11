@@ -9,7 +9,7 @@ from src.alerts.formatters import format_alert
 from src.alerts.models import AlertData, AlertSendResult
 from src.alerts.providers.base import AlertProvider
 from src.database.alerts import create_sent_alert, was_alert_sent_today
-from src.telegram.client import TelegramClient, TelegramClientError
+from src.messaging.telegram.client import TelegramClient, TelegramClientError
 
 logger = logging.getLogger(__name__)
 

@@ -63,6 +63,7 @@ End-to-end conversation flow testing.
 
 | ID       | Description                                  | Priority |
 |----------|----------------------------------------------|----------|
+| TELE-010 | Migrate alert formatters to Markdown/MarkdownV2 | Medium |
 | TELE-005 | Structured logging with chat_id, session_id  | Medium   |
 | TELE-003 | Graceful long-poll timeout handling          | Medium   |
 | TELE-009 | Integration test suite                       | Medium   |

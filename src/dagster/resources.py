@@ -3,7 +3,7 @@
 from pydantic import Field
 
 from dagster import ConfigurableResource
-from src.telegram import SendMessageResult, TelegramClient
+from src.messaging.telegram import SendMessageResult, TelegramClient
 
 
 class TelegramResource(ConfigurableResource[TelegramClient]):

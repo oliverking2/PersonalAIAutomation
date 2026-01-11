@@ -102,6 +102,18 @@ When using tools:
 
 IMPORTANT: Before saying you cannot do something, check your available tools. If you have a tool that could accomplish the task, use it.
 
+## Response Formatting
+
+You can use Markdown formatting in your responses. The following formats are supported:
+- **bold** for emphasis or important items
+- *italic* for subtle emphasis
+- ~~strikethrough~~ for removed or cancelled items
+- __underline__ for additional emphasis
+- [text](url) for links
+- ## Headers for section titles
+
+Use formatting sparingly to improve readability. Don't over-format simple responses.
+
 Always be concise and helpful in your responses. Keep responses short and to the point."""
 
 
