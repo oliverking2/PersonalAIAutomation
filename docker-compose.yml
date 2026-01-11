@@ -125,7 +125,7 @@ services:
   # GlitchTip (error tracking)
   # ----------------------------
   glitchtip:
-    image: glitchtip/glitchtip:latest
+    image: glitchtip/glitchtip:v5.1.1
     container_name: personal_automation_glitchtip
     restart: unless-stopped
     depends_on:
@@ -140,7 +140,7 @@ services:
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
       GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN}
       CSRF_TRUSTED_ORIGINS: ${GLITCHTIP_DOMAIN}
-      VALKEY_URL: "redis://valkey:6379/0"
+      REDIS_URL: "redis://valkey:6379/0"
 
       # Minimal setup: no real email for now (emails go to container logs)
       EMAIL_URL: "consolemail://"
@@ -151,6 +151,10 @@ services:
 
       # Keep resource usage sensible
       CELERY_WORKER_CONCURRENCY: "2"
+
+      # Debug mode
+      DEBUG: "True"
+      CELERY_WORKER_LOGLEVEL: "DEBUG"
     command: ./bin/run-all-in-one.sh
 
 volumes:
