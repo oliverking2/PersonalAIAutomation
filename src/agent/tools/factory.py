@@ -358,6 +358,7 @@ def _create_update_tool(config: CRUDToolConfig) -> ToolDef:
         risk_level=RiskLevel.SENSITIVE,
         args_model=update_args_model,
         handler=update_handler,
+        id_field=config.id_field,
     )
 
 

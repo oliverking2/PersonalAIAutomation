@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from src.agent.bedrock_client import BedrockClient, ToolUseBlock
-from src.agent.enums import ConfirmationType, RiskLevel, ToolDecisionType
+from src.agent.enums import ConfidenceLevel, ConfirmationType, RiskLevel, ToolDecisionType
 from src.agent.exceptions import (
     BedrockClientError,
     BedrockResponseError,
@@ -30,6 +30,7 @@ from src.agent.models import (
     ToolDef,
 )
 from src.agent.utils.call_tracking import TrackingContext, set_tracking_context
+from src.agent.utils.confidence_classifier import classify_action_confidence
 from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
 from src.agent.utils.confirmation_classifier import (
     ClassificationParseError,
@@ -46,6 +47,7 @@ from src.agent.utils.context_manager import (
     save_conversation_state,
     set_pending_confirmation,
 )
+from src.agent.utils.formatting import format_action
 from src.agent.utils.tools.registry import ToolRegistry
 from src.agent.utils.tools.selector import ToolSelector
 from src.database.agent_tracking import (
@@ -1134,19 +1136,64 @@ class AgentRunner:
         state: _RunState,
         conv_state: ConversationState | None,
         response: dict[str, Any],
-    ) -> AgentRunResult:
+    ) -> AgentRunResult | None:
         """Create a batch confirmation request for multiple sensitive tools.
 
-        Safe tools are executed immediately. Sensitive tools are collected
-        into a batch confirmation request.
+        Uses confidence classification to determine if confirmation is needed:
+        - EXPLICIT: User directly requested this action - execute immediately
+        - NEEDS_CONFIRMATION: Agent inferred or suggested - request confirmation
+
+        Safe tools are executed immediately. Sensitive tools are either executed
+        (if EXPLICIT) or collected into a batch confirmation request.
 
         :param sensitive_contexts: Contexts for sensitive tools needing confirmation.
         :param safe_contexts: Contexts for safe tools to execute immediately.
         :param state: Current run state.
         :param conv_state: Conversation state for persistence.
         :param response: Full LLM response.
-        :returns: AgentRunResult with batch confirmation request.
+        :returns: AgentRunResult with batch confirmation request, or None if
+            all tools were executed (EXPLICIT confidence).
         """
+        # Classify confidence for the sensitive tools
+        # Build a combined action description for classification
+        action_descriptions = []
+        for ctx in sensitive_contexts:
+            tool = state.tools[ctx.tool_name]
+            # Try to extract entity name from args for better description
+            entity_name = self._extract_entity_name(ctx.input_args)
+            action_desc = format_action(ctx.tool_name, entity_name, ctx.input_args)
+            action_descriptions.append(action_desc)
+
+        combined_action = "; ".join(action_descriptions)
+
+        classification = classify_action_confidence(
+            client=self.client,
+            messages=state.messages,
+            proposed_action=combined_action,
+        )
+
+        logger.info(
+            f"Confidence classification: level={classification.level}, "
+            f"reasoning='{classification.reasoning[:80]}...'"
+        )
+
+        if classification.level == ConfidenceLevel.EXPLICIT:
+            # User explicitly requested this - execute without confirmation
+            logger.info(
+                f"EXPLICIT confidence - executing {len(sensitive_contexts)} sensitive "
+                f"tool(s) without confirmation"
+            )
+            # Combine all contexts and execute
+            all_contexts = safe_contexts + sensitive_contexts
+            self._execute_all_tools(all_contexts, state, response)
+            return None  # Continue agent loop
+
+        # NEEDS_CONFIRMATION - proceed with confirmation request
+        logger.info(
+            f"NEEDS_CONFIRMATION - requesting confirmation for {len(sensitive_contexts)} "
+            f"sensitive tool(s)"
+        )
+
         # Execute safe tools first (if any)
         if safe_contexts:
             logger.info(f"Executing {len(safe_contexts)} safe tool(s) before confirmation")
@@ -1193,6 +1240,13 @@ class AgentRunner:
         for idx, ctx in enumerate(sensitive_contexts, start=1):
             tool = state.tools[ctx.tool_name]
             action_summary = self._generate_action_summary(tool.description, ctx.input_args)
+
+            # Fetch current entity to get previous values for diff display
+            previous_values = self._fetch_previous_values(tool, ctx.input_args, state.tools)
+            entity_name = previous_values.pop("_entity_name", None) or self._extract_entity_name(
+                ctx.input_args
+            )
+
             pending_tools.append(
                 PendingToolAction(
                     index=idx,
@@ -1201,6 +1255,8 @@ class AgentRunner:
                     tool_description=tool.description,
                     input_args=ctx.input_args,
                     action_summary=action_summary,
+                    previous_values=previous_values,
+                    entity_name=entity_name,
                 )
             )
 
@@ -1307,3 +1363,83 @@ class AgentRunner:
         """
         args_display = ", ".join(f"{k}={v!r}" for k, v in input_args.items())
         return f"{tool_description}\nArguments: {args_display}"
+
+    @staticmethod
+    def _extract_entity_name(input_args: dict[str, Any]) -> str | None:
+        """Extract entity name from tool arguments for display.
+
+        Looks for common name fields in the arguments.
+
+        :param input_args: Tool arguments.
+        :returns: Entity name if found, None otherwise.
+        """
+        # Common name field patterns
+        name_fields = ["task_name", "goal_name", "name", "title", "item_name"]
+        for field in name_fields:
+            if field in input_args and isinstance(input_args[field], str):
+                return input_args[field]
+        return None
+
+    def _fetch_previous_values(
+        self,
+        tool: ToolDef,
+        input_args: dict[str, Any],
+        tools: dict[str, ToolDef],
+    ) -> dict[str, Any]:
+        """Fetch current entity values for diff display.
+
+        For update tools, derives the get tool and fetches the current entity.
+        Returns the fields being updated with their current values.
+
+        :param tool: The update tool being called.
+        :param input_args: Arguments to the update tool.
+        :param tools: Available tools registry.
+        :returns: Dict of current values, with '_entity_name' for display.
+        """
+        # Guard: only applies to update tools with id_field
+        if not tool.id_field or not tool.name.startswith("update_"):
+            return {}
+
+        # Derive get tool and entity ID
+        get_tool_name = tool.name.replace("update_", "get_", 1)
+        get_tool = tools.get(get_tool_name)
+        entity_id = input_args.get(tool.id_field)
+
+        if not get_tool or not entity_id:
+            if not get_tool:
+                logger.debug(f"No get tool found for {tool.name}: {get_tool_name}")
+            return {}
+
+        try:
+            # Fetch the current entity
+            get_args = get_tool.args_model(**{tool.id_field: entity_id})
+            result = get_tool.handler(get_args)
+            entity = result.get("item", {})
+
+            if not entity:
+                return {}
+
+            # Build previous values for fields being updated
+            previous_values: dict[str, Any] = {}
+
+            # Extract entity name for display
+            name_fields = ["name", "task_name", "goal_name", "title", "item_name"]
+            for name_field in name_fields:
+                if name_field in entity:
+                    previous_values["_entity_name"] = entity[name_field]
+                    break
+
+            # Copy current values for fields being updated
+            for field in input_args:
+                if field != tool.id_field and field in entity:
+                    previous_values[field] = entity[field]
+
+            logger.debug(
+                f"Fetched previous values: tool={tool.name}, "
+                f"entity_id={entity_id}, fields={list(previous_values.keys())}"
+            )
+            return previous_values
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch previous values: tool={tool.name}, error={e}")
+            return {}

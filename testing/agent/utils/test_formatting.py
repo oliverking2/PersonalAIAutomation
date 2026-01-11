@@ -4,10 +4,15 @@ import unittest
 
 from src.agent.models import PendingToolAction
 from src.agent.utils.formatting import (
+    ContentChange,
     format_action,
+    format_batch_diff,
+    format_batch_execution_diff,
     format_confirmation_message,
+    format_content_diff,
     format_date_human,
     format_datetime_human,
+    format_execution_diff,
     format_time_human,
 )
 
@@ -223,6 +228,7 @@ class TestFormatConfirmationMessage(unittest.TestCase):
         index: int,
         tool_name: str,
         input_args: dict,
+        previous_values: dict | None = None,
     ) -> PendingToolAction:
         """Create a PendingToolAction for testing."""
         return PendingToolAction(
@@ -232,6 +238,7 @@ class TestFormatConfirmationMessage(unittest.TestCase):
             tool_description=f"Description for {tool_name}",
             input_args=input_args,
             action_summary=f"Summary for {tool_name}",
+            previous_values=previous_values or {},
         )
 
     def test_single_action(self) -> None:
@@ -300,6 +307,197 @@ class TestFormatConfirmationMessage(unittest.TestCase):
         self.assertIn("I'll", result)
         self.assertIn("update", result)
         self.assertIn("sound good?", result)
+
+    def test_single_action_with_content_diff(self) -> None:
+        """Test confirmation message shows diff for content updates."""
+        tool = self._make_tool(
+            1,
+            "update_task",
+            {"task_id": "abc-123", "content": "New content"},
+            previous_values={"content": "Old content"},
+        )
+        result = format_confirmation_message([(tool, "Test Task")])
+
+        self.assertIn("I'd", result)
+        self.assertIn('**Before:** "Old content"', result)
+        self.assertIn('**After:** "New content"', result)
+        self.assertIn("This look right?", result)
+
+    def test_single_action_with_diff_no_old_content(self) -> None:
+        """Test diff display when old content is None."""
+        tool = self._make_tool(
+            1,
+            "update_task",
+            {"task_id": "abc-123", "content": "New content"},
+        )
+        result = format_confirmation_message([(tool, "Test Task")])
+
+        self.assertIn("**Before:** (not available)", result)
+        self.assertIn('**After:** "New content"', result)
+
+    def test_batch_actions_with_content_diffs(self) -> None:
+        """Test batch confirmation shows inline diffs."""
+        tool1 = self._make_tool(
+            1,
+            "update_task",
+            {"task_id": "abc-123", "content": "Updated content 1"},
+            previous_values={"content": "Old content 1"},
+        )
+
+        tool2 = self._make_tool(
+            2,
+            "update_task",
+            {"task_id": "def-456", "content": "Updated content 2"},
+            previous_values={"content": "Old content 2"},
+        )
+
+        result = format_confirmation_message(
+            [
+                (tool1, "Task 1"),
+                (tool2, "Task 2"),
+            ]
+        )
+
+        self.assertIn("Just confirming these:", result)
+        self.assertIn("1.", result)
+        self.assertIn("2.", result)
+        self.assertIn('**Before:** "Old content 1"', result)
+        self.assertIn('**After:** "Updated content 1"', result)
+        self.assertIn('**Before:** "Old content 2"', result)
+        self.assertIn('**After:** "Updated content 2"', result)
+
+
+class TestContentDiffFormatting(unittest.TestCase):
+    """Tests for content diff formatting functions."""
+
+    def test_format_content_diff(self) -> None:
+        """Test basic content diff formatting."""
+        result = format_content_diff(
+            entity_name="Test Task",
+            old_content="Old description",
+            new_content="New description",
+        )
+
+        self.assertIn('"Test Task"', result)
+        self.assertIn('Before: "Old description"', result)
+        self.assertIn('After: "New description"', result)
+
+    def test_format_content_diff_no_old_content(self) -> None:
+        """Test content diff when old content is None."""
+        result = format_content_diff(
+            entity_name="Test Task",
+            old_content=None,
+            new_content="New description",
+        )
+
+        self.assertIn("Before: (empty)", result)
+        self.assertIn('After: "New description"', result)
+
+    def test_format_batch_diff(self) -> None:
+        """Test batch diff formatting."""
+        changes = [
+            ContentChange(
+                entity_name="Task 1",
+                old_content="Old 1",
+                new_content="New 1",
+                changed=True,
+            ),
+            ContentChange(
+                entity_name="Task 2",
+                old_content="Old 2",
+                new_content="New 2",
+                changed=True,
+            ),
+        ]
+        result = format_batch_diff(changes)
+
+        self.assertIn("Task 1:", result)
+        self.assertIn("Task 2:", result)
+        self.assertIn('Before: "Old 1"', result)
+        self.assertIn('After: "New 1"', result)
+
+    def test_format_batch_diff_no_change(self) -> None:
+        """Test batch diff shows 'no changes needed' for unchanged items."""
+        changes = [
+            ContentChange(
+                entity_name="Task 1",
+                old_content="Content",
+                new_content="Content",
+                changed=False,
+            ),
+        ]
+        result = format_batch_diff(changes)
+
+        self.assertIn("No changes needed", result)
+
+    def test_format_batch_diff_empty(self) -> None:
+        """Test batch diff with empty list."""
+        result = format_batch_diff([])
+
+        self.assertEqual(result, "No changes to show.")
+
+    def test_format_execution_diff(self) -> None:
+        """Test post-execution diff formatting."""
+        result = format_execution_diff(
+            entity_name="Test Task",
+            old_content="Old description",
+            new_content="New description",
+        )
+
+        self.assertIn('Done! I\'ve tidied up "Test Task"', result)
+        self.assertIn("Before:", result)
+        self.assertIn("After:", result)
+        self.assertIn('"Old description"', result)
+        self.assertIn('"New description"', result)
+
+    def test_format_batch_execution_diff(self) -> None:
+        """Test post-execution batch diff formatting."""
+        changes = [
+            ContentChange(
+                entity_name="Task 1",
+                old_content="Old 1",
+                new_content="New 1",
+                changed=True,
+            ),
+            ContentChange(
+                entity_name="Task 2",
+                old_content="Old 2",
+                new_content="New 2",
+                changed=True,
+            ),
+        ]
+        result = format_batch_execution_diff(changes)
+
+        self.assertIn("Done! Updated 2 item(s)", result)
+        self.assertIn("Task 1:", result)
+        self.assertIn("Task 2:", result)
+
+    def test_format_batch_execution_diff_all_unchanged(self) -> None:
+        """Test batch execution diff when no changes were needed."""
+        changes = [
+            ContentChange(
+                entity_name="Task 1",
+                old_content="Content",
+                new_content="Content",
+                changed=False,
+            ),
+        ]
+        result = format_batch_execution_diff(changes)
+
+        self.assertEqual(result, "No changes were needed (all items already clean).")
+
+    def test_truncation_of_long_content(self) -> None:
+        """Test that long content is truncated in diffs."""
+        long_content = "x" * 300
+        result = format_content_diff(
+            entity_name="Test Task",
+            old_content=long_content,
+            new_content="Short",
+        )
+
+        # Should be truncated with ellipsis
+        self.assertIn("...", result)
+        self.assertNotIn("x" * 300, result)
 
 
 if __name__ == "__main__":

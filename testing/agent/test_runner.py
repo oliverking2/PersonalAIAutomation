@@ -9,10 +9,11 @@ from unittest.mock import MagicMock, patch
 from pydantic import BaseModel
 
 from src.agent.bedrock_client import ToolUseBlock
-from src.agent.enums import RiskLevel
+from src.agent.enums import ConfidenceLevel, RiskLevel
 from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError, ToolTimeoutError
 from src.agent.models import ToolDef
 from src.agent.runner import DEFAULT_SYSTEM_PROMPT, AgentRunner
+from src.agent.utils.confidence_classifier import ConfidenceClassification
 from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
 from src.agent.utils.tools.registry import ToolRegistry
 
@@ -229,6 +230,7 @@ class TestAgentRunner(unittest.TestCase):
         self.assertEqual(result.steps_taken, 1)
         self.assertEqual(result.stop_reason, "end_turn")
 
+    @patch("src.agent.runner.classify_action_confidence")
     @patch("src.agent.runner.save_conversation_state")
     @patch("src.agent.runner.complete_agent_run")
     @patch("src.agent.runner.create_agent_run")
@@ -239,10 +241,17 @@ class TestAgentRunner(unittest.TestCase):
         mock_create_run: MagicMock,
         mock_complete_run: MagicMock,
         mock_save_state: MagicMock,
+        mock_classify: MagicMock,
     ) -> None:
-        """Test that sensitive tools require confirmation."""
+        """Test that sensitive tools require confirmation when NEEDS_CONFIRMATION."""
         mock_create_conv.return_value = self.mock_conversation
         mock_create_run.return_value = self.mock_run
+
+        # Mock confidence classifier to return NEEDS_CONFIRMATION
+        mock_classify.return_value = ConfidenceClassification(
+            level=ConfidenceLevel.NEEDS_CONFIRMATION,
+            reasoning="Vague request requires confirmation",
+        )
 
         self.mock_client.create_user_message.return_value = {
             "role": "user",
@@ -288,6 +297,82 @@ class TestAgentRunner(unittest.TestCase):
         self.assertEqual(tool_action.input_args, {"value": "update"})
         self.assertEqual(tool_action.tool_use_id, "tool-456")
         self.assertEqual(result.steps_taken, 0)
+
+    @patch("src.agent.runner.classify_action_confidence")
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_run_sensitive_tool_executes_immediately_when_explicit(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        """Test that sensitive tools execute immediately when EXPLICIT confidence."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        # Mock confidence classifier to return EXPLICIT
+        mock_classify.return_value = ConfidenceClassification(
+            level=ConfidenceLevel.EXPLICIT,
+            reasoning="User explicitly requested this update",
+        )
+
+        self.mock_client.create_user_message.return_value = {
+            "role": "user",
+            "content": [{"text": "Update the task description to 'New description'"}],
+        }
+
+        tool_response = {
+            "output": {
+                "message": {
+                    "content": [
+                        {
+                            "toolUse": {
+                                "toolUseId": "tool-456",
+                                "name": "sensitive_tool",
+                                "input": {"value": "update"},
+                            }
+                        }
+                    ]
+                }
+            },
+            "stopReason": "tool_use",
+        }
+
+        final_response = {
+            "output": {"message": {"content": [{"text": "Updated!"}]}},
+            "stopReason": "end_turn",
+        }
+
+        self.mock_client.converse.side_effect = [tool_response, final_response]
+        self.mock_client.get_stop_reason.side_effect = ["tool_use", "end_turn"]
+        self.mock_client.parse_tool_use.return_value = [
+            ToolUseBlock(id="tool-456", name="sensitive_tool", input={"value": "update"})
+        ]
+        self.mock_client.parse_text_response.return_value = "Updated!"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+            require_confirmation=True,
+        )
+
+        result = runner.run(
+            "Update the task description to 'New description'",
+            self.mock_session,
+            tool_names=["sensitive_tool"],
+        )
+
+        # Should execute immediately without confirmation
+        self.assertEqual(result.stop_reason, "end_turn")
+        self.assertIsNone(result.confirmation_request)
+        self.assertEqual(len(result.tool_calls), 1)
+        self.assertEqual(result.tool_calls[0].tool_name, "sensitive_tool")
+        self.assertFalse(result.tool_calls[0].is_error)
 
     @patch("src.agent.runner.complete_agent_run")
     @patch("src.agent.runner.create_agent_run")
@@ -1054,6 +1139,7 @@ class TestMessageDuplicationPrevention(unittest.TestCase):
         # NOT 8 (which would include duplicated context)
         self.assertEqual(len(saved_state.messages), 6)
 
+    @patch("src.agent.runner.classify_action_confidence")
     @patch("src.agent.runner.save_conversation_state")
     @patch("src.agent.runner.complete_agent_run")
     @patch("src.agent.runner.create_agent_run")
@@ -1064,8 +1150,13 @@ class TestMessageDuplicationPrevention(unittest.TestCase):
         mock_create_run: MagicMock,
         mock_complete_run: MagicMock,
         mock_save_state: MagicMock,
+        mock_classify: MagicMock,
     ) -> None:
         """Test that requesting confirmation doesn't duplicate messages."""
+        mock_classify.return_value = ConfidenceClassification(
+            level=ConfidenceLevel.NEEDS_CONFIRMATION,
+            reasoning="Needs confirmation for this test",
+        )
         existing_messages = [
             self._make_user_message("Previous message"),
             self._make_assistant_message("Previous response"),

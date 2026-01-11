@@ -49,3 +49,14 @@ class ToolDecisionType(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
     MODIFY = "modify"
+
+
+class ConfidenceLevel(StrEnum):
+    """Classification of user intent for a proposed action.
+
+    EXPLICIT: User directly requested this specific action.
+    NEEDS_CONFIRMATION: Agent is inferring, interpreting vaguely, or suggesting unprompted.
+    """
+
+    EXPLICIT = "explicit"
+    NEEDS_CONFIRMATION = "needs_confirmation"
