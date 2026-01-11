@@ -7,7 +7,7 @@ tool registry to handle tasks, goals, and content curation autonomously.
 **Key highlights:**
 
 - **Agentic architecture** - Multi-step reasoning loop with AWS Bedrock (Claude Sonnet/Haiku) that dynamically selects and executes tools based on user intent
-- **Tool registry pattern** - 19 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
+- **Tool registry pattern** - 22 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
 - **Telegram integration** - Two-way conversational interface with session persistence, enabling both proactive alerts and interactive requests
 - **Production-ready infrastructure** - Dagster orchestration, PostgreSQL persistence, FastAPI REST layer, and comprehensive observability
 
@@ -46,15 +46,15 @@ This section provides a high-level overview of how the system works, intended as
 │                              AI AGENT LAYER                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ToolSelector          │  AgentRunner            │  ToolRegistry            │
-│  (AI-first tool        │  (Bedrock Converse      │  (19 tools across        │
-│   selection)           │   reasoning loop)       │   5 domains)             │
+│  (AI-first tool        │  (Bedrock Converse      │  (22 tools across        │
+│   selection)           │   reasoning loop)       │   6 domains)             │
 │                        │                         │                          │
 │  • Analyses intent     │  • Multi-step execution │  • Tasks: CRUD           │
 │  • Picks relevant      │  • HITL confirmation    │  • Goals: CRUD           │
 │    tools (≤5)          │  • Max 5 steps/run      │  • Reading List: CRUD    │
 │                        │                         │  • Ideas: CRUD           │
-│                        │                         │  • Reminders: create,    │
-│                        │                         │    query, cancel         │
+│                        │                         │  • Reminders: CRUD       │
+│                        │                         │  • Memory: add/update    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -175,7 +175,8 @@ src/
 ├── notion/          # Notion API client and models
 ├── observability/   # Error tracking (Sentry/GlitchTip)
 ├── substack/        # Substack API client and parsing
-├── telegram/        # Telegram Bot client and service
+├── messaging/       # Messaging providers
+│   └── telegram/    # Telegram Bot client, polling, handlers
 └── utils/           # Logging configuration
 ```
 
@@ -345,6 +346,38 @@ Sessions are stored in PostgreSQL with the following tables:
 - `telegram_messages`: Audit log of all messages (user and assistant)
 - `telegram_polling_cursor`: Persisted update_id for reliable polling
 
+### Persistent Memory
+The agent maintains persistent memory across conversations, allowing it to recall facts, preferences, and context from previous sessions.
+
+#### Features
+- **Proactive learning**: Agent notices information worth remembering and asks before storing
+- **Memory categories**: Person (people), Preference (user preferences), Context (recurring context), Project (project-specific info)
+- **Version history**: Updates create new versions, preserving full history of changes
+- **Token-efficient IDs**: Short 8-character alphanumeric IDs instead of UUIDs
+- **Prompt caching**: Memory loaded once per conversation with deterministic ordering
+
+#### How It Works
+1. User shares information ("Alec is my boss")
+2. Agent asks for confirmation ("Should I remember that for future conversations?")
+3. User confirms → memory stored with category and optional subject
+4. In future conversations, memory is included in the system prompt
+5. Agent can update memories when information changes (no confirmation needed for updates)
+
+#### Memory Format in Context
+Memories are grouped by category and include IDs for reference:
+```
+### Person
+- [id:a1b2c3d4] [Alec] Alec is my boss at TechCorp
+
+### Preference
+- [id:e5f6g7h8] User prefers tasks due on Fridays
+```
+
+#### Storage
+Memory uses two PostgreSQL tables:
+- `agent_memories`: Memory metadata (id, category, subject, lifecycle)
+- `agent_memory_versions`: Content history with version tracking
+
 ### User Reminders
 Set one-time and recurring reminders via the AI agent, delivered via Telegram with acknowledgement buttons.
 
@@ -470,7 +503,17 @@ The API service starts automatically with docker-compose. Access OpenAPI documen
 | POST   | /reminders/query     | Yes  | Query reminders with optional filters            |
 | GET    | /reminders/{id}      | Yes  | Retrieve a reminder schedule                     |
 | POST   | /reminders           | Yes  | Create a one-time or recurring reminder          |
+| PATCH  | /reminders/{id}      | Yes  | Update a reminder schedule                       |
 | DELETE | /reminders/{id}      | Yes  | Cancel (deactivate) a reminder                   |
+
+##### Memory
+| Method | Path             | Auth | Description                                      |
+|--------|------------------|------|--------------------------------------------------|
+| GET    | /memory          | Yes  | List all active memories                         |
+| GET    | /memory/{id}     | Yes  | Retrieve a memory with version history           |
+| POST   | /memory          | Yes  | Create a new memory entry                        |
+| PATCH  | /memory/{id}     | Yes  | Update a memory (creates new version)            |
+| DELETE | /memory/{id}     | Yes  | Soft-delete a memory                             |
 
 ##### Fuzzy Name Search
 All query endpoints support fuzzy name matching via `name_filter` parameter. Results are scored using `partial_ratio` matching and returned with a quality indicator:
@@ -519,7 +562,7 @@ When creating items, the agent provides structured inputs that are automatically
 The agent cannot create arbitrary content - it must use these structured fields, which are then formatted via templates with an "AI Agent" attribution footer. This ensures consistent, well-structured page content.
 
 #### Available Tools
-The agent has 19 built-in tools organised by domain:
+The agent has 22 built-in tools organised by domain:
 
 | Domain       | Tools                                                                          |
 |--------------|--------------------------------------------------------------------------------|
@@ -527,7 +570,8 @@ The agent has 19 built-in tools organised by domain:
 | Goals        | query_goals, get_goal, create_goals, update_goal                               |
 | Reading List | query_reading_list, get_reading_item, create_reading_list, update_reading_item |
 | Ideas        | query_ideas, get_idea, create_ideas, update_idea                               |
-| Reminders    | create_reminder, query_reminders, cancel_reminder                              |
+| Reminders    | create_reminder, query_reminders, update_reminder, cancel_reminder             |
+| Memory       | add_to_memory, update_memory (system tools, always available)                  |
 
 #### Agent Runner
 The AgentRunner executes the reasoning and tool-calling loop with safety guardrails:
@@ -625,7 +669,7 @@ The agent:
 #### Cost and Token Tracking
 The agent automatically tracks all LLM calls, tokens, and costs. Each Bedrock API call is recorded with:
 - Request messages and response content (stored as JSONB)
-- Input, output, and cache-read token counts
+- Input, output, cache-read, and cache-write token counts
 - Estimated cost based on model pricing
 - Call latency in milliseconds
 - Call type (chat, selector, classifier, or summariser)
@@ -638,11 +682,41 @@ Tracking data is organised in three tables:
 ##### Model Pricing
 Costs are estimated per 1,000 tokens:
 
-| Model  | Input   | Output  | Cache Read |
-|--------|---------|---------|------------|
-| Haiku  | $0.001  | $0.005  | $0.0001    |
-| Sonnet | $0.003  | $0.015  | $0.0003    |
-| Opus   | $0.005  | $0.025  | $0.0005    |
+| Model  | Input   | Output  | Cache Read | Cache Write |
+|--------|---------|---------|------------|-------------|
+| Haiku  | $0.001  | $0.005  | $0.0001    | $0.00125    |
+| Sonnet | $0.003  | $0.015  | $0.0003    | $0.00375    |
+| Opus   | $0.005  | $0.025  | $0.0005    | $0.00625    |
+
+##### Prompt Caching Strategy
+The agent uses AWS Bedrock's prompt caching to reduce costs for multi-turn conversations. Cache reads are charged at 10% of the input rate (90% savings), while cache writes cost 125% of the input rate (25% premium).
+
+**System Prompt Caching**
+The system prompt is fully static with no dynamic content (datetime, user info, etc.). This ensures the ~400 token system prompt is cached once and reused across all turns.
+
+**Tool Configuration Caching**
+Tools are organised by domain (e.g., `domain:tasks`, `domain:goals`). Each domain has a cache point placed after its tools in the tool configuration:
+
+```
+[task_tools...] → cachePoint → [goal_tools...] → cachePoint → [reminder_tools...]
+```
+
+This incremental caching strategy means:
+1. First turn: Cache write for system prompt + selected domains
+2. Subsequent turns with same domains: Cache read (90% savings)
+3. Adding a new domain: Cache read for existing domains + cache write for new domain only
+
+**Domain Ordering for Cache Stability**
+When merging domains across turns, existing domains are placed first to maintain cache order:
+- Turn 1 selects `[tasks]` → cached
+- Turn 2 adds `[goals]` → merged as `[tasks, goals]` → tasks cache hit, goals cache write
+- Turn 3 continues → `[tasks, goals]` cache hit for both
+
+**Expected Cache Efficiency**
+For typical multi-turn conversations:
+- ~86% cache read rate after the first turn
+- Break-even after 2 turns (cache write premium recovered by cache reads)
+- Significant savings for longer conversations
 
 ### Notion Integration
 API wrapper for Notion to query and manage tasks, goals, reading items, and ideas. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.

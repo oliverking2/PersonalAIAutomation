@@ -106,6 +106,8 @@ class WorkTaskAlertProvider:
     def get_pending_alerts(self) -> list[AlertData]:
         """Get work task summary for daily reminder.
 
+        Includes overdue tasks and tasks due today as a morning digest.
+
         :returns: List with single AlertData or empty if no relevant tasks.
         """
         today = date.today()
@@ -114,6 +116,14 @@ class WorkTaskAlertProvider:
 
         items: list[AlertItem] = []
         work_groups = [TaskGroup.WORK]
+
+        # Get overdue work tasks (due before today, not done)
+        overdue_tasks = _query_tasks(
+            self._client,
+            TaskQueryParams(due_before=today, task_groups=work_groups),
+        )
+        for task in overdue_tasks:
+            items.append(_create_alert_item(task, "overdue", today))
 
         # Get work tasks due today
         due_today_tasks = _query_tasks(
@@ -161,7 +171,10 @@ class WorkTaskAlertProvider:
             logger.info("No work tasks for daily reminder")
             return []
 
-        log_parts = [f"{len(due_today_tasks)} due today"]
+        log_parts = []
+        if overdue_tasks:
+            log_parts.append(f"{len(overdue_tasks)} overdue")
+        log_parts.append(f"{len(due_today_tasks)} due today")
         if is_monday:
             log_parts.append(f"{high_priority_count} high priority")
             log_parts.append(f"{medium_priority_count} medium priority this week")
@@ -204,6 +217,8 @@ class PersonalTaskAlertProvider:
     def get_pending_alerts(self) -> list[AlertData]:
         """Get personal task summary for daily reminder.
 
+        Includes overdue tasks and tasks due today as a morning digest.
+
         :returns: List with single AlertData or empty if no relevant tasks.
         """
         today = date.today()
@@ -212,6 +227,14 @@ class PersonalTaskAlertProvider:
 
         items: list[AlertItem] = []
         personal_groups = [TaskGroup.PERSONAL, TaskGroup.PHOTOGRAPHY]
+
+        # Get overdue personal/photography tasks (due before today, not done)
+        overdue_tasks = _query_tasks(
+            self._client,
+            TaskQueryParams(due_before=today, task_groups=personal_groups),
+        )
+        for task in overdue_tasks:
+            items.append(_create_alert_item(task, "overdue", today))
 
         # Get personal/photography tasks due today
         due_today_tasks = _query_tasks(
@@ -259,7 +282,10 @@ class PersonalTaskAlertProvider:
             logger.info("No personal tasks for daily reminder")
             return []
 
-        log_parts = [f"{len(due_today_tasks)} due today"]
+        log_parts = []
+        if overdue_tasks:
+            log_parts.append(f"{len(overdue_tasks)} overdue")
+        log_parts.append(f"{len(due_today_tasks)} due today")
         if is_saturday:
             log_parts.append(f"{high_priority_count} high priority")
             log_parts.append(f"{medium_priority_count} medium priority this weekend")

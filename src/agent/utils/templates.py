@@ -4,8 +4,6 @@ This module provides template builders for generating structured markdown
 content when creating tasks, goals, and reading list items via the agent.
 """
 
-from datetime import date
-
 
 def build_task_content(
     description: str | None = None,
@@ -21,9 +19,8 @@ def build_task_content(
     if description:
         lines.extend(["## Description", description, ""])
     if notes:
-        lines.extend(["## Notes", notes, ""])
+        lines.extend(["## Notes", notes])
 
-    lines.extend(["---", f"Created via AI Agent on {date.today()}"])
     return "\n".join(lines)
 
 
@@ -41,9 +38,8 @@ def build_goal_content(
     if description:
         lines.extend(["## Description", description, ""])
     if notes:
-        lines.extend(["## Notes", notes, ""])
+        lines.extend(["## Notes", notes])
 
-    lines.extend(["---", f"Created via AI Agent on {date.today()}"])
     return "\n".join(lines)
 
 
@@ -59,7 +55,6 @@ def build_reading_item_content(notes: str | None = None) -> str:
     else:
         lines.append("(Add notes after reading)")
 
-    lines.extend(["", "---", f"Added via AI Agent on {date.today()}"])
     return "\n".join(lines)
 
 
@@ -75,5 +70,4 @@ def build_idea_content(notes: str | None = None) -> str:
     else:
         lines.append("(Add details here)")
 
-    lines.extend(["", "---", f"Captured via AI Agent on {date.today()}"])
     return "\n".join(lines)

@@ -12,6 +12,12 @@ Beyond writing code, Claude should act as a thoughtful collaborator:
 - **Be realistic about complexity**: Don't oversell or undersell difficulty. Be honest about what's straightforward vs what will be tricky.
 - **Explain the "why"**: Don't just implement - explain why we're choosing one approach over another.
 - **Teach, don't just deliver**: Help understand what code is doing so it can be modified later. The goal is knowledge transfer, not just working code.
+- **Suggest external packages**: Before implementing complex functionality from scratch, look for well-supported external packages that could simplify the codebase. Proactively suggest packages when they would:
+  - Replace significant custom code with a maintained solution
+  - Provide better error handling, edge cases, or testing than a quick implementation
+  - Be well-maintained (recent commits, active issues, good documentation)
+  - Have good typing support (type stubs or inline types)
+  - Be widely adopted in the Python ecosystem
 
 ## Build Commands
 
@@ -142,7 +148,7 @@ This ensures:
 - Tests live under `testing/` and mirror `src/` structure.
 - Do not create new top-level folders unless explicitly asked.
 - Review `ROADMAP.md` before starting work and update it when completing features.
-- Review existing PRDs in `.claude/prds/` before implementing new features.
+- Review existing PRDs in `prds/` before implementing new features.
 
 ## Coding Standards
 

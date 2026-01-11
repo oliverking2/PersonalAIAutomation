@@ -275,6 +275,14 @@ class AsyncInternalAPIClient:
         result = await self._request("PATCH", path, json=json)
         return cast(dict[str, Any], result)
 
+    async def delete(self, path: str) -> None:
+        """Make a DELETE request to the API.
+
+        :param path: API endpoint path.
+        :raises InternalAPIClientError: If the request fails.
+        """
+        await self._request("DELETE", path)
+
     async def _request(
         self,
         method: str,
@@ -305,6 +313,10 @@ class AsyncInternalAPIClient:
                     f"{response.status_code}: {error_detail}"
                 )
                 raise InternalAPIClientError(error_detail, status_code=response.status_code)
+
+            # Handle 204 No Content (e.g., DELETE responses)
+            if response.status_code == HTTP_NO_CONTENT:
+                return {}
 
             result = response.json()
             return list(result) if isinstance(result, list) else dict(result)

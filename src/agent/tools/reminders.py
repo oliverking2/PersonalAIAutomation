@@ -70,6 +70,36 @@ class CancelReminderArgs(BaseModel):
     )
 
 
+class UpdateReminderArgs(BaseModel):
+    """Arguments for updating a reminder."""
+
+    reminder_id: str = Field(
+        ...,
+        min_length=1,
+        description="The ID of the reminder to update",
+    )
+    message: str | None = Field(
+        None,
+        min_length=1,
+        max_length=500,
+        description="New reminder message",
+    )
+    trigger_at: datetime | None = Field(
+        None,
+        description=(
+            "New trigger time (ISO 8601 format with timezone, "
+            "e.g. '2024-01-15T09:00:00Z' or '2024-01-15T09:00:00+00:00')"
+        ),
+    )
+    cron_schedule: str | None = Field(
+        None,
+        description=(
+            "New cron schedule (e.g. '0 9 * * 2' for Tuesday at 9am). "
+            "Set to empty string to convert a recurring reminder to one-time."
+        ),
+    )
+
+
 def _get_client() -> InternalAPIClient:
     """Get an API client instance.
 
@@ -129,6 +159,7 @@ def _query_reminders_handler(args: BaseModel) -> dict[str, Any]:
             "id": r.get("id"),
             "message": r.get("message"),
             "next_trigger_at": r.get("next_trigger_at"),
+            "cron_schedule": r.get("cron_schedule"),
             "is_recurring": r.get("is_recurring"),
             "is_active": r.get("is_active"),
         }
@@ -156,6 +187,40 @@ def _cancel_reminder_handler(args: BaseModel) -> dict[str, Any]:
     }
 
 
+def _update_reminder_handler(args: BaseModel) -> dict[str, Any]:
+    """Handle reminder update.
+
+    :param args: UpdateReminderArgs instance.
+    :returns: Updated reminder details.
+    """
+    update_args = cast(UpdateReminderArgs, args)
+    logger.debug(f"Updating reminder: id={update_args.reminder_id}")
+
+    # Build the update payload, only including provided fields
+    payload: dict[str, Any] = {}
+    if update_args.message is not None:
+        payload["message"] = update_args.message
+    if update_args.trigger_at is not None:
+        payload["trigger_at"] = update_args.trigger_at.isoformat()
+    if update_args.cron_schedule is not None:
+        payload["cron_schedule"] = update_args.cron_schedule
+
+    with _get_client() as client:
+        response = client.patch(
+            f"/reminders/{update_args.reminder_id}",
+            json=payload,
+        )
+
+    return {
+        "id": response.get("id"),
+        "message": response.get("message"),
+        "next_trigger_at": response.get("next_trigger_at"),
+        "cron_schedule": response.get("cron_schedule"),
+        "is_recurring": response.get("is_recurring"),
+        "updated": True,
+    }
+
+
 CREATE_REMINDER_TOOL = ToolDef(
     name="create_reminder",
     description=(
@@ -164,7 +229,7 @@ CREATE_REMINDER_TOOL = ToolDef(
         "For recurring reminders, also provide a cron_schedule (e.g. '0 9 * * 1-5' for "
         "weekdays at 9am). The trigger_at must be in ISO 8601 format with timezone."
     ),
-    tags=frozenset({"reminders", "create"}),
+    tags=frozenset({"domain:reminders", "reminders", "create"}),
     risk_level=RiskLevel.SAFE,
     args_model=CreateReminderArgs,
     handler=_create_reminder_handler,
@@ -177,7 +242,7 @@ QUERY_REMINDERS_TOOL = ToolDef(
         "set include_inactive=true to include cancelled or completed reminders. "
         "Returns reminder ID, message, next trigger time, and whether it's recurring."
     ),
-    tags=frozenset({"reminders", "query", "list"}),
+    tags=frozenset({"domain:reminders", "reminders", "query", "list"}),
     risk_level=RiskLevel.SAFE,
     args_model=QueryRemindersArgs,
     handler=_query_reminders_handler,
@@ -190,10 +255,25 @@ CANCEL_REMINDER_TOOL = ToolDef(
         "triggering or sending any more messages. Use query_reminders first to find "
         "the reminder ID if you don't have it."
     ),
-    tags=frozenset({"reminders", "cancel", "delete", "remove"}),
+    tags=frozenset({"domain:reminders", "reminders", "cancel", "delete", "remove"}),
     risk_level=RiskLevel.SENSITIVE,
     args_model=CancelReminderArgs,
     handler=_cancel_reminder_handler,
+)
+
+UPDATE_REMINDER_TOOL = ToolDef(
+    name="update_reminder",
+    description=(
+        "Update an existing reminder's message, schedule, or trigger time. "
+        "You can update any combination of: message (the reminder text), "
+        "trigger_at (when it triggers), or cron_schedule (the recurrence pattern). "
+        "To convert a recurring reminder to one-time, set cron_schedule to empty string. "
+        "Use query_reminders first to find the reminder ID if you don't have it."
+    ),
+    tags=frozenset({"domain:reminders", "reminders", "update", "edit", "modify"}),
+    risk_level=RiskLevel.SENSITIVE,
+    args_model=UpdateReminderArgs,
+    handler=_update_reminder_handler,
 )
 
 
@@ -205,5 +285,6 @@ def get_reminders_tools() -> list[ToolDef]:
     return [
         CREATE_REMINDER_TOOL,
         QUERY_REMINDERS_TOOL,
+        UPDATE_REMINDER_TOOL,
         CANCEL_REMINDER_TOOL,
     ]

@@ -4,15 +4,19 @@ import logging
 from typing import Any
 
 from src.agent.enums import RiskLevel
-from src.agent.exceptions import DuplicateToolError, ToolNotFoundError
+from src.agent.exceptions import DomainSizeError, DuplicateToolError, ToolNotFoundError
 from src.agent.models import ToolDef, ToolMetadata
 from src.agent.tools import (
     get_goals_tools,
     get_ideas_tools,
+    get_memory_tools,
     get_reading_list_tools,
     get_reminders_tools,
     get_tasks_tools,
 )
+
+# Maximum tools per domain - must be <= DEFAULT_MAX_TOOLS in selector
+MAX_TOOLS_PER_DOMAIN = 10
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,10 @@ def create_default_registry() -> "ToolRegistry":
     :returns: ToolRegistry instance with all tools registered.
     """
     registry = ToolRegistry()
+
+    # Register system tools (always available)
+    for tool in get_memory_tools():
+        registry.register(tool)
 
     # Register all tool groups
     for tool in get_reading_list_tools():
@@ -42,6 +50,9 @@ def create_default_registry() -> "ToolRegistry":
 
     for tool in get_reminders_tools():
         registry.register(tool)
+
+    # Validate no domain exceeds max tool limit
+    registry.validate_domain_sizes()
 
     logger.info(f"Created default registry with {len(registry)} tools")
     return registry
@@ -132,28 +143,28 @@ class ToolRegistry:
         """
         return [tool for tool in self._tools.values() if tool.risk_level == risk_level]
 
-    def get_standard_tools(self) -> list[ToolDef]:
-        """Get tools tagged as 'standard'.
+    def get_system_tools(self) -> list[ToolDef]:
+        """Get tools tagged as 'system'.
 
-        Standard tools are always included in agent runs and are intended
-        to be cached in the system prompt for cost efficiency.
+        System tools are always available and bypass normal tool selection.
+        They are core agent capabilities like memory management.
 
-        :returns: List of standard tool definitions.
+        :returns: List of system tool definitions.
         """
-        return self.filter_by_tags({"standard"})
+        return self.filter_by_tags({"system"})
 
     def get_selectable_tools(self) -> list[ToolDef]:
-        """Get tools that are NOT tagged as 'standard'.
+        """Get tools that are NOT tagged as 'system'.
 
         These are domain-specific tools that should be selected per-request
         by the ToolSelector based on user intent.
 
-        :returns: List of selectable (non-standard) tool definitions.
+        :returns: List of selectable (non-system) tool definitions.
         """
-        return [tool for tool in self._tools.values() if "standard" not in tool.tags]
+        return [tool for tool in self._tools.values() if "system" not in tool.tags]
 
     def list_selectable_metadata(self) -> list[ToolMetadata]:
-        """List metadata for selectable (non-standard) tools.
+        """List metadata for selectable tools.
 
         Used by ToolSelector to present only domain tools for selection.
 
@@ -178,6 +189,85 @@ class ToolRegistry:
         """
         tools = self.get_many(tool_names)
         return {"tools": [tool.to_bedrock_tool_spec() for tool in tools]}
+
+    def to_bedrock_tool_config_with_cache_points(
+        self,
+        domains: list[str],
+    ) -> dict[str, Any]:
+        """Generate Bedrock toolConfig with cache points after each domain.
+
+        Groups tools by domain and adds a cachePoint after each domain's tools.
+        This enables incremental caching - when a new domain is added, only
+        the new domain's tools need to be cache-written while previous domains
+        are cache-read.
+
+        :param domains: Ordered list of domains (order determines cache point placement).
+        :returns: Bedrock-compatible toolConfig with cache points.
+        """
+        tools_list: list[dict[str, Any]] = []
+
+        for domain in domains:
+            # Get all tools for this domain
+            domain_tools = [tool for tool in self._tools.values() if domain in tool.tags]
+
+            # Add tool specs for this domain
+            for tool in domain_tools:
+                tools_list.append(tool.to_bedrock_tool_spec())
+
+            # Add cache point after this domain's tools (if we added any tools)
+            if domain_tools:
+                tools_list.append({"cachePoint": {"type": "default"}})
+
+        return {"tools": tools_list}
+
+    def get_domains(self) -> set[str]:
+        """Get all unique domain tags from registered tools.
+
+        Domain tags have the format 'domain:{name}' (e.g., 'domain:tasks').
+
+        :returns: Set of unique domain tags.
+        """
+        domains: set[str] = set()
+        for tool in self._tools.values():
+            for tag in tool.tags:
+                if tag.startswith("domain:"):
+                    domains.add(tag)
+        return domains
+
+    def get_tools_by_domain(self, domain_tag: str) -> list[ToolDef]:
+        """Get all tools for a specific domain.
+
+        :param domain_tag: Domain tag (e.g., 'domain:tasks').
+        :returns: List of tools in that domain.
+        """
+        return [tool for tool in self._tools.values() if domain_tag in tool.tags]
+
+    def get_domain_tool_count(self) -> dict[str, int]:
+        """Get count of tools per domain.
+
+        :returns: Dictionary mapping domain tags to tool counts.
+        """
+        counts: dict[str, int] = {}
+        for tool in self._tools.values():
+            for tag in tool.tags:
+                if tag.startswith("domain:"):
+                    counts[tag] = counts.get(tag, 0) + 1
+        return counts
+
+    def validate_domain_sizes(self, max_tools: int = MAX_TOOLS_PER_DOMAIN) -> None:
+        """Validate that no domain exceeds the maximum tool count.
+
+        This should be called after all tools are registered to catch
+        configuration errors early before the agent starts.
+
+        :param max_tools: Maximum allowed tools per domain.
+        :raises DomainSizeError: If any domain exceeds the limit.
+        """
+        counts = self.get_domain_tool_count()
+        for domain, count in counts.items():
+            if count > max_tools:
+                raise DomainSizeError(domain, count, max_tools)
+        logger.debug(f"Domain sizes validated: {counts}")
 
     def __len__(self) -> int:
         """Return the number of registered tools."""

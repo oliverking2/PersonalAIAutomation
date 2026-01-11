@@ -9,8 +9,13 @@ from alembic import context
 from src.database.connection import create_db_engine, get_database_url
 from src.database.core import Base
 from src.database.agent_tracking.models import *  # noqa: F403
+from src.database.alerts.models import *  # noqa: F403
 from src.database.extraction_state.models import *  # noqa: F403
+from src.database.medium.models import *  # noqa: F403
+from src.database.memory.models import *  # noqa: F403
 from src.database.newsletters.models import *  # noqa: F403
+from src.database.reminders.models import *  # noqa: F403
+from src.database.substack.models import *  # noqa: F403
 from src.database.telegram.models import *  # noqa: F403
 
 # Load environment variables

@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.api.health import router as health_router
+from src.api.memory import router as memory_router
 from src.api.models import ErrorResponse
 from src.api.notion import router as notion_router
 from src.api.reminders import router as reminders_router
@@ -65,6 +66,7 @@ async def validation_exception_handler(
 
 
 app.include_router(health_router)
+app.include_router(memory_router, dependencies=[Depends(verify_token)])
 app.include_router(notion_router, dependencies=[Depends(verify_token)])
 app.include_router(reminders_router, dependencies=[Depends(verify_token)])
 

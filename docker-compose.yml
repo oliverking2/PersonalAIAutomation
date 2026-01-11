@@ -59,7 +59,7 @@ services:
     build: .
     container_name: personal_automation_telegram
     restart: unless-stopped
-    command: ["python", "-m", "src.telegram"]
+    command: ["python", "-m", "src.messaging.telegram"]
     env_file: .env
     environment:
       - DATABASE_HOST=postgres

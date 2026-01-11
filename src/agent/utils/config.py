@@ -16,24 +16,29 @@ class ModelPricing(NamedTuple):
     input_per_1k: Decimal
     output_per_1k: Decimal
     cache_read_per_1k: Decimal
+    cache_write_per_1k: Decimal
 
 
 # Pricing per 1,000 tokens (as of December 2025)
+# Cache reads are 10% of input rate, cache writes are 125% of input rate
 MODEL_PRICING: dict[str, ModelPricing] = {
     "haiku": ModelPricing(
         input_per_1k=Decimal("0.001"),
         output_per_1k=Decimal("0.005"),
         cache_read_per_1k=Decimal("0.0001"),
+        cache_write_per_1k=Decimal("0.00125"),
     ),
     "sonnet": ModelPricing(
         input_per_1k=Decimal("0.003"),
         output_per_1k=Decimal("0.015"),
         cache_read_per_1k=Decimal("0.0003"),
+        cache_write_per_1k=Decimal("0.00375"),
     ),
     "opus": ModelPricing(
         input_per_1k=Decimal("0.005"),
         output_per_1k=Decimal("0.025"),
         cache_read_per_1k=Decimal("0.0005"),
+        cache_write_per_1k=Decimal("0.00625"),
     ),
 }
 

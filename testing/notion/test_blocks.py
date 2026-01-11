@@ -3,6 +3,8 @@
 import unittest
 
 from src.notion.blocks import (
+    UnsupportedBlockTypeError,
+    UnsupportedMarkdownError,
     blocks_to_markdown,
     markdown_to_blocks,
 )
@@ -277,17 +279,18 @@ class TestBlocksToMarkdown(unittest.TestCase):
         result = blocks_to_markdown(blocks)
         self.assertEqual(result, "This is plain text.")
 
-    def test_unknown_block_type_is_skipped(self) -> None:
-        """Unknown block types should be skipped."""
+    def test_unsupported_block_type_raises_exception(self) -> None:
+        """Unsupported block types should raise UnsupportedBlockTypeError."""
         blocks = [
-            {"type": "unknown_type", "unknown_type": {}},
+            {"type": "code", "code": {"rich_text": [{"plain_text": "print()"}]}},
             {
                 "type": "paragraph",
                 "paragraph": {"rich_text": [{"plain_text": "Valid"}]},
             },
         ]
-        result = blocks_to_markdown(blocks)
-        self.assertEqual(result, "Valid")
+        with self.assertRaises(UnsupportedBlockTypeError) as ctx:
+            blocks_to_markdown(blocks)
+        self.assertIn("code", ctx.exception.unsupported_types)
 
     def test_rich_text_with_text_content(self) -> None:
         """Rich text with text.content structure should be handled."""
@@ -422,10 +425,11 @@ class TestMalformedMarkdown(unittest.TestCase):
         self.assertEqual(len(result[0]["paragraph"]["rich_text"][0]["text"]["content"]), 10000)
 
     def test_special_characters(self) -> None:
-        """Special characters should be preserved."""
-        result = markdown_to_blocks("## <script>alert('xss')</script>")
+        """Safe special characters should be preserved."""
+        # Note: HTML tags like <script> are rejected as unsupported markdown
+        result = markdown_to_blocks("## Test & symbols: @#$%^*()")
         content = result[0]["heading_2"]["rich_text"][0]["text"]["content"]
-        self.assertEqual(content, "<script>alert('xss')</script>")
+        self.assertEqual(content, "Test & symbols: @#$%^*()")
 
     def test_none_input_handled(self) -> None:
         """None-like empty input should return empty list."""
@@ -440,9 +444,13 @@ class TestMalformedMarkdown(unittest.TestCase):
 
     def test_tabs_and_spaces(self) -> None:
         """Tabs and spaces should be preserved in content."""
-        result = markdown_to_blocks("  \tIndented text")
+        # Note: Leading whitespace is interpreted as code block by markdown parser
+        # Test internal whitespace instead
+        result = markdown_to_blocks("Text with\ttab and  spaces")
         self.assertEqual(result[0]["type"], "paragraph")
-        self.assertIn("\t", result[0]["paragraph"]["rich_text"][0]["text"]["content"])
+        content = result[0]["paragraph"]["rich_text"][0]["text"]["content"]
+        self.assertIn("\t", content)
+        self.assertIn("  ", content)
 
 
 class TestMalformedBlocks(unittest.TestCase):
@@ -538,6 +546,161 @@ class TestMalformedBlocks(unittest.TestCase):
         ]
         result = blocks_to_markdown(blocks)
         self.assertEqual(result, "Hello World")
+
+
+class TestUnsupportedBlockTypeError(unittest.TestCase):
+    """Tests for UnsupportedBlockTypeError exception handling."""
+
+    def test_single_unsupported_type_raises_exception(self) -> None:
+        """Single unsupported block type should raise with that type listed."""
+        blocks = [
+            {"type": "image", "image": {"external": {"url": "https://example.com/img.png"}}},
+        ]
+        with self.assertRaises(UnsupportedBlockTypeError) as ctx:
+            blocks_to_markdown(blocks)
+        self.assertEqual(ctx.exception.unsupported_types, {"image"})
+        self.assertIn("image", str(ctx.exception))
+
+    def test_multiple_unsupported_types_all_reported(self) -> None:
+        """Multiple unsupported block types should all be reported."""
+        blocks = [
+            {"type": "code", "code": {"rich_text": [{"plain_text": "x = 1"}]}},
+            {"type": "image", "image": {"external": {"url": "https://example.com/img.png"}}},
+            {"type": "table", "table": {"table_width": 2}},
+        ]
+        with self.assertRaises(UnsupportedBlockTypeError) as ctx:
+            blocks_to_markdown(blocks)
+        self.assertEqual(ctx.exception.unsupported_types, {"code", "image", "table"})
+
+    def test_mixed_supported_and_unsupported_raises_exception(self) -> None:
+        """Blocks with mix of supported and unsupported types should raise."""
+        blocks = [
+            {"type": "heading_2", "heading_2": {"rich_text": [{"plain_text": "Title"}]}},
+            {"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": "Text"}]}},
+            {"type": "embed", "embed": {"url": "https://example.com"}},
+        ]
+        with self.assertRaises(UnsupportedBlockTypeError) as ctx:
+            blocks_to_markdown(blocks)
+        self.assertEqual(ctx.exception.unsupported_types, {"embed"})
+
+    def test_exception_message_contains_block_types(self) -> None:
+        """Exception message should list all unsupported block types."""
+        blocks = [
+            {"type": "callout", "callout": {"rich_text": [{"plain_text": "Note"}]}},
+            {"type": "quote", "quote": {"rich_text": [{"plain_text": "Quote"}]}},
+        ]
+        with self.assertRaises(UnsupportedBlockTypeError) as ctx:
+            blocks_to_markdown(blocks)
+        error_message = str(ctx.exception)
+        self.assertIn("callout", error_message)
+        self.assertIn("quote", error_message)
+        self.assertIn("unsupported block types", error_message.lower())
+
+    def test_all_supported_types_do_not_raise(self) -> None:
+        """All supported block types should not raise exception."""
+        blocks = [
+            {"type": "heading_2", "heading_2": {"rich_text": [{"plain_text": "H2"}]}},
+            {"type": "heading_3", "heading_3": {"rich_text": [{"plain_text": "H3"}]}},
+            {"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": "Para"}]}},
+            {
+                "type": "bulleted_list_item",
+                "bulleted_list_item": {"rich_text": [{"plain_text": "Bullet"}]},
+            },
+            {
+                "type": "numbered_list_item",
+                "numbered_list_item": {"rich_text": [{"plain_text": "Number"}]},
+            },
+            {"type": "to_do", "to_do": {"rich_text": [{"plain_text": "Todo"}], "checked": False}},
+            {"type": "divider", "divider": {}},
+        ]
+        # Should not raise
+        result = blocks_to_markdown(blocks)
+        self.assertIn("H2", result)
+        self.assertIn("Para", result)
+
+    def test_empty_blocks_do_not_raise(self) -> None:
+        """Empty blocks list should not raise exception."""
+        result = blocks_to_markdown([])
+        self.assertEqual(result, "")
+
+    def test_exception_message_suggests_notion_edit(self) -> None:
+        """Exception message should tell user to edit in Notion."""
+        blocks = [{"type": "video", "video": {"external": {"url": "https://example.com/vid.mp4"}}}]
+        with self.assertRaises(UnsupportedBlockTypeError) as ctx:
+            blocks_to_markdown(blocks)
+        self.assertIn("Notion", str(ctx.exception))
+
+
+class TestUnsupportedMarkdownError(unittest.TestCase):
+    """Tests for UnsupportedMarkdownError exception on write."""
+
+    def test_table_raises_exception(self) -> None:
+        """Markdown tables should raise UnsupportedMarkdownError."""
+        markdown = "| Header |\n|---|\n| Cell |"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        self.assertEqual(ctx.exception.unsupported_constructs, {"table"})
+
+    def test_code_block_raises_exception(self) -> None:
+        """Fenced code blocks should raise UnsupportedMarkdownError."""
+        markdown = "```python\nprint('hello')\n```"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        self.assertEqual(ctx.exception.unsupported_constructs, {"code block"})
+
+    def test_image_raises_exception(self) -> None:
+        """Markdown images should raise UnsupportedMarkdownError."""
+        markdown = "![alt text](image.png)"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        self.assertEqual(ctx.exception.unsupported_constructs, {"image"})
+
+    def test_link_raises_exception(self) -> None:
+        """Markdown links should raise UnsupportedMarkdownError."""
+        markdown = "[link text](https://example.com)"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        self.assertEqual(ctx.exception.unsupported_constructs, {"link"})
+
+    def test_blockquote_raises_exception(self) -> None:
+        """Blockquotes should raise UnsupportedMarkdownError."""
+        markdown = "> quoted text"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        self.assertEqual(ctx.exception.unsupported_constructs, {"blockquote"})
+
+    def test_html_raises_exception(self) -> None:
+        """HTML in markdown should raise UnsupportedMarkdownError."""
+        markdown = "<div>HTML content</div>"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        self.assertEqual(ctx.exception.unsupported_constructs, {"HTML"})
+
+    def test_multiple_unsupported_constructs(self) -> None:
+        """Multiple unsupported constructs should all be reported."""
+        markdown = "| Table |\n|---|\n\n> Quote\n\n![img](url)"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        unsupported = ctx.exception.unsupported_constructs
+        self.assertIn("table", unsupported)
+        self.assertIn("blockquote", unsupported)
+        self.assertIn("image", unsupported)
+
+    def test_valid_markdown_does_not_raise(self) -> None:
+        """Supported markdown should not raise exception."""
+        markdown = "## Heading\n\nParagraph text\n\n- Bullet item\n\n1. Numbered item\n\n---"
+        # Should not raise
+        result = markdown_to_blocks(markdown)
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+
+    def test_exception_message_lists_constructs(self) -> None:
+        """Exception message should list the unsupported constructs."""
+        markdown = "```python\ncode\n```"
+        with self.assertRaises(UnsupportedMarkdownError) as ctx:
+            markdown_to_blocks(markdown)
+        self.assertIn("code block", str(ctx.exception))
+        self.assertIn("unsupported markdown", str(ctx.exception).lower())
 
 
 if __name__ == "__main__":

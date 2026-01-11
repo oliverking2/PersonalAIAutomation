@@ -63,7 +63,10 @@ IDEAS_TOOL_CONFIG = CRUDToolConfig(
     update_description=(
         f"Update an existing idea. Requires the idea_id. "
         f"Can update idea (title), status ({_status_options}), idea_group ({_group_options}). "
-        f"Use notes to update page content; omit to keep existing."
+        f"IMPORTANT: Before updating notes, you MUST first call get_idea to retrieve "
+        f"the current content, then merge existing content with your changes. The content field "
+        f"will REPLACE all existing page content. If get_idea fails due to unsupported blocks, "
+        f"inform the user they must edit directly in Notion."
     ),
 )
 

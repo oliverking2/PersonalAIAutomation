@@ -20,11 +20,13 @@ class TestModelPricing(unittest.TestCase):
             input_per_1k=Decimal("0.001"),
             output_per_1k=Decimal("0.005"),
             cache_read_per_1k=Decimal("0.0001"),
+            cache_write_per_1k=Decimal("0.00125"),
         )
 
         self.assertEqual(pricing.input_per_1k, Decimal("0.001"))
         self.assertEqual(pricing.output_per_1k, Decimal("0.005"))
         self.assertEqual(pricing.cache_read_per_1k, Decimal("0.0001"))
+        self.assertEqual(pricing.cache_write_per_1k, Decimal("0.00125"))
 
     def test_model_pricing_immutable(self) -> None:
         """ModelPricing should be immutable (NamedTuple)."""
@@ -32,6 +34,7 @@ class TestModelPricing(unittest.TestCase):
             input_per_1k=Decimal("0.001"),
             output_per_1k=Decimal("0.005"),
             cache_read_per_1k=Decimal("0.0001"),
+            cache_write_per_1k=Decimal("0.00125"),
         )
 
         with self.assertRaises(AttributeError):
@@ -53,12 +56,19 @@ class TestModelPricingDict(unittest.TestCase):
                 self.assertGreater(pricing.input_per_1k, Decimal("0"))
                 self.assertGreater(pricing.output_per_1k, Decimal("0"))
                 self.assertGreater(pricing.cache_read_per_1k, Decimal("0"))
+                self.assertGreater(pricing.cache_write_per_1k, Decimal("0"))
 
     def test_cache_read_cheaper_than_input(self) -> None:
         """Cache read tokens should be cheaper than input tokens."""
         for model, pricing in MODEL_PRICING.items():
             with self.subTest(model=model):
                 self.assertLess(pricing.cache_read_per_1k, pricing.input_per_1k)
+
+    def test_cache_write_more_expensive_than_input(self) -> None:
+        """Cache write tokens should be more expensive than input tokens (125% premium)."""
+        for model, pricing in MODEL_PRICING.items():
+            with self.subTest(model=model):
+                self.assertGreater(pricing.cache_write_per_1k, pricing.input_per_1k)
 
 
 class TestAgentConfig(unittest.TestCase):

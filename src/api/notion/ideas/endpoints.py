@@ -16,7 +16,11 @@ from src.api.notion.ideas.models import (
     IdeaResponse,
     IdeaUpdateRequest,
 )
-from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
+from src.notion.blocks import (
+    UnsupportedBlockTypeError,
+    blocks_to_markdown,
+    markdown_to_blocks,
+)
 from src.notion.client import NotionClient
 from src.notion.enums import IdeaStatus
 from src.notion.exceptions import NotionClientError
@@ -109,6 +113,9 @@ def get_idea(
         )
 
         return _idea_to_response(idea, content=content)
+    except UnsupportedBlockTypeError as e:
+        logger.warning(f"Get idea failed - unsupported blocks: id={idea_id}, error={e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except NotionClientError as e:
         logger.exception(f"Failed to get idea: id={idea_id}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -219,6 +226,12 @@ def update_idea(
                 detail="No properties or content to update.",
             )
 
+        # Check for unsupported blocks before replacing content
+        if request.content is not None:
+            existing_blocks = client.get_page_content(idea_id)
+            if existing_blocks:
+                blocks_to_markdown(existing_blocks)  # Raises if unsupported
+
         # Update properties if any
         if properties:
             data = client.update_page(page_id=idea_id, properties=properties)
@@ -245,6 +258,9 @@ def update_idea(
         )
 
         return _idea_to_response(idea, content=content)
+    except UnsupportedBlockTypeError as e:
+        logger.warning(f"Update idea failed - unsupported blocks: id={idea_id}, error={e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except NotionClientError as e:
         logger.exception(f"Failed to update idea: id={idea_id}, fields={fields}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e

@@ -16,6 +16,7 @@ from src.api.reminders.models import (
     ReminderScheduleResponse,
     SnoozeRequest,
     SnoozeResponse,
+    UpdateReminderRequest,
 )
 from src.database.connection import get_session
 from src.database.reminders import (
@@ -30,6 +31,7 @@ from src.database.reminders import (
     get_schedule_by_id,
     list_schedules_for_chat,
     snooze_instance,
+    update_reminder_schedule,
 )
 
 logger = logging.getLogger(__name__)
@@ -174,6 +176,59 @@ def get_reminder(reminder_id: UUID) -> ReminderScheduleResponse:
 
     elapsed_ms = (time.perf_counter() - start) * 1000
     logger.info(f"Get reminder complete: id={reminder_id}, elapsed={elapsed_ms:.0f}ms")
+
+    return response
+
+
+@router.patch(
+    "/{reminder_id}",
+    response_model=ReminderScheduleResponse,
+    summary="Update reminder",
+)
+def update_reminder(
+    reminder_id: UUID,
+    request: UpdateReminderRequest,
+) -> ReminderScheduleResponse:
+    """Update a reminder schedule.
+
+    Update the message, trigger time, or cron schedule. All fields are optional;
+    only provided fields are updated. To convert a recurring reminder to one-time,
+    pass an empty string for cron_schedule.
+    """
+    start = time.perf_counter()
+    logger.info(
+        f"Update reminder: id={reminder_id}, "
+        f"message={request.message is not None}, "
+        f"trigger_at={request.trigger_at is not None}, "
+        f"cron_schedule={request.cron_schedule!r}"
+    )
+
+    # Check if at least one field is provided
+    if request.message is None and request.trigger_at is None and request.cron_schedule is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one field must be provided for update",
+        )
+
+    with get_session() as session:
+        schedule = update_reminder_schedule(
+            session=session,
+            schedule_id=reminder_id,
+            message=request.message,
+            cron_schedule=request.cron_schedule,
+            next_trigger_at=request.trigger_at,
+        )
+
+        if schedule is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Reminder not found: {reminder_id}",
+            )
+
+        response = _schedule_to_response(schedule)
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info(f"Update reminder complete: id={reminder_id}, elapsed={elapsed_ms:.0f}ms")
 
     return response
 

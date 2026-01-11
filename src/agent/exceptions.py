@@ -33,6 +33,22 @@ class ToolNotFoundError(ToolRegistryError):
         super().__init__(f"Tool '{tool_name}' not found in registry")
 
 
+class DomainSizeError(ToolRegistryError):
+    """Raised when a domain has too many tools."""
+
+    def __init__(self, domain: str, tool_count: int, max_tools: int) -> None:
+        """Initialise DomainSizeError.
+
+        :param domain: The domain that exceeds the limit.
+        :param tool_count: Number of tools in the domain.
+        :param max_tools: Maximum allowed tools per domain.
+        """
+        self.domain = domain
+        self.tool_count = tool_count
+        self.max_tools = max_tools
+        super().__init__(f"Domain '{domain}' has {tool_count} tools, exceeds max of {max_tools}")
+
+
 class BedrockClientError(AgentError):
     """Error related to AWS Bedrock API calls."""
 

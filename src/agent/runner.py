@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from src.agent.bedrock_client import BedrockClient, ToolUseBlock
-from src.agent.enums import ConfirmationType, RiskLevel, ToolDecisionType
+from src.agent.enums import ConfidenceLevel, ConfirmationType, RiskLevel, ToolDecisionType
 from src.agent.exceptions import (
     BedrockClientError,
     BedrockResponseError,
@@ -30,6 +30,7 @@ from src.agent.models import (
     ToolDef,
 )
 from src.agent.utils.call_tracking import TrackingContext, set_tracking_context
+from src.agent.utils.confidence_classifier import classify_action_confidence
 from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
 from src.agent.utils.confirmation_classifier import (
     ClassificationParseError,
@@ -46,6 +47,8 @@ from src.agent.utils.context_manager import (
     save_conversation_state,
     set_pending_confirmation,
 )
+from src.agent.utils.formatting import format_action
+from src.agent.utils.memory import build_memory_context
 from src.agent.utils.tools.registry import ToolRegistry
 from src.agent.utils.tools.selector import ToolSelector
 from src.database.agent_tracking import (
@@ -54,6 +57,7 @@ from src.database.agent_tracking import (
     create_agent_run,
     get_agent_conversation_by_id,
 )
+from src.database.memory import get_active_memories
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime.type_defs import (
@@ -65,17 +69,32 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Default system prompt for the agent (use {current_datetime} placeholder)
+# System prompt (fully static for caching - no dynamic content)
 DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, reading lists, ideas, and reminders.
 
-You can:
-- Query, get, create, and update tasks (including changing due dates, status, priority)
-- Query, get, create, and update goals
-- Query, get, create, and update reading list items
-- Query, get, create, and update ideas
-- Create, query, and cancel reminders (one-time or recurring)
+## Your Capabilities
 
-The current date and time is {current_datetime}.
+You can work with:
+- **Tasks**: Query, get, create, and update tasks (including changing due dates, status, priority)
+- **Goals**: Query, get, create, and update goals
+- **Reading List**: Query, get, create, and update reading list items
+- **Ideas**: Query, get, create, and update ideas
+- **Reminders**: Create, query, update, and cancel reminders (one-time or recurring)
+- **Memory**: Store and update important information for future conversations
+
+## Dynamic Tool Selection
+
+Your available tools are dynamically selected based on the conversation context. Tools are organised into domains (e.g., tasks, goals, reminders). When you discuss a topic, all tools for that domain become available.
+
+Key behaviours:
+- When you switch topics, your available tools will change to match the new domain
+- If the conversation spans multiple domains, tools from the most recent domains are prioritised
+- To manage tool limits, older domains may be dropped when you start discussing new topics
+- You can always bring back a domain by mentioning it again
+
+The tools currently available to you reflect what the system thinks you need based on the conversation so far. If a tool you expect is missing, the user may need to mention that topic more explicitly.
+
+## Guidelines
 
 When using tools:
 1. Analyse the user's request carefully
@@ -87,6 +106,26 @@ When using tools:
 7. Before calling create tools, check if the name/title is specific enough to find later. If vague (e.g., "Send email", "Meeting"), nudge the user for more details
 
 IMPORTANT: Before saying you cannot do something, check your available tools. If you have a tool that could accomplish the task, use it.
+
+## Memory Management
+
+You have persistent memory across conversations. Store facts about people, user preferences, and recurring context - but not transient details.
+
+**Storing new memories:** Ask confirmation first ("Should I remember that?"), then use add_to_memory with an appropriate category (person, preference, context, project).
+
+**Updating memories:** Use update_memory with the memory ID shown as [id:xxxxxxxx]. No confirmation needed for updates.
+
+## Response Formatting
+
+You can use Markdown formatting in your responses. The following formats are supported:
+- **bold** for emphasis or important items
+- *italic* for subtle emphasis
+- ~~strikethrough~~ for removed or cancelled items
+- __underline__ for additional emphasis
+- [text](url) for links
+- ## Headers for section titles
+
+Use formatting sparingly to improve readability. Don't over-format simple responses.
 
 Always be concise and helpful in your responses. Keep responses short and to the point."""
 
@@ -111,6 +150,14 @@ class _ToolUseContext:
     tool_use_id: str
     tool_name: str
     input_args: dict[str, Any]
+
+
+@dataclass
+class _ResolvedTools:
+    """Result of resolving tools for a run."""
+
+    tool_names: list[str]
+    domains: list[str]
 
 
 class AgentRunner:
@@ -145,9 +192,12 @@ class AgentRunner:
         """
         self.registry = registry
         self.client = client or BedrockClient()
-        self.system_prompt = system_prompt
+        self._base_system_prompt = system_prompt
         self.require_confirmation = require_confirmation
         self._config = config
+
+        # Run-scoped system prompt (set at start of each run, includes memory context)
+        self._run_system_prompt: str = ""
 
         # Executor for tool timeout handling (single worker for sequential execution)
         self._tool_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -161,10 +211,27 @@ class AgentRunner:
         # Create internal tool selector
         self._selector = ToolSelector(registry=registry, client=self.client)
 
-        # Cache standard tool names (always included)
-        self._standard_tool_names = [t.name for t in registry.get_standard_tools()]
-        if self._standard_tool_names:
-            logger.debug(f"Standard tools cached: {self._standard_tool_names}")
+        # Cache system tool names (always available, bypass selection)
+        self._system_tool_names = [t.name for t in registry.get_system_tools()]
+        if self._system_tool_names:
+            logger.debug(f"System tools cached: {self._system_tool_names}")
+
+    def _build_system_prompt(self, session: Session) -> None:
+        """Build and store the run-scoped system prompt with memory context.
+
+        Loads active memories from the database and appends them to the base
+        system prompt. Memory ordering is deterministic for prompt caching.
+        The result is stored in `_run_system_prompt` for access during the run.
+
+        :param session: Database session.
+        """
+        memories = get_active_memories(session)
+        memory_context = build_memory_context(memories)
+
+        if memory_context:
+            self._run_system_prompt = f"{self._base_system_prompt}\n\n{memory_context}"
+        else:
+            self._run_system_prompt = self._base_system_prompt
 
     def run(
         self,
@@ -206,6 +273,9 @@ class AgentRunner:
             conversation = create_agent_conversation(session)
             db_conversation_id = conversation.id
             conv_state = ConversationState(conversation_id=db_conversation_id)
+
+        # Build system prompt with memory context (loaded once per run)
+        self._build_system_prompt(session)
 
         agent_run = create_agent_run(
             session, conversation_id=db_conversation_id, user_message=user_message
@@ -291,7 +361,7 @@ class AgentRunner:
             clear_pending_confirmation(conv_state)
 
             return AgentRunResult(
-                response="I couldn't understand your response. Please try again with a clearer answer.",
+                response="Sorry, I didn't quite catch that - could you clarify?",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="classification_error",
@@ -323,7 +393,7 @@ class AgentRunner:
             logger.info("User declined all confirmations")
 
             return AgentRunResult(
-                response="All actions cancelled.",
+                response="No worries, I won't make those changes.",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="user_cancelled",
@@ -376,9 +446,9 @@ class AgentRunner:
         tools = tools_to_execute if tools_to_execute is not None else pending.tools
 
         if not tools:
-            # No tools to execute, just return cancelled message
+            # No tools to execute (edge case)
             return AgentRunResult(
-                response="No actions to execute.",
+                response="Nothing to do here.",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="no_actions",
@@ -456,7 +526,13 @@ class AgentRunner:
             context_length=context_length,
         )
 
-        return self._run_agent_loop(state, self._build_tool_config(all_tool_names), conv_state)
+        # Use domains from conv_state for incremental tool caching
+        domains = conv_state.selected_domains if conv_state else None
+        return self._run_agent_loop(
+            state,
+            self._build_tool_config(all_tool_names, domains),
+            conv_state,
+        )
 
     def _handle_partial_confirmation(
         self,
@@ -541,7 +617,7 @@ class AgentRunner:
             user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
             append_messages(conv_state, [user_msg])
             return AgentRunResult(
-                response="All actions were rejected.",
+                response="Got it, I'll leave everything as is.",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="user_cancelled",
@@ -564,7 +640,7 @@ class AgentRunner:
         user_message: str,
         tool_names: list[str] | None,
         conv_state: ConversationState | None,
-    ) -> list[str]:
+    ) -> _ResolvedTools:
         """Resolve the tools to use for this run.
 
         Uses context-aware tool selection:
@@ -577,10 +653,12 @@ class AgentRunner:
         :param user_message: User message for auto-selection.
         :param tool_names: Explicit tool names override.
         :param conv_state: Conversation state with previous tool selection.
-        :returns: List of selected tool names.
+        :returns: ResolvedTools with tool names and domains.
         """
         if tool_names is not None:
-            return tool_names
+            # Explicit tools - extract domains from them
+            domains = self._selector._tools_to_domains(tool_names)
+            return _ResolvedTools(tool_names=tool_names, domains=domains)
 
         # Get current tools from conversation state (if any)
         current_tools = (
@@ -597,49 +675,80 @@ class AgentRunner:
         )
 
         if current_tools:
-            # Additive mode: merge new tools with existing
+            # Selector already handles merging and pruning - use its result directly
             if selection.tool_names:
-                merged = list(dict.fromkeys(current_tools + selection.tool_names))
-                logger.info(f"Added tools {selection.tool_names}, now have: {merged}")
-                return merged
-            logger.debug(f"No new tools needed, keeping: {current_tools}")
-            return current_tools
+                logger.info(
+                    f"Tool selection: {selection.tool_names}, "
+                    f"domains={selection.domains}, reasoning={selection.reasoning}"
+                )
+                return _ResolvedTools(tool_names=selection.tool_names, domains=selection.domains)
+            # No domains selected - keep current tools
+            logger.debug(f"No domains selected, keeping: {current_tools}")
+            prev_domains = conv_state.selected_domains if conv_state else []
+            return _ResolvedTools(tool_names=current_tools, domains=prev_domains)
         # First turn: use full selection
         logger.info(
             f"Initial tool selection: {selection.tool_names}, reasoning={selection.reasoning}"
         )
-        return selection.tool_names
+        return _ResolvedTools(tool_names=selection.tool_names, domains=selection.domains)
 
     def _build_initial_messages(
         self,
         user_message: str,
         conv_state: ConversationState | None,
+        domain_notification: str | None = None,
     ) -> tuple[list[Any], int]:
         """Build initial messages for the agent run.
 
+        Dynamic context (current datetime, domain changes) is injected here rather
+        than in the system prompt to keep the system prompt fully static and cacheable.
+
         :param user_message: The user's input message.
         :param conv_state: Optional conversation state for context.
+        :param domain_notification: Optional notification about domain changes.
         :returns: Tuple of (messages, context_length) where context_length is
             the number of messages from conversation history.
         """
+        # Build dynamic context prefix (keeps system prompt static for caching)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M %Z").strip()
+        context_parts = [f"[Current time: {current_time}]"]
+        if domain_notification:
+            context_parts.append(domain_notification)
+
+        context_prefix = "\n".join(context_parts)
+        effective_message = f"{context_prefix}\n\n{user_message}"
+
         if conv_state is not None:
             context_messages = build_context_messages(conv_state)
-            new_user_message = self.client.create_user_message(user_message)
+            new_user_message = self.client.create_user_message(effective_message)
             return [*context_messages, new_user_message], len(context_messages)
-        return [self.client.create_user_message(user_message)], 0
+        return [self.client.create_user_message(effective_message)], 0
 
     def _build_tool_config(
         self,
         tool_names: list[str],
+        domains: list[str] | None = None,
     ) -> ToolConfigurationTypeDef | None:
         """Build Bedrock tool configuration from tool names.
 
+        If domains are provided, uses domain-based caching with cache points
+        after each domain's tools for incremental caching.
+
         :param tool_names: List of tool names to include.
+        :param domains: Optional ordered domain list for cache point placement.
         :returns: Tool configuration or None if no tools.
         """
         if not tool_names:
             logger.info("No tools available for this request")
             return None
+
+        if domains:
+            # Use domain-based caching with cache points after each domain
+            return cast(
+                "ToolConfigurationTypeDef",
+                self.registry.to_bedrock_tool_config_with_cache_points(domains),
+            )
+
         return cast(
             "ToolConfigurationTypeDef",
             self.registry.to_bedrock_tool_config(tool_names),
@@ -698,7 +807,7 @@ class AgentRunner:
         self,
         user_message: str,
         tool_names: list[str] | None,
-        conv_state: ConversationState | None = None,
+        conv_state: ConversationState | None,
     ) -> AgentRunResult:
         """Execute the agent run logic.
 
@@ -707,17 +816,24 @@ class AgentRunner:
         :param conv_state: Optional conversation state for context.
         :returns: Result of the agent run.
         """
-        selected_tools = self._resolve_tools(user_message, tool_names, conv_state)
+        resolved = self._resolve_tools(user_message, tool_names, conv_state)
 
-        # Merge standard tools with selected tools (deduplicated)
-        all_tool_names = list(dict.fromkeys(self._standard_tool_names + selected_tools))
+        # Merge system tools with selected tools (deduplicated)
+        all_tool_names = list(dict.fromkeys(self._system_tool_names + resolved.tool_names))
 
-        # Update conversation state with selected tools
+        # Check for domain changes and build notification
+        domain_notification = self._build_domain_change_notification(conv_state, resolved.domains)
+
+        # Update conversation state with selected tools and domains
         if conv_state is not None:
-            conv_state.selected_tools = selected_tools
+            conv_state.selected_tools = resolved.tool_names
+            conv_state.selected_domains = resolved.domains
 
-        tool_config = self._build_tool_config(all_tool_names)
-        initial_messages, context_length = self._build_initial_messages(user_message, conv_state)
+        # Use domains for incremental tool caching (cache point per domain)
+        tool_config = self._build_tool_config(all_tool_names, resolved.domains)
+        initial_messages, context_length = self._build_initial_messages(
+            user_message, conv_state, domain_notification
+        )
 
         state = _RunState(
             messages=initial_messages,
@@ -731,10 +847,48 @@ class AgentRunner:
 
         logger.info(
             f"Starting agent run: tools={all_tool_names or '(none)'}, "
-            f"max_steps={self._config.max_steps}"
+            f"domains={resolved.domains}, max_steps={self._config.max_steps}"
         )
 
         return self._run_agent_loop(state, tool_config, conv_state)
+
+    def _build_domain_change_notification(
+        self,
+        conv_state: ConversationState | None,
+        new_domains: list[str],
+    ) -> str | None:
+        """Build a notification message about domain changes.
+
+        :param conv_state: Conversation state with previous domains.
+        :param new_domains: Newly selected domains.
+        :returns: Notification message or None if no changes.
+        """
+        if conv_state is None or not conv_state.selected_domains:
+            # First turn - no change notification needed
+            return None
+
+        prev_set = set(conv_state.selected_domains)
+        new_set = set(new_domains)
+
+        added = new_set - prev_set
+        removed = prev_set - new_set
+
+        if not added and not removed:
+            return None
+
+        # Build human-readable domain names (strip 'domain:' prefix)
+        def format_domains(domains: set[str]) -> str:
+            return ", ".join(d.replace("domain:", "") for d in sorted(domains))
+
+        parts: list[str] = []
+        if added:
+            parts.append(f"Added domains: {format_domains(added)}")
+        if removed:
+            parts.append(f"Removed domains: {format_domains(removed)}")
+
+        notification = f"[Tool update: {'; '.join(parts)}]"
+        logger.info(f"Domain change notification: {notification}")
+        return notification
 
     def _run_agent_loop(
         self,
@@ -811,17 +965,17 @@ class AgentRunner:
         messages: list[MessageTypeDef],
         tool_config: ToolConfigurationTypeDef | None,
     ) -> dict[str, Any]:
-        """Call the LLM and return the response."""
-        # Format system prompt with current datetime
-        formatted_prompt = self.system_prompt.format(
-            current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M %Z").strip()
-        )
+        """Call the LLM and return the response.
 
+        :param messages: Conversation messages.
+        :param tool_config: Tool configuration for Bedrock.
+        :returns: LLM response.
+        """
         try:
             return self.client.converse(
                 messages=messages,
                 model_id=self._config.chat_model,
-                system_prompt=formatted_prompt,
+                system_prompt=self._run_system_prompt,
                 tool_config=tool_config,
                 max_tokens=self._config.max_tokens,
                 cache_system_prompt=True,
@@ -1023,19 +1177,64 @@ class AgentRunner:
         state: _RunState,
         conv_state: ConversationState | None,
         response: dict[str, Any],
-    ) -> AgentRunResult:
+    ) -> AgentRunResult | None:
         """Create a batch confirmation request for multiple sensitive tools.
 
-        Safe tools are executed immediately. Sensitive tools are collected
-        into a batch confirmation request.
+        Uses confidence classification to determine if confirmation is needed:
+        - EXPLICIT: User directly requested this action - execute immediately
+        - NEEDS_CONFIRMATION: Agent inferred or suggested - request confirmation
+
+        Safe tools are executed immediately. Sensitive tools are either executed
+        (if EXPLICIT) or collected into a batch confirmation request.
 
         :param sensitive_contexts: Contexts for sensitive tools needing confirmation.
         :param safe_contexts: Contexts for safe tools to execute immediately.
         :param state: Current run state.
         :param conv_state: Conversation state for persistence.
         :param response: Full LLM response.
-        :returns: AgentRunResult with batch confirmation request.
+        :returns: AgentRunResult with batch confirmation request, or None if
+            all tools were executed (EXPLICIT confidence).
         """
+        # Classify confidence for the sensitive tools
+        # Build a combined action description for classification
+        action_descriptions = []
+        for ctx in sensitive_contexts:
+            tool = state.tools[ctx.tool_name]
+            # Try to extract entity name from args for better description
+            entity_name = self._extract_entity_name(ctx.input_args)
+            action_desc = format_action(ctx.tool_name, entity_name, ctx.input_args)
+            action_descriptions.append(action_desc)
+
+        combined_action = "; ".join(action_descriptions)
+
+        classification = classify_action_confidence(
+            client=self.client,
+            messages=state.messages,
+            proposed_action=combined_action,
+        )
+
+        logger.info(
+            f"Confidence classification: level={classification.level}, "
+            f"reasoning='{classification.reasoning[:80]}...'"
+        )
+
+        if classification.level == ConfidenceLevel.EXPLICIT:
+            # User explicitly requested this - execute without confirmation
+            logger.info(
+                f"EXPLICIT confidence - executing {len(sensitive_contexts)} sensitive "
+                f"tool(s) without confirmation"
+            )
+            # Combine all contexts and execute
+            all_contexts = safe_contexts + sensitive_contexts
+            self._execute_all_tools(all_contexts, state, response)
+            return None  # Continue agent loop
+
+        # NEEDS_CONFIRMATION - proceed with confirmation request
+        logger.info(
+            f"NEEDS_CONFIRMATION - requesting confirmation for {len(sensitive_contexts)} "
+            f"sensitive tool(s)"
+        )
+
         # Execute safe tools first (if any)
         if safe_contexts:
             logger.info(f"Executing {len(safe_contexts)} safe tool(s) before confirmation")
@@ -1082,6 +1281,13 @@ class AgentRunner:
         for idx, ctx in enumerate(sensitive_contexts, start=1):
             tool = state.tools[ctx.tool_name]
             action_summary = self._generate_action_summary(tool.description, ctx.input_args)
+
+            # Fetch current entity to get previous values for diff display
+            previous_values = self._fetch_previous_values(tool, ctx.input_args, state.tools)
+            entity_name = previous_values.pop("_entity_name", None) or self._extract_entity_name(
+                ctx.input_args
+            )
+
             pending_tools.append(
                 PendingToolAction(
                     index=idx,
@@ -1090,6 +1296,8 @@ class AgentRunner:
                     tool_description=tool.description,
                     input_args=ctx.input_args,
                     action_summary=action_summary,
+                    previous_values=previous_values,
+                    entity_name=entity_name,
                 )
             )
 
@@ -1196,3 +1404,83 @@ class AgentRunner:
         """
         args_display = ", ".join(f"{k}={v!r}" for k, v in input_args.items())
         return f"{tool_description}\nArguments: {args_display}"
+
+    @staticmethod
+    def _extract_entity_name(input_args: dict[str, Any]) -> str | None:
+        """Extract entity name from tool arguments for display.
+
+        Looks for common name fields in the arguments.
+
+        :param input_args: Tool arguments.
+        :returns: Entity name if found, None otherwise.
+        """
+        # Common name field patterns
+        name_fields = ["task_name", "goal_name", "name", "title", "item_name"]
+        for field in name_fields:
+            if field in input_args and isinstance(input_args[field], str):
+                return input_args[field]
+        return None
+
+    def _fetch_previous_values(
+        self,
+        tool: ToolDef,
+        input_args: dict[str, Any],
+        tools: dict[str, ToolDef],
+    ) -> dict[str, Any]:
+        """Fetch current entity values for diff display.
+
+        For update tools, derives the get tool and fetches the current entity.
+        Returns the fields being updated with their current values.
+
+        :param tool: The update tool being called.
+        :param input_args: Arguments to the update tool.
+        :param tools: Available tools registry.
+        :returns: Dict of current values, with '_entity_name' for display.
+        """
+        # Guard: only applies to update tools with id_field
+        if not tool.id_field or not tool.name.startswith("update_"):
+            return {}
+
+        # Derive get tool and entity ID
+        get_tool_name = tool.name.replace("update_", "get_", 1)
+        get_tool = tools.get(get_tool_name)
+        entity_id = input_args.get(tool.id_field)
+
+        if not get_tool or not entity_id:
+            if not get_tool:
+                logger.debug(f"No get tool found for {tool.name}: {get_tool_name}")
+            return {}
+
+        try:
+            # Fetch the current entity
+            get_args = get_tool.args_model(**{tool.id_field: entity_id})
+            result = get_tool.handler(get_args)
+            entity = result.get("item", {})
+
+            if not entity:
+                return {}
+
+            # Build previous values for fields being updated
+            previous_values: dict[str, Any] = {}
+
+            # Extract entity name for display
+            name_fields = ["name", "task_name", "goal_name", "title", "item_name"]
+            for name_field in name_fields:
+                if name_field in entity:
+                    previous_values["_entity_name"] = entity[name_field]
+                    break
+
+            # Copy current values for fields being updated
+            for field in input_args:
+                if field != tool.id_field and field in entity:
+                    previous_values[field] = entity[field]
+
+            logger.debug(
+                f"Fetched previous values: tool={tool.name}, "
+                f"entity_id={entity_id}, fields={list(previous_values.keys())}"
+            )
+            return previous_values
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch previous values: tool={tool.name}, error={e}")
+            return {}

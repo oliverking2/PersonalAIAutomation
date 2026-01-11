@@ -17,11 +17,11 @@ from src.database.extraction_state import get_watermark, set_watermark
 from src.database.newsletters import backfill_article_urls
 from src.enums import ExtractionSource
 from src.graph.client import GraphClient
+from src.messaging.telegram import TelegramClient
+from src.messaging.telegram.utils.config import get_telegram_settings
 from src.newsletters.medium.service import MediumService
 from src.newsletters.substack import SubstackService
 from src.newsletters.tldr.service import TLDRService
-from src.telegram import TelegramClient
-from src.telegram.utils.config import get_telegram_settings
 
 # Email address to fetch newsletters for
 GRAPH_USER_EMAIL = os.environ["GRAPH_TARGET_UPN"]

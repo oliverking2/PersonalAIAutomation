@@ -50,7 +50,7 @@ Text: {description}"""
         system_prompt="You are a concise summariser. Output only the summary.",
         max_tokens=100,
         temperature=0.0,
-        cache_system_prompt=False,
+        cache_system_prompt=True,
     )
 
     summary = client.parse_text_response(response).strip()

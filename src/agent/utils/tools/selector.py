@@ -4,78 +4,77 @@ import json
 import logging
 
 from src.agent.bedrock_client import BedrockClient
-from src.agent.enums import CallType, RiskLevel
+from src.agent.enums import CallType
 from src.agent.exceptions import BedrockClientError, ToolSelectionError
-from src.agent.models import ToolMetadata, ToolSelectionResult
+from src.agent.models import ToolSelectionResult
 from src.agent.utils.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
 # Default maximum number of tools to select
-DEFAULT_MAX_TOOLS = 5
+DEFAULT_MAX_TOOLS = 10
 
-# Minimum word length for keyword matching in fallback selection
-MIN_KEYWORD_LENGTH = 3
+# Default maximum number of domains
+DEFAULT_MAX_DOMAINS = 3
 
 # Number of retries for AI selection before falling back
 DEFAULT_MAX_RETRIES = 3
 
-TOOL_SELECTION_SYSTEM_PROMPT = """You are a tool selector. Given a user request and a list of available tools, select which tool types should be made available to handle the request.
+# System prompts are fully static for prompt caching - dynamic content goes in user message
+DOMAIN_SELECTION_SYSTEM_PROMPT = f"""You are a domain selector. Given a user request, identify which domains are relevant.
 
-IMPORTANT: You are selecting which TYPES of tools to expose, not how many times they will be called. The agent can call any selected tool multiple times. For example, if the user wants to add 10 reading items, just select "create_reading_item" once - the agent will call it 10 times as needed.
+A domain is a category of tools (e.g., tasks, goals, reminders). When you select a domain, ALL tools for that domain become available.
 
-Rules:
-1. Select only tools that are directly relevant to the user's intent
-2. Each tool should appear at most ONCE in your list (no duplicates)
-3. Prefer SAFE tools over SENSITIVE tools unless the user clearly wants to modify data
-4. Order tools by relevance (most relevant first)
-5. Select at most {max_tools} different tool types
-6. If no tools are relevant, return an empty list
-
-Available tools:
-{tool_descriptions}
-
-Respond with valid JSON only, no other text:
-{{
-  "tool_names": ["tool1", "tool2"],
-  "reasoning": "Brief explanation of why these tools were selected"
-}}
-
-"""
-
-ADDITIVE_SELECTION_SYSTEM_PROMPT = """You are a tool selector. The user is continuing a conversation where these tools are already selected: {current_tools}
-
-Determine if the user's message requires ADDITIONAL tools not already selected.
+The user message contains:
+1. The available domains and their tools
+2. The user's request
 
 Rules:
-1. If the current tools are sufficient for this message, return an empty list
-2. Only add tools if the user is asking for something the current tools cannot handle
-3. Clarification messages (providing details, dates, confirmations) usually don't need new tools
-4. Select at most {max_tools} additional tools
-
-Available tools (excluding already selected):
-{tool_descriptions}
+1. Select domains where the user might need ANY operation (query, create, update, delete)
+2. A conversation about "tasks" should select the entire "tasks" domain
+3. Select at most {DEFAULT_MAX_DOMAINS} domains
+4. Order by relevance (most relevant first)
+5. If no domains are relevant, return an empty list
 
 Respond with valid JSON only, no other text:
-{{
-  "tool_names": [],
-  "reasoning": "Current tools are sufficient for this clarification"
-}}
+{{{{
+  "domains": ["domain:tasks", "domain:goals"],
+  "reasoning": "User wants to work with tasks and goals"
+}}}}"""
 
-or if new tools are needed:
-{{
-  "tool_names": ["new_tool"],
-  "reasoning": "User is now asking to do X which requires new_tool"
-}}
+ADDITIVE_DOMAIN_SELECTION_PROMPT = f"""You are a domain selector for continuing conversations.
 
-"""
+The user message contains:
+1. The currently selected domains
+2. The available domains (excluding already selected)
+3. The user's new message
+
+Determine if the user's message requires ADDITIONAL domains.
+
+Rules:
+1. If the user is still working within the current domains, return an empty list
+2. Only add domains if the user explicitly mentions a new topic area
+3. Clarification messages (providing details, dates, confirmations) usually don't need new domains
+4. Select at most {DEFAULT_MAX_DOMAINS} additional domains
+
+Respond with valid JSON only, no other text:
+{{{{
+  "domains": [],
+  "reasoning": "User is still working with current domains"
+}}}}
+
+or if new domains are needed:
+{{{{
+  "domains": ["domain:reminders"],
+  "reasoning": "User is now asking about reminders"
+}}}}"""
 
 
 class ToolSelector:
-    """AI-first tool selector using Bedrock Converse.
+    """Domain-based tool selector using Bedrock Converse.
 
-    Determines which subset of tools should be exposed for a given user request.
-    Uses an LLM to analyse intent and select relevant tools.
+    Selects entire domains (e.g., all task tools) rather than individual tools.
+    Uses recency-based pruning to manage tool count across conversation turns.
     """
 
     def __init__(
@@ -89,7 +88,7 @@ class ToolSelector:
 
         :param registry: Tool registry containing available tools.
         :param client: Bedrock client for LLM calls. Creates one if not provided.
-        :param max_tools: Maximum number of tools to select per request.
+        :param max_tools: Maximum number of tools to include.
         :param max_retries: Number of retries for AI selection before falling back.
         """
         self.registry = registry
@@ -97,122 +96,186 @@ class ToolSelector:
         self.max_tools = max_tools
         self.max_retries = max_retries
 
-    def _format_tool_metadata(self, metadata: list[ToolMetadata]) -> str:
-        """Format tool metadata for the LLM prompt.
+    def _format_domain_descriptions(self, domains: set[str]) -> str:
+        """Format domain descriptions for the LLM prompt.
 
-        :param metadata: List of tool metadata.
-        :returns: Formatted string describing available tools.
+        :param domains: Set of domain tags.
+        :returns: Formatted string describing available domains.
         """
         lines: list[str] = []
-        for tool in metadata:
-            tags_str = ", ".join(sorted(tool.tags)) if tool.tags else "none"
-            lines.append(
-                f"- {tool.name}: {tool.description} [tags: {tags_str}, risk: {tool.risk_level}]"
-            )
+        for domain in sorted(domains):
+            tools = self.registry.get_tools_by_domain(domain)
+            tool_names = ", ".join(t.name for t in tools)
+            lines.append(f"- {domain}: {len(tools)} tools ({tool_names})")
         return "\n".join(lines)
 
-    def _parse_selection_response(
-        self, response_text: str, available_tools: set[str]
-    ) -> ToolSelectionResult:
-        """Parse the LLM response into a selection result.
+    def _get_selectable_domains(self) -> set[str]:
+        """Get domains from selectable (non-standard) tools.
+
+        :returns: Set of domain tags.
+        """
+        selectable = self.registry.get_selectable_tools()
+        domains: set[str] = set()
+        for tool in selectable:
+            for tag in tool.tags:
+                if tag.startswith("domain:"):
+                    domains.add(tag)
+        return domains
+
+    def _tools_to_domains(self, tool_names: list[str]) -> list[str]:
+        """Extract unique domains from a list of tool names.
+
+        Preserves order based on first occurrence.
+
+        :param tool_names: List of tool names.
+        :returns: Ordered list of domain tags.
+        """
+        domains: list[str] = []
+        seen: set[str] = set()
+        for name in tool_names:
+            if name in self.registry:
+                tool = self.registry.get(name)
+                for tag in tool.tags:
+                    if tag.startswith("domain:") and tag not in seen:
+                        domains.append(tag)
+                        seen.add(tag)
+        return domains
+
+    def _merge_domains_by_recency(
+        self,
+        intent_domains: list[str],
+        existing_domains: list[str],
+    ) -> list[str]:
+        """Merge domains with existing domains taking priority for cache stability.
+
+        Existing domains are placed first (already cached and should be preserved),
+        followed by new intent domains. This ensures that when pruning occurs,
+        new domains are dropped rather than existing ones, maximising cache hits.
+
+        :param intent_domains: Domains from current user intent (to be added).
+        :param existing_domains: Domains already in conversation (preserved for caching).
+        :returns: Merged list with existing domains first.
+        """
+        # Existing domains first for cache stability, then new domains
+        return list(dict.fromkeys(existing_domains + intent_domains))
+
+    def _prune_domains_to_limit(self, domains: list[str]) -> list[str]:
+        """Prune domains to stay within tool limit.
+
+        Drops complete domains from the end (oldest/least relevant)
+        until the total tool count is under max_tools.
+
+        :param domains: Recency-ordered domain list.
+        :returns: Pruned domain list.
+        """
+        domain_counts = self.registry.get_domain_tool_count()
+        result: list[str] = []
+        total_tools = 0
+
+        for domain in domains:
+            tool_count = domain_counts.get(domain, 0)
+            if total_tools + tool_count <= self.max_tools:
+                result.append(domain)
+                total_tools += tool_count
+            else:
+                logger.debug(
+                    f"Dropping domain {domain} ({tool_count} tools) - "
+                    f"would exceed limit of {self.max_tools}"
+                )
+
+        if len(result) < len(domains):
+            dropped = set(domains) - set(result)
+            logger.info(f"Pruned domains due to tool limit: kept={result}, dropped={list(dropped)}")
+
+        return result
+
+    def _expand_domains_to_tools(self, domains: list[str]) -> list[str]:
+        """Expand domain tags to individual tool names.
+
+        :param domains: List of domain tags.
+        :returns: List of tool names.
+        """
+        tool_names: list[str] = []
+        seen: set[str] = set()
+        for domain in domains:
+            for tool in self.registry.get_tools_by_domain(domain):
+                if tool.name not in seen:
+                    tool_names.append(tool.name)
+                    seen.add(tool.name)
+        return tool_names
+
+    def _parse_domain_response(
+        self, response_text: str, available_domains: set[str]
+    ) -> tuple[list[str], str]:
+        """Parse the LLM response for domain selection.
 
         :param response_text: Raw text response from the LLM.
-        :param available_tools: Set of valid tool names.
-        :returns: Parsed tool selection result.
+        :param available_domains: Set of valid domain tags.
+        :returns: Tuple of (domain list, reasoning).
         :raises ToolSelectionError: If the response cannot be parsed.
         """
         try:
-            # Extract JSON from markdown code blocks if present
             text = BedrockClient.extract_json_from_markdown(response_text)
-
             data = json.loads(text)
 
-            tool_names = data.get("tool_names", [])
+            domains = data.get("domains", [])
             reasoning = data.get("reasoning", "")
 
-            # Filter to only valid tools, deduplicate, and respect max limit
-            # Using dict.fromkeys() preserves order while removing duplicates
-            valid_tools = list(
-                dict.fromkeys(name for name in tool_names if name in available_tools)
-            )[: self.max_tools]
+            # Filter to valid domains, deduplicate, respect limit
+            valid_domains = list(dict.fromkeys(d for d in domains if d in available_domains))[
+                :DEFAULT_MAX_DOMAINS
+            ]
 
-            return ToolSelectionResult(
-                tool_names=valid_tools,
-                reasoning=reasoning,
-            )
+            return valid_domains, reasoning
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             logger.warning(
-                f"Failed to parse tool selection response: {e}, response={response_text[:200]}"
+                f"Failed to parse domain selection response: {e}, response={response_text[:200]}"
             )
-            raise ToolSelectionError(f"Failed to parse tool selection response: {e}") from e
+            raise ToolSelectionError(f"Failed to parse domain selection response: {e}") from e
 
-    def select(
+    def _select_domains(
         self,
         user_intent: str,
+        available_domains: set[str],
+        current_domains: list[str] | None = None,
         model: str | None = None,
-        current_tools: list[str] | None = None,
-    ) -> ToolSelectionResult:
-        """Select tools for a user request using AI.
+    ) -> tuple[list[str], str]:
+        """Select domains using LLM.
 
-        Standard tools (tagged with 'standard') are excluded from selection
-        as they are always included in agent runs.
+        Dynamic content (domain descriptions, current domains) is passed in the user
+        message to keep system prompts static for caching.
 
-        When current_tools is provided, uses additive mode: only returns tools
-        that should be ADDED to the existing set. This is more efficient for
-        follow-up messages where the user is providing clarifications.
-
-        :param user_intent: The user's request or intent text.
-        :param model: Optional model ID/alias override for selection (e.g., 'haiku').
-        :param current_tools: Tools already selected in this conversation. When
-            provided, selector returns only additional tools needed.
-        :returns: Tool selection result with ordered tool names.
-        :raises ToolSelectionError: If selection fails.
+        :param user_intent: The user's request text.
+        :param available_domains: Set of available domain tags.
+        :param current_domains: Already selected domains (for additive mode).
+        :param model: Optional model override.
+        :returns: Tuple of (selected domains, reasoning).
         """
-        # Only select from non-standard tools (standard tools are always included)
-        metadata = self.registry.list_selectable_metadata()
-
-        if not metadata:
-            logger.debug("No tools registered, returning empty selection")
-            return ToolSelectionResult(
-                tool_names=[],
-                reasoning="No tools available in registry",
-            )
-
-        # In additive mode, exclude already-selected tools from candidates
-        current_tools_set = set(current_tools) if current_tools else set()
-        if current_tools:
-            metadata = [m for m in metadata if m.name not in current_tools_set]
-            if not metadata:
-                logger.debug("All tools already selected, no additional tools needed")
-                return ToolSelectionResult(
-                    tool_names=[],
-                    reasoning="All relevant tools already selected",
-                )
-
-        available_tools = {m.name for m in metadata}
-        tool_descriptions = self._format_tool_metadata(metadata)
-
-        # Use appropriate prompt based on mode
-        if current_tools:
-            system_prompt = ADDITIVE_SELECTION_SYSTEM_PROMPT.format(
-                current_tools=current_tools,
-                max_tools=self.max_tools,
-                tool_descriptions=tool_descriptions,
+        # Build user message with dynamic content (keeps system prompt static for caching)
+        if current_domains:
+            available_for_selection = available_domains - set(current_domains)
+            if not available_for_selection:
+                return [], "All domains already selected"
+            domain_descriptions = self._format_domain_descriptions(available_for_selection)
+            system_prompt = ADDITIVE_DOMAIN_SELECTION_PROMPT
+            user_message = (
+                f"Currently selected domains: {', '.join(current_domains)}\n\n"
+                f"Available domains:\n{domain_descriptions}\n\n"
+                f"User message: {user_intent}"
             )
         else:
-            system_prompt = TOOL_SELECTION_SYSTEM_PROMPT.format(
-                max_tools=self.max_tools,
-                tool_descriptions=tool_descriptions,
+            domain_descriptions = self._format_domain_descriptions(available_domains)
+            system_prompt = DOMAIN_SELECTION_SYSTEM_PROMPT
+            user_message = (
+                f"Available domains:\n{domain_descriptions}\n\nUser message: {user_intent}"
             )
 
-        user_message = f"User message: {user_intent}"
+        effective_model = model or "haiku"
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
             try:
-                # model parameter is required - use 'haiku' as default for cost-effective selection
-                effective_model = model or "haiku"
                 response = self.client.converse(
                     messages=[self.client.create_user_message(user_message)],
                     model_id=effective_model,
@@ -224,86 +287,119 @@ class ToolSelector:
                 )
 
                 response_text = self.client.parse_text_response(response)
-                result = self._parse_selection_response(response_text, available_tools)
+                domains, reasoning = self._parse_domain_response(response_text, available_domains)
 
-                if current_tools:
-                    if result.tool_names:
-                        logger.info(
-                            f"Additive selection: adding {result.tool_names} to {current_tools}"
-                        )
-                    else:
-                        logger.info(
-                            f"Additive selection: no new tools needed, keeping {current_tools}"
-                        )
-                else:
-                    logger.info(
-                        f"Tool selection completed: intent='{user_intent[:50]}...', "
-                        f"selected={result.tool_names}"
-                    )
-
-                return result
+                return domains, reasoning
 
             except (BedrockClientError, ToolSelectionError) as e:
                 last_error = e
                 logger.warning(
-                    f"AI tool selection attempt {attempt + 1}/{self.max_retries} failed: {e}"
+                    f"AI domain selection attempt {attempt + 1}/{self.max_retries} failed: {e}"
                 )
 
         logger.warning(
-            f"AI tool selection failed after {self.max_retries} attempts, falling back: {last_error}"
+            f"AI domain selection failed after {self.max_retries} attempts: {last_error}"
         )
-        return self._fallback_selection(user_intent, metadata)
+        # Return empty and let caller handle fallback
+        return [], "AI selection failed"
 
-    def _fallback_selection(
-        self, user_intent: str, metadata: list[ToolMetadata]
+    def select(
+        self,
+        user_intent: str,
+        model: str | None = None,
+        current_tools: list[str] | None = None,
     ) -> ToolSelectionResult:
-        """Tag-based fallback selection when AI selection fails.
+        """Select tools using domain-based grouping.
 
-        :param user_intent: The user's request text.
-        :param metadata: Available tool metadata.
-        :returns: Tool selection based on keyword matching.
+        Instead of selecting individual tools, identifies relevant domains
+        and returns ALL tools for those domains. Uses recency-based pruning
+        to manage tool count - oldest domains are dropped entirely when
+        the limit is exceeded.
+
+        :param user_intent: The user's request or intent text.
+        :param model: Optional model ID/alias override for selection.
+        :param current_tools: Tools already selected in this conversation.
+        :returns: Tool selection result with tool names and domains.
         """
-        intent_lower = user_intent.lower()
-        scored_tools: list[tuple[str, int]] = []
+        # Get available domains from selectable tools
+        available_domains = self._get_selectable_domains()
 
-        # Score tools based on keyword matches
-        for tool in metadata:
-            score = 0
+        if not available_domains:
+            logger.debug("No domains available, returning empty selection")
+            return ToolSelectionResult(
+                tool_names=[],
+                domains=[],
+                reasoning="No domains available in registry",
+            )
 
-            # Check if tool name words appear in intent
-            name_words = tool.name.replace("_", " ").split()
-            for word in name_words:
-                if word.lower() in intent_lower:
-                    score += 2
+        # Get existing domains from current tools
+        existing_domains = self._tools_to_domains(current_tools) if current_tools else []
 
-            # Check if description words appear in intent
-            desc_words = tool.description.lower().split()
-            for word in desc_words:
-                if len(word) > MIN_KEYWORD_LENGTH and word in intent_lower:
-                    score += 1
+        # Select domains from current intent
+        intent_domains, reasoning = self._select_domains(
+            user_intent,
+            available_domains,
+            existing_domains if existing_domains else None,
+            model,
+        )
 
-            # Check tag matches
-            for tag in tool.tags:
-                if tag.lower() in intent_lower:
-                    score += 3
+        # If AI selection failed entirely, use fallback
+        if not intent_domains and reasoning == "AI selection failed":
+            intent_domains, reasoning = self._fallback_domain_selection(
+                user_intent, available_domains
+            )
 
-            # Prefer safe tools
-            if tool.risk_level == RiskLevel.SAFE:
-                score += 1
+        # Merge by recency (intent domains first, then existing)
+        merged_domains = self._merge_domains_by_recency(intent_domains, existing_domains)
 
-            if score > 0:
-                scored_tools.append((tool.name, score))
+        # Prune oldest domains if over limit
+        pruned_domains = self._prune_domains_to_limit(merged_domains)
 
-        # Sort by score descending and take top N
-        scored_tools.sort(key=lambda x: x[1], reverse=True)
-        selected = [name for name, _ in scored_tools[: self.max_tools]]
+        # Expand domains to tools
+        tool_names = self._expand_domains_to_tools(pruned_domains)
 
-        logger.info(f"Fallback tool selection: intent='{user_intent[:50]}...', selected={selected}")
+        logger.info(
+            f"Domain selection completed: intent='{user_intent[:50]}...', "
+            f"domains={pruned_domains}, tools={len(tool_names)}"
+        )
 
         return ToolSelectionResult(
-            tool_names=selected,
-            reasoning="Selected via fallback keyword matching",
+            tool_names=tool_names,
+            domains=pruned_domains,
+            reasoning=reasoning,
         )
+
+    def _fallback_domain_selection(
+        self, user_intent: str, available_domains: set[str]
+    ) -> tuple[list[str], str]:
+        """Keyword-based fallback for domain selection.
+
+        Matches domain names against user intent.
+
+        :param user_intent: The user's request text.
+        :param available_domains: Available domain tags.
+        :returns: Tuple of (matched domains, reasoning).
+        """
+        intent_lower = user_intent.lower()
+        matched: list[str] = []
+
+        for domain in available_domains:
+            # Extract domain name (e.g., 'domain:tasks' -> 'tasks')
+            domain_name = domain.split(":", 1)[1] if ":" in domain else domain
+
+            # Check if domain name appears in intent
+            if (
+                domain_name.lower() in intent_lower
+                or domain_name.rstrip("s").lower() in intent_lower
+            ):
+                matched.append(domain)
+
+        # Limit to max domains
+        matched = matched[:DEFAULT_MAX_DOMAINS]
+
+        logger.info(f"Fallback domain selection: intent='{user_intent[:50]}...', matched={matched}")
+
+        return matched, "Selected via fallback keyword matching"
 
     def select_by_tags(self, tags: set[str]) -> ToolSelectionResult:
         """Select tools by tag without AI.
@@ -314,16 +410,13 @@ class ToolSelector:
         :returns: Tool selection result.
         """
         tools = self.registry.filter_by_tags(tags)
+        tool_names = [t.name for t in tools]
 
-        # Sort by risk level (safe first), then name
-        sorted_tools = sorted(
-            tools,
-            key=lambda t: (t.risk_level != RiskLevel.SAFE, t.name),
-        )
-
-        selected = [t.name for t in sorted_tools[: self.max_tools]]
+        # Extract domains from selected tools
+        domains = self._tools_to_domains(tool_names)
 
         return ToolSelectionResult(
-            tool_names=selected,
+            tool_names=tool_names[: self.max_tools],
+            domains=domains,
             reasoning=f"Selected by tags: {', '.join(sorted(tags))}",
         )

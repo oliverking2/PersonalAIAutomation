@@ -16,7 +16,12 @@ from src.api.notion.tasks.models import (
     TaskResponse,
     TaskUpdateRequest,
 )
-from src.notion.blocks import blocks_to_markdown, markdown_to_blocks
+from src.notion.blocks import (
+    UnsupportedBlockTypeError,
+    UnsupportedMarkdownError,
+    blocks_to_markdown,
+    markdown_to_blocks,
+)
 from src.notion.client import NotionClient
 from src.notion.enums import TaskStatus
 from src.notion.exceptions import NotionClientError
@@ -111,6 +116,9 @@ def get_task(
         )
 
         return _task_to_response(task, content=content)
+    except UnsupportedBlockTypeError as e:
+        logger.warning(f"Get task failed - unsupported blocks: id={task_id}, error={e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except NotionClientError as e:
         logger.exception(f"Failed to get task: id={task_id}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
@@ -168,6 +176,13 @@ def create_tasks(
 
             created.append(_task_to_response(task, content=request.content))
             logger.debug(f"Create tasks [{i + 1}/{len(requests)}]: created id={task.id}")
+        except UnsupportedMarkdownError as e:
+            error_msg = str(e)
+            logger.warning(
+                f"Create tasks [{i + 1}/{len(requests)}]: "
+                f"unsupported markdown in name={request.task_name!r}, error={error_msg}"
+            )
+            failed.append(BulkCreateFailure(name=request.task_name, error=error_msg))
         except (NotionClientError, HTTPException) as e:
             error_msg = e.detail if isinstance(e, HTTPException) else str(e)
             logger.warning(
@@ -227,6 +242,12 @@ def update_task(
                 detail="No properties or content to update.",
             )
 
+        # Check for unsupported blocks before replacing content
+        if request.content is not None:
+            existing_blocks = client.get_page_content(task_id)
+            if existing_blocks:
+                blocks_to_markdown(existing_blocks)  # Raises if unsupported
+
         # Update properties if any
         if properties:
             data = client.update_page(page_id=task_id, properties=properties)
@@ -254,6 +275,12 @@ def update_task(
         )
 
         return _task_to_response(task, content=content)
+    except UnsupportedBlockTypeError as e:
+        logger.warning(f"Update task failed - unsupported blocks: id={task_id}, error={e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except UnsupportedMarkdownError as e:
+        logger.warning(f"Update task failed - unsupported markdown: id={task_id}, error={e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except NotionClientError as e:
         logger.exception(f"Failed to update task: id={task_id}, fields={fields}, error={e}")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e

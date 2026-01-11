@@ -80,17 +80,16 @@ class TestTaskContentBuilding(unittest.TestCase):
         self.assertIn("Review the quarterly budget numbers", payload["content"])
         self.assertIn("## Notes", payload["content"])
         self.assertIn("Check against last year's figures", payload["content"])
-        self.assertIn("Created via AI Agent", payload["content"])
 
         # description/notes should NOT be in payload
         self.assertNotIn("description", payload)
         self.assertNotIn("notes", payload)
 
     @patch("src.agent.tools.factory._get_client")
-    def test_task_without_description_creates_minimal_content(
+    def test_task_without_description_creates_empty_content(
         self, mock_get_client: MagicMock
     ) -> None:
-        """Tasks without description should still create content with footer."""
+        """Tasks without description/notes should have empty content."""
         mock_client = MagicMock()
         mock_get_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_get_client.return_value.__exit__ = MagicMock(return_value=False)
@@ -108,10 +107,9 @@ class TestTaskContentBuilding(unittest.TestCase):
         call_args = mock_client.post.call_args
         payload = call_args[1]["json"][0]
 
-        # Content should still be present with at least the footer
+        # Content should be present but empty when no description/notes
         self.assertIn("content", payload)
-        self.assertIn("Created via AI Agent", payload["content"])
-        # But no description section since none was provided
+        self.assertEqual(payload["content"], "")
         self.assertNotIn("## Description", payload["content"])
 
 

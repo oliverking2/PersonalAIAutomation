@@ -39,6 +39,7 @@ class AgentConversation(Base):
     total_input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_cache_write_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_estimated_cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(precision=10, scale=6),
         nullable=False,
@@ -127,6 +128,7 @@ class AgentRun(Base):
     total_input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_cache_write_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_estimated_cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(precision=10, scale=6),
         nullable=False,
@@ -176,6 +178,7 @@ class LLMCall(Base):
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     estimated_cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(precision=10, scale=6),
         nullable=False,

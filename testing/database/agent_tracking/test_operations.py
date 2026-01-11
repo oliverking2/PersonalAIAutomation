@@ -213,7 +213,8 @@ class TestCompleteAgentRun(unittest.TestCase):
                 "usage": {
                     "inputTokens": 500,
                     "outputTokens": 250,
-                    "cacheReadInputTokenCount": 100,
+                    "cacheReadInputTokens": 100,
+                    "cacheWriteInputTokens": 50,
                 },
                 "output": {},
             },
@@ -232,6 +233,7 @@ class TestCompleteAgentRun(unittest.TestCase):
         self.assertEqual(result.total_input_tokens, 500)
         self.assertEqual(result.total_output_tokens, 250)
         self.assertEqual(result.total_cache_read_tokens, 100)
+        self.assertEqual(result.total_cache_write_tokens, 50)
 
     @patch("src.database.agent_tracking.operations._update_conversation_totals")
     def test_calls_update_conversation_totals(self, mock_update: MagicMock) -> None:

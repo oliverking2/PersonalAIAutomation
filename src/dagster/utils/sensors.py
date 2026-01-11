@@ -6,9 +6,9 @@ from dagster import (
     RunFailureSensorContext,
     run_failure_sensor,
 )
-from src.telegram import TelegramClient
-from src.telegram.utils.config import get_telegram_settings
-from src.telegram.utils.misc import _escape_md
+from src.messaging.telegram import TelegramClient
+from src.messaging.telegram.utils.config import get_telegram_settings
+from src.messaging.telegram.utils.formatting import format_message
 
 
 @run_failure_sensor(
@@ -34,14 +34,11 @@ def telegram_on_run_failure(context: RunFailureSensorContext) -> None:
         chat_id=settings.error_chat_id,
     )
     context.log.info(f"Sending Telegram alert for failed run: {subject}")
-    text = (
-        f"*{_escape_md(subject)}*\n"
-        f"Pipeline: `{_escape_md(run.job_name)}`\n"
-        f"Run ID: `{_escape_md(run.run_id)}`\n"
-    )
-    context.log.info(f"Message: {text}")
+    text = f"**{subject}**\nPipeline: `{run.job_name}`\nRun ID: `{run.run_id}`\n"
+    formatted_text, parse_mode = format_message(text)
+    context.log.info(f"Message: {formatted_text}")
 
-    client.send_message_sync(text, parse_mode="MarkdownV2")
+    client.send_message_sync(formatted_text, parse_mode=parse_mode)
 
 
 util_sensor_defs = Definitions(

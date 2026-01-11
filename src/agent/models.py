@@ -22,6 +22,7 @@ class ToolDef(BaseModel):
     :param risk_level: Whether the tool is safe or sensitive.
     :param args_model: Pydantic model class defining the tool's arguments.
     :param handler: Function that executes the tool.
+    :param id_field: For update tools, the field name containing the entity ID.
     """
 
     name: str = Field(..., min_length=1, max_length=64)
@@ -30,6 +31,7 @@ class ToolDef(BaseModel):
     risk_level: RiskLevel = Field(default=RiskLevel.SAFE)
     args_model: type[BaseModel]
     handler: Callable[[Any], dict[str, Any]]
+    id_field: str | None = Field(default=None)
 
     model_config = {"frozen": True, "arbitrary_types_allowed": True}
 
@@ -75,10 +77,12 @@ class ToolSelectionResult(BaseModel):
     """Result of tool selection.
 
     :param tool_names: Ordered list of selected tool names.
+    :param domains: Ordered list of domain tags selected (e.g., 'domain:tasks').
     :param reasoning: Explanation for the selection (for debugging).
     """
 
     tool_names: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
     reasoning: str = Field(default="")
 
 
@@ -108,6 +112,8 @@ class PendingToolAction(BaseModel):
     :param tool_description: Description of the tool.
     :param input_args: Arguments that would be passed to the tool.
     :param action_summary: Human-readable summary of what the tool would do.
+    :param previous_values: Current values of fields being updated (for diff display).
+    :param entity_name: Name of the entity being modified (for diff display).
     """
 
     index: int
@@ -116,6 +122,20 @@ class PendingToolAction(BaseModel):
     tool_description: str
     input_args: dict[str, Any]
     action_summary: str
+    previous_values: dict[str, Any] = Field(default_factory=dict)
+    entity_name: str | None = None
+
+    @property
+    def old_content(self) -> str | None:
+        """Get previous content value for backwards compatibility."""
+        content = self.previous_values.get("content")
+        return content if isinstance(content, str) else None
+
+    @property
+    def new_content(self) -> str | None:
+        """Get new content value from input args."""
+        content = self.input_args.get("content")
+        return content if isinstance(content, str) else None
 
 
 class ConfirmationRequest(BaseModel):
@@ -171,6 +191,7 @@ class ConversationState:
     conversation_id: uuid.UUID
     messages: list[dict[str, Any]] = field(default_factory=list)
     selected_tools: list[str] = field(default_factory=list)
+    selected_domains: list[str] = field(default_factory=list)
     pending_confirmation: PendingConfirmation | None = None
     summary: str | None = None
     message_count: int = 0
