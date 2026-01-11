@@ -109,6 +109,19 @@ services:
         condition: service_healthy
 
   # ----------------------------
+  # Valkey (Redis-compatible cache for GlitchTip)
+  # ----------------------------
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: personal_automation_valkey
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------
   # GlitchTip (error tracking)
   # ----------------------------
   glitchtip:
@@ -118,6 +131,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      valkey:
+        condition: service_healthy
     ports:
       - "${GLITCHTIP_PORT}:8000"
     environment:
@@ -125,7 +140,7 @@ services:
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
       GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN}
       CSRF_TRUSTED_ORIGINS: ${GLITCHTIP_DOMAIN}
-      VALKEY_URL: ""
+      VALKEY_URL: "redis://valkey:6379/0"
 
       # Minimal setup: no real email for now (emails go to container logs)
       EMAIL_URL: "consolemail://"
