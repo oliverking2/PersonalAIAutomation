@@ -342,7 +342,11 @@ def _create_update_tool(config: CRUDToolConfig) -> ToolDef:
             payload.pop("notes", None)
 
         if not payload:
-            return {"error": "No properties to update", "updated": False}
+            return {
+                "error": "No properties to update",
+                "error_type": "validation",
+                "updated": False,
+            }
 
         with _get_client() as client:
             response = client.patch(f"{config.endpoint_prefix}/{item_id}", json=payload)

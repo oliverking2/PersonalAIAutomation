@@ -32,6 +32,16 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def log_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Log incoming request ID for traceability."""
+    request_id = request.headers.get("X-Request-ID", "no-request-id")
+    logger.debug(f"Incoming request: {request.method} {request.url.path} request_id={request_id}")
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     _request: Request, exc: RequestValidationError

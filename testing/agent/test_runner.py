@@ -1409,6 +1409,37 @@ class TestToolTimeout(unittest.TestCase):
         """Test that default config has 30 second timeout."""
         self.assertEqual(DEFAULT_AGENT_CONFIG.tool_timeout_seconds, 30.0)
 
+    def test_execution_error_includes_error_type(self) -> None:
+        """Test that execution errors include error_type in result."""
+
+        def failing_handler(args: DummyArgs) -> dict[str, Any]:
+            raise ValueError("Something went wrong")
+
+        failing_tool = ToolDef(
+            name="failing_tool",
+            description="A failing tool",
+            tags=frozenset({"test"}),
+            risk_level=RiskLevel.SAFE,
+            args_model=DummyArgs,
+            handler=failing_handler,
+        )
+        self.registry.register(failing_tool)
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        tool_result, tool_call = runner._execute_and_create_tool_call(
+            failing_tool,
+            "test-id",
+            {"value": "test"},
+        )
+
+        self.assertTrue(tool_call.is_error)
+        self.assertIn("error", tool_result)
+        self.assertEqual(tool_result["error_type"], "execution")
+
 
 if __name__ == "__main__":
     unittest.main()

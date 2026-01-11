@@ -473,6 +473,7 @@ class TestUpdateToolGeneration(unittest.TestCase):
 
         self.assertFalse(result["updated"])
         self.assertIn("error", result)
+        self.assertEqual(result["error_type"], "validation")
         mock_get_client.assert_not_called()
 
 

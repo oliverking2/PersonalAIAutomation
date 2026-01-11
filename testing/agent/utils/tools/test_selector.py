@@ -262,6 +262,17 @@ class TestToolSelector(unittest.TestCase):
         self.assertEqual(domains, [])
         self.assertEqual(reasoning, "")
 
+    def test_parse_domain_response_domains_not_list(self) -> None:
+        """Test that non-list domains value raises ToolSelectionError."""
+        # LLM might return a string instead of a list
+        response = '{"domains": "domain:items", "reasoning": "test"}'
+
+        with self.assertRaises(ToolSelectionError) as context:
+            self.selector._parse_domain_response(response, {"domain:items"})
+
+        self.assertIn("Expected 'domains' to be a list", str(context.exception))
+        self.assertIn("str", str(context.exception))
+
     def test_tools_to_domains(self) -> None:
         """Test extracting domains from tool names."""
         domains = self.selector._tools_to_domains(["query_items", "delete_item"])

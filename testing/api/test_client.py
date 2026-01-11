@@ -1,7 +1,7 @@
 """Tests for InternalAPIClient."""
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
@@ -83,7 +83,11 @@ class TestInternalAPIClient(unittest.TestCase):
             params={"key": "value"},
             json=None,
             timeout=60,
+            headers=ANY,
         )
+        # Verify X-Request-ID header was sent
+        call_headers = mock_session.request.call_args.kwargs["headers"]
+        self.assertIn("X-Request-ID", call_headers)
 
     @patch("src.api.client.requests.Session")
     def test_post_request(self, mock_session_class: MagicMock) -> None:
@@ -106,6 +110,7 @@ class TestInternalAPIClient(unittest.TestCase):
             params=None,
             json={"title": "Test"},
             timeout=60,
+            headers=ANY,
         )
 
     @patch("src.api.client.requests.Session")
@@ -129,6 +134,7 @@ class TestInternalAPIClient(unittest.TestCase):
             params=None,
             json={"title": "Updated"},
             timeout=60,
+            headers=ANY,
         )
 
     @patch("src.api.client.requests.Session")

@@ -38,7 +38,6 @@ if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime import BedrockRuntimeClient
     from mypy_boto3_bedrock_runtime.type_defs import (
         ContentBlockTypeDef,
-        MessageTypeDef,
         ToolConfigurationTypeDef,
     )
 
@@ -98,7 +97,7 @@ class BedrockClient:
 
     def converse(  # noqa: PLR0913 - Bedrock API has multiple config options
         self,
-        messages: list[MessageTypeDef],
+        messages: list[dict[str, Any]],
         model_id: str,
         system_prompt: str | None = None,
         tool_config: ToolConfigurationTypeDef | None = None,
@@ -180,7 +179,11 @@ class BedrockClient:
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
             error_message = e.response.get("Error", {}).get("Message", str(e))
-            logger.exception(f"Bedrock API error: code={error_code}, message={error_message}")
+            logger.exception(
+                f"Bedrock API error: code={error_code}, message={error_message}, "
+                f"model={effective_model}, messages_count={len(messages)}, "
+                f"call_type={call_type.value}"
+            )
             raise BedrockClientError(
                 f"Bedrock API call failed: {error_code} - {error_message}"
             ) from e
@@ -275,7 +278,7 @@ class BedrockClient:
         tool_use_id: str,
         result: dict[str, Any],
         is_error: bool = False,
-    ) -> MessageTypeDef:
+    ) -> dict[str, Any]:
         """Create a tool result message for the conversation.
 
         :param tool_use_id: ID of the tool use being responded to.
@@ -296,7 +299,7 @@ class BedrockClient:
             ],
         }
 
-    def create_user_message(self, text: str) -> MessageTypeDef:
+    def create_user_message(self, text: str) -> dict[str, Any]:
         """Create a user message.
 
         :param text: Message text.
@@ -309,7 +312,7 @@ class BedrockClient:
         tool_use_id: str,
         name: str,
         input_args: dict[str, Any],
-    ) -> MessageTypeDef:
+    ) -> dict[str, Any]:
         """Create an assistant message containing a tool use request.
 
         :param tool_use_id: Unique ID for this tool use.

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import uuid
 from typing import Any, cast
 
 import httpx
@@ -143,17 +144,24 @@ class InternalAPIClient:
         :raises InternalAPIClientError: If the request fails.
         """
         url = f"{self.base_url}{path}"
+        request_id = str(uuid.uuid4())
 
         try:
-            logger.debug(f"API request: {method} {path} params={params} json={json}")
+            logger.debug(f"API request: {method} {path} request_id={request_id}")
             response = self._session.request(
-                method, url, params=params, json=json, timeout=self.timeout
+                method,
+                url,
+                params=params,
+                json=json,
+                timeout=self.timeout,
+                headers={"X-Request-ID": request_id},
             )
 
             if response.status_code >= HTTP_ERROR_THRESHOLD:
                 error_detail = self._extract_error_detail(response)
                 logger.warning(
-                    f"API request failed: {method} {path} -> {response.status_code}: {error_detail}"
+                    f"API request failed: {method} {path} request_id={request_id} "
+                    f"status={response.status_code} error={error_detail}"
                 )
                 raise InternalAPIClientError(error_detail, status_code=response.status_code)
 
@@ -165,7 +173,7 @@ class InternalAPIClient:
             return list(result) if isinstance(result, list) else dict(result)
 
         except RequestException as e:
-            logger.exception(f"API request error: {method} {path}")
+            logger.exception(f"API request error: {method} {path} request_id={request_id}")
             raise InternalAPIClientError(f"Request failed: {e}") from e
 
     @staticmethod
@@ -300,17 +308,24 @@ class AsyncInternalAPIClient:
         :raises InternalAPIClientError: If the request fails.
         """
         url = f"{self.base_url}{path}"
+        request_id = str(uuid.uuid4())
 
         try:
-            logger.debug(f"Async API request: {method} {path} params={params} json={json}")
+            logger.debug(f"Async API request: {method} {path} request_id={request_id}")
             client = await self._get_client()
-            response = await client.request(method, url, params=params, json=json)
+            response = await client.request(
+                method,
+                url,
+                params=params,
+                json=json,
+                headers={"X-Request-ID": request_id},
+            )
 
             if response.status_code >= HTTP_ERROR_THRESHOLD:
                 error_detail = self._extract_error_detail(response)
                 logger.warning(
-                    f"Async API request failed: {method} {path} -> "
-                    f"{response.status_code}: {error_detail}"
+                    f"Async API request failed: {method} {path} request_id={request_id} "
+                    f"status={response.status_code} error={error_detail}"
                 )
                 raise InternalAPIClientError(error_detail, status_code=response.status_code)
 
@@ -322,10 +337,10 @@ class AsyncInternalAPIClient:
             return list(result) if isinstance(result, list) else dict(result)
 
         except httpx.TimeoutException as e:
-            logger.exception(f"Async API request timeout: {method} {path}")
+            logger.exception(f"Async API request timeout: {method} {path} request_id={request_id}")
             raise InternalAPIClientError(f"Request timed out: {e}") from e
         except httpx.HTTPError as e:
-            logger.exception(f"Async API request error: {method} {path}")
+            logger.exception(f"Async API request error: {method} {path} request_id={request_id}")
             raise InternalAPIClientError(f"Request failed: {e}") from e
 
     @staticmethod

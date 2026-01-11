@@ -349,10 +349,11 @@ class TestBuildContextMessages(unittest.TestCase):
 
         messages = build_context_messages(state)
 
-        # Summary + ack + recent message
-        self.assertEqual(len(messages), 3)
+        # Summary + recent message (no synthetic acknowledgement)
+        self.assertEqual(len(messages), 2)
         self.assertIn("Previous discussion", messages[0]["content"][0]["text"])
-        self.assertEqual(messages[1]["role"], "assistant")
+        self.assertEqual(messages[1]["role"], "user")
+        self.assertEqual(messages[1]["content"][0]["text"], "New question")
 
 
 class TestPendingConfirmation(unittest.TestCase):

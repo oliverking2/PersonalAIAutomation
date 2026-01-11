@@ -219,6 +219,10 @@ class ToolSelector:
             data = json.loads(text)
 
             domains = data.get("domains", [])
+            if not isinstance(domains, list):
+                raise ToolSelectionError(
+                    f"Expected 'domains' to be a list, got {type(domains).__name__}"
+                )
             reasoning = data.get("reasoning", "")
 
             # Filter to valid domains, deduplicate, respect limit

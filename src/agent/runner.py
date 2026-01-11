@@ -61,7 +61,6 @@ from src.database.memory import get_active_memories
 
 if TYPE_CHECKING:
     from mypy_boto3_bedrock_runtime.type_defs import (
-        MessageTypeDef,
         ToolConfigurationTypeDef,
     )
     from sqlalchemy.orm import Session
@@ -134,7 +133,7 @@ Always be concise and helpful in your responses. Keep responses short and to the
 class _RunState:
     """Mutable state for an agent run."""
 
-    messages: list[Any]  # MessageTypeDef
+    messages: list[dict[str, Any]]
     tool_calls: list[ToolCall]
     steps_taken: int
     tools: dict[str, ToolDef]
@@ -387,8 +386,7 @@ class AgentRunner:
             clear_pending_confirmation(conv_state)
 
             # Add user message to context
-            user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
-            append_messages(conv_state, [user_msg])
+            append_messages(conv_state, [self.client.create_user_message(user_message)])
 
             logger.info("User declined all confirmations")
 
@@ -599,8 +597,7 @@ class AgentRunner:
                 except ClassificationParseError as e:
                     logger.warning(f"Failed to apply correction to {tool_action.tool_name}: {e}")
                     # Add error message to response
-                    user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
-                    append_messages(conv_state, [user_msg])
+                    append_messages(conv_state, [self.client.create_user_message(user_message)])
                     return AgentRunResult(
                         response=(
                             f"I couldn't apply your correction to the "
@@ -614,8 +611,7 @@ class AgentRunner:
 
         if not tools_to_execute:
             # All tools rejected
-            user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
-            append_messages(conv_state, [user_msg])
+            append_messages(conv_state, [self.client.create_user_message(user_message)])
             return AgentRunResult(
                 response="Got it, I'll leave everything as is.",
                 tool_calls=[],
@@ -790,7 +786,7 @@ class AgentRunner:
             is_error = True
         except ToolExecutionError as e:
             logger.warning(f"Tool execution failed: {e}")
-            tool_result = {"error": e.error}
+            tool_result = {"error": e.error, "error_type": "execution"}
             is_error = True
 
         tool_call = ToolCall(
@@ -962,7 +958,7 @@ class AgentRunner:
 
     def _call_llm(
         self,
-        messages: list[MessageTypeDef],
+        messages: list[dict[str, Any]],
         tool_config: ToolConfigurationTypeDef | None,
     ) -> dict[str, Any]:
         """Call the LLM and return the response.
@@ -1141,12 +1137,18 @@ class AgentRunner:
 
             if tool_name not in state.tools:
                 logger.error(f"LLM requested unknown tool: {tool_name}")
-                error_result = {"error": f"Unknown tool: {tool_name}"}
+                error_result = {
+                    "error": f"Unknown tool: {tool_name}",
+                    "error_type": "validation",
+                }
             else:
                 # Tool exists but we can't execute it because another tool
                 # in this batch is unknown - we need to bail out entirely
                 logger.warning(f"Skipping tool {tool_name} due to unknown tool in same request")
-                error_result = {"error": "Execution skipped due to unknown tool in batch"}
+                error_result = {
+                    "error": "Execution skipped due to unknown tool in batch",
+                    "error_type": "execution",
+                }
 
             state.tool_calls.append(
                 ToolCall(

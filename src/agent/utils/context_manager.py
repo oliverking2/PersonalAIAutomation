@@ -293,13 +293,7 @@ def build_context_messages(state: ConversationState) -> list[dict[str, Any]]:
                 }
             ],
         }
-        # Add a placeholder assistant acknowledgement
-        assistant_ack = {
-            "role": "assistant",
-            "content": [{"text": "I understand the previous context. How can I help you?"}],
-        }
         messages.append(summary_message)
-        messages.append(assistant_ack)
 
     # Add recent messages
     messages.extend(state.messages)
