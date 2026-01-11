@@ -1,11 +1,10 @@
 """Tests for agent content templates."""
 
 import unittest
-from datetime import date
-from unittest.mock import patch
 
 from src.agent.utils.templates import (
     build_goal_content,
+    build_idea_content,
     build_reading_item_content,
     build_task_content,
 )
@@ -14,23 +13,24 @@ from src.agent.utils.templates import (
 class TestBuildTaskContent(unittest.TestCase):
     """Tests for the build_task_content function."""
 
-    @patch("src.agent.utils.templates.date")
-    def test_basic_task_content(self, mock_date: unittest.mock.MagicMock) -> None:
+    def test_description_only(self) -> None:
         """Test building task content with description only."""
-        mock_date.today.return_value = date(2025, 1, 15)
-
         result = build_task_content(description="Fix the authentication bug")
 
         self.assertIn("## Description", result)
         self.assertIn("Fix the authentication bug", result)
-        self.assertIn("Created via AI Agent on 2025-01-15", result)
         self.assertNotIn("## Notes", result)
 
-    @patch("src.agent.utils.templates.date")
-    def test_task_content_with_notes(self, mock_date: unittest.mock.MagicMock) -> None:
-        """Test building task content with description and notes."""
-        mock_date.today.return_value = date(2025, 1, 15)
+    def test_notes_only(self) -> None:
+        """Test building task content with notes only."""
+        result = build_task_content(notes="Check for security vulnerabilities")
 
+        self.assertNotIn("## Description", result)
+        self.assertIn("## Notes", result)
+        self.assertIn("Check for security vulnerabilities", result)
+
+    def test_description_and_notes(self) -> None:
+        """Test building task content with description and notes."""
         result = build_task_content(
             description="Review the PR",
             notes="Check for security vulnerabilities",
@@ -40,52 +40,39 @@ class TestBuildTaskContent(unittest.TestCase):
         self.assertIn("Review the PR", result)
         self.assertIn("## Notes", result)
         self.assertIn("Check for security vulnerabilities", result)
-        self.assertIn("Created via AI Agent on 2025-01-15", result)
 
-    def test_task_content_has_separator(self) -> None:
-        """Test that task content includes separator before timestamp."""
-        result = build_task_content(description="Test task")
-
-        self.assertIn("---", result)
-
-    def test_task_content_structure(self) -> None:
-        """Test that task content has correct structure."""
+    def test_structure_order(self) -> None:
+        """Test that description comes before notes."""
         result = build_task_content(
             description="Description text",
             notes="Notes text",
         )
 
         lines = result.split("\n")
-
-        # Check structure order
         desc_index = lines.index("## Description")
         notes_index = lines.index("## Notes")
-        separator_index = lines.index("---")
 
         self.assertLess(desc_index, notes_index)
-        self.assertLess(notes_index, separator_index)
+
+    def test_empty_returns_empty(self) -> None:
+        """Test that no inputs returns empty string."""
+        result = build_task_content()
+        self.assertEqual(result, "")
 
 
 class TestBuildGoalContent(unittest.TestCase):
     """Tests for the build_goal_content function."""
 
-    @patch("src.agent.utils.templates.date")
-    def test_basic_goal_content(self, mock_date: unittest.mock.MagicMock) -> None:
+    def test_description_only(self) -> None:
         """Test building goal content with description only."""
-        mock_date.today.return_value = date(2025, 2, 20)
-
         result = build_goal_content(description="Improve fitness by running daily")
 
         self.assertIn("## Description", result)
         self.assertIn("Improve fitness by running daily", result)
-        self.assertIn("Created via AI Agent on 2025-02-20", result)
         self.assertNotIn("## Notes", result)
 
-    @patch("src.agent.utils.templates.date")
-    def test_goal_content_with_notes(self, mock_date: unittest.mock.MagicMock) -> None:
+    def test_description_and_notes(self) -> None:
         """Test building goal content with description and notes."""
-        mock_date.today.return_value = date(2025, 2, 20)
-
         result = build_goal_content(
             description="Learn a new programming language",
             notes="Start with Rust",
@@ -96,81 +83,71 @@ class TestBuildGoalContent(unittest.TestCase):
         self.assertIn("## Notes", result)
         self.assertIn("Start with Rust", result)
 
-    def test_goal_content_has_separator(self) -> None:
-        """Test that goal content includes separator before timestamp."""
-        result = build_goal_content(description="Test goal")
-
-        self.assertIn("---", result)
+    def test_empty_returns_empty(self) -> None:
+        """Test that no inputs returns empty string."""
+        result = build_goal_content()
+        self.assertEqual(result, "")
 
 
 class TestBuildReadingItemContent(unittest.TestCase):
     """Tests for the build_reading_item_content function."""
 
-    @patch("src.agent.utils.templates.date")
-    def test_reading_content_without_notes(self, mock_date: unittest.mock.MagicMock) -> None:
+    def test_without_notes(self) -> None:
         """Test building reading item content without notes."""
-        mock_date.today.return_value = date(2025, 3, 10)
-
         result = build_reading_item_content()
 
         self.assertIn("## Notes", result)
         self.assertIn("(Add notes after reading)", result)
-        self.assertIn("Added via AI Agent on 2025-03-10", result)
 
-    @patch("src.agent.utils.templates.date")
-    def test_reading_content_with_notes(self, mock_date: unittest.mock.MagicMock) -> None:
+    def test_with_notes(self) -> None:
         """Test building reading item content with notes."""
-        mock_date.today.return_value = date(2025, 3, 10)
-
         result = build_reading_item_content(notes="Recommended by colleague")
 
         self.assertIn("## Notes", result)
         self.assertIn("Recommended by colleague", result)
         self.assertNotIn("(Add notes after reading)", result)
 
-    def test_reading_content_has_separator(self) -> None:
-        """Test that reading content includes separator before timestamp."""
-        result = build_reading_item_content()
 
-        self.assertIn("---", result)
+class TestBuildIdeaContent(unittest.TestCase):
+    """Tests for the build_idea_content function."""
 
-    def test_reading_content_uses_added_instead_of_created(self) -> None:
-        """Test that reading content says 'Added' not 'Created'."""
-        result = build_reading_item_content()
+    def test_without_notes(self) -> None:
+        """Test building idea content without notes."""
+        result = build_idea_content()
 
-        self.assertIn("Added via AI Agent", result)
-        self.assertNotIn("Created via AI Agent", result)
+        self.assertIn("## Details", result)
+        self.assertIn("(Add details here)", result)
+
+    def test_with_notes(self) -> None:
+        """Test building idea content with notes."""
+        result = build_idea_content(notes="This could be a mobile app")
+
+        self.assertIn("## Details", result)
+        self.assertIn("This could be a mobile app", result)
+        self.assertNotIn("(Add details here)", result)
 
 
 class TestTemplateConsistency(unittest.TestCase):
     """Tests for consistency across all template functions."""
-
-    def test_all_templates_have_agent_attribution(self) -> None:
-        """Test that all templates include AI Agent attribution."""
-        task = build_task_content(description="test")
-        goal = build_goal_content(description="test")
-        reading = build_reading_item_content()
-
-        self.assertIn("AI Agent", task)
-        self.assertIn("AI Agent", goal)
-        self.assertIn("AI Agent", reading)
-
-    def test_all_templates_have_date(self) -> None:
-        """Test that all templates include a date."""
-        task = build_task_content(description="test")
-        goal = build_goal_content(description="test")
-        reading = build_reading_item_content()
-
-        today = str(date.today())
-        self.assertIn(today, task)
-        self.assertIn(today, goal)
-        self.assertIn(today, reading)
 
     def test_all_templates_return_strings(self) -> None:
         """Test that all templates return strings."""
         self.assertIsInstance(build_task_content(description="test"), str)
         self.assertIsInstance(build_goal_content(description="test"), str)
         self.assertIsInstance(build_reading_item_content(), str)
+        self.assertIsInstance(build_idea_content(), str)
+
+    def test_all_templates_use_markdown_headings(self) -> None:
+        """Test that all templates use markdown headings."""
+        task = build_task_content(description="test")
+        goal = build_goal_content(description="test")
+        reading = build_reading_item_content()
+        idea = build_idea_content()
+
+        self.assertIn("##", task)
+        self.assertIn("##", goal)
+        self.assertIn("##", reading)
+        self.assertIn("##", idea)
 
 
 if __name__ == "__main__":
