@@ -13,6 +13,7 @@ from src.api.models import ErrorResponse
 from src.api.notion import router as notion_router
 from src.api.reminders import router as reminders_router
 from src.api.security import verify_token
+from src.api.webhooks import router as webhooks_router
 from src.observability.sentry import init_sentry
 from src.utils.logging import configure_logging
 
@@ -66,6 +67,7 @@ async def validation_exception_handler(
 
 
 app.include_router(health_router)
+app.include_router(webhooks_router)  # Webhooks handle their own authentication
 app.include_router(memory_router, dependencies=[Depends(verify_token)])
 app.include_router(notion_router, dependencies=[Depends(verify_token)])
 app.include_router(reminders_router, dependencies=[Depends(verify_token)])
