@@ -72,7 +72,10 @@ TASK_TOOL_CONFIG = CRUDToolConfig(
         f"Update an existing task. Requires the task_id. "
         f"Can update task name, status ({_status_options}), priority ({_priority_options}), "
         f"effort level ({_effort_options}), task group ({_group_options}), or due date. "
-        f"Use description/notes to update page content; omit to keep existing."
+        f"IMPORTANT: Before updating description/notes, you MUST first call get_task to retrieve "
+        f"the current content, then merge existing content with your changes. The content field "
+        f"will REPLACE all existing page content. If get_task fails due to unsupported blocks, "
+        f"inform the user they must edit directly in Notion."
     ),
 )
 

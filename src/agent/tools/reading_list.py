@@ -70,7 +70,10 @@ READING_LIST_TOOL_CONFIG = CRUDToolConfig(
         f"Update an existing reading list item. Requires the item_id. "
         f"Can update title, type ({_type_options}), status ({_status_options}), "
         f"priority ({_priority_options}), category ({_category_options}), or item_url. "
-        f"Use notes to update page content; omit to keep existing."
+        f"IMPORTANT: Before updating notes, you MUST first call get_reading_item to retrieve "
+        f"the current content, then merge existing content with your changes. The content field "
+        f"will REPLACE all existing page content. If get_reading_item fails due to unsupported "
+        f"blocks, inform the user they must edit directly in Notion."
     ),
 )
 

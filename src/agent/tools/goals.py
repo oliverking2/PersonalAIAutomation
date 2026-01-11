@@ -70,7 +70,10 @@ GOAL_TOOL_CONFIG = CRUDToolConfig(
         f"Update an existing goal. Requires the goal_id. "
         f"Can update goal name, status ({_status_options}), "
         f"priority ({_priority_options}), category ({_category_options}), progress, or due date. "
-        f"Use description/notes to update page content; omit to keep existing."
+        f"IMPORTANT: Before updating description/notes, you MUST first call get_goal to retrieve "
+        f"the current content, then merge existing content with your changes. The content field "
+        f"will REPLACE all existing page content. If get_goal fails due to unsupported blocks, "
+        f"inform the user they must edit directly in Notion."
     ),
 )
 

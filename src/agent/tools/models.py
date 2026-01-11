@@ -132,18 +132,14 @@ class AgentReadingItemCreateArgs(BaseModel):
 class AgentTaskUpdateArgs(BaseModel):
     """Agent arguments for updating a task.
 
-    Uses description and notes instead of raw content.
-    If provided, the tool handler builds formatted content from these fields.
+    Uses content field for raw markdown. Agent must fetch existing content
+    via get_task, merge changes, and pass the complete content.
     """
 
     task_name: str | None = Field(None, min_length=1, description="Task title")
-    description: str | None = Field(
+    content: str | None = Field(
         None,
-        description="What needs to be done and why",
-    )
-    notes: str | None = Field(
-        None,
-        description="Additional context, references, or details",
+        description="Complete page content in markdown (replaces all existing content)",
     )
     due_date: date | None = Field(None, description="Task due date")
     task_group: TaskGroup | None = Field(
@@ -167,18 +163,14 @@ class AgentTaskUpdateArgs(BaseModel):
 class AgentGoalUpdateArgs(BaseModel):
     """Agent arguments for updating a goal.
 
-    Uses description and notes instead of raw content.
-    If provided, the tool handler builds formatted content from these fields.
+    Uses content field for raw markdown. Agent must fetch existing content
+    via get_goal, merge changes, and pass the complete content.
     """
 
     goal_name: str | None = Field(None, min_length=1, description="Goal title")
-    description: str | None = Field(
+    content: str | None = Field(
         None,
-        description="What this goal aims to achieve and why it matters",
-    )
-    notes: str | None = Field(
-        None,
-        description="Additional context, milestones, or references",
+        description="Complete page content in markdown (replaces all existing content)",
     )
     status: GoalStatus | None = Field(
         None,
@@ -204,17 +196,17 @@ class AgentGoalUpdateArgs(BaseModel):
 class AgentReadingItemUpdateArgs(BaseModel):
     """Agent arguments for updating a reading list item.
 
-    Uses notes instead of raw content.
-    If provided, the tool handler builds formatted content from this field.
+    Uses content field for raw markdown. Agent must fetch existing content
+    via get_reading_item, merge changes, and pass the complete content.
     """
 
     title: str | None = Field(None, min_length=1, description="Title of the item")
     item_type: ReadingType | None = Field(
         None, description=f"Type of reading item ({', '.join(ReadingType)})"
     )
-    notes: str | None = Field(
+    content: str | None = Field(
         None,
-        description="Notes or thoughts about this item",
+        description="Complete page content in markdown (replaces all existing content)",
     )
     item_url: str | None = Field(None, description="URL of the article, book, or resource to read")
     status: ReadingStatus | None = Field(
@@ -261,14 +253,14 @@ class AgentIdeaCreateArgs(BaseModel):
 class AgentIdeaUpdateArgs(BaseModel):
     """Agent arguments for updating an idea.
 
-    Uses notes instead of raw content.
-    If provided, the tool handler builds formatted content from this field.
+    Uses content field for raw markdown. Agent must fetch existing content
+    via get_idea, merge changes, and pass the complete content.
     """
 
     idea: str | None = Field(None, min_length=1, description="Idea title or summary")
-    notes: str | None = Field(
+    content: str | None = Field(
         None,
-        description="Additional details, context, or elaboration on the idea",
+        description="Complete page content in markdown (replaces all existing content)",
     )
     status: IdeaStatus | None = Field(
         None,
