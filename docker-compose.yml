@@ -124,6 +124,7 @@ services:
       DATABASE_URL: "postgres://glitchtip:${GLITCHTIP_DB_PASSWORD}@postgres:5432/glitchtip"
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
       GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN}
+      CSRF_TRUSTED_ORIGINS: ${GLITCHTIP_DOMAIN}
       VALKEY_URL: ""
 
       # Minimal setup: no real email for now (emails go to container logs)
