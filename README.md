@@ -7,7 +7,7 @@ tool registry to handle tasks, goals, and content curation autonomously.
 **Key highlights:**
 
 - **Agentic architecture** - Multi-step reasoning loop with AWS Bedrock (Claude Sonnet/Haiku) that dynamically selects and executes tools based on user intent
-- **Tool registry pattern** - 19 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
+- **Tool registry pattern** - 20 domain-specific tools with JSON schema generation, risk-level classification, and human-in-the-loop confirmation for sensitive operations
 - **Telegram integration** - Two-way conversational interface with session persistence, enabling both proactive alerts and interactive requests
 - **Production-ready infrastructure** - Dagster orchestration, PostgreSQL persistence, FastAPI REST layer, and comprehensive observability
 
@@ -46,15 +46,15 @@ This section provides a high-level overview of how the system works, intended as
 │                              AI AGENT LAYER                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ToolSelector          │  AgentRunner            │  ToolRegistry            │
-│  (AI-first tool        │  (Bedrock Converse      │  (19 tools across        │
+│  (AI-first tool        │  (Bedrock Converse      │  (20 tools across        │
 │   selection)           │   reasoning loop)       │   5 domains)             │
 │                        │                         │                          │
 │  • Analyses intent     │  • Multi-step execution │  • Tasks: CRUD           │
 │  • Picks relevant      │  • HITL confirmation    │  • Goals: CRUD           │
 │    tools (≤5)          │  • Max 5 steps/run      │  • Reading List: CRUD    │
 │                        │                         │  • Ideas: CRUD           │
-│                        │                         │  • Reminders: create,    │
-│                        │                         │    query, cancel         │
+│                        │                         │  • Reminders: CRUD       │
+│                        │                         │    + cancel              │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -175,7 +175,8 @@ src/
 ├── notion/          # Notion API client and models
 ├── observability/   # Error tracking (Sentry/GlitchTip)
 ├── substack/        # Substack API client and parsing
-├── telegram/        # Telegram Bot client and service
+├── messaging/       # Messaging providers
+│   └── telegram/    # Telegram Bot client, polling, handlers
 └── utils/           # Logging configuration
 ```
 
@@ -470,6 +471,7 @@ The API service starts automatically with docker-compose. Access OpenAPI documen
 | POST   | /reminders/query     | Yes  | Query reminders with optional filters            |
 | GET    | /reminders/{id}      | Yes  | Retrieve a reminder schedule                     |
 | POST   | /reminders           | Yes  | Create a one-time or recurring reminder          |
+| PATCH  | /reminders/{id}      | Yes  | Update a reminder schedule                       |
 | DELETE | /reminders/{id}      | Yes  | Cancel (deactivate) a reminder                   |
 
 ##### Fuzzy Name Search
@@ -519,7 +521,7 @@ When creating items, the agent provides structured inputs that are automatically
 The agent cannot create arbitrary content - it must use these structured fields, which are then formatted via templates with an "AI Agent" attribution footer. This ensures consistent, well-structured page content.
 
 #### Available Tools
-The agent has 19 built-in tools organised by domain:
+The agent has 20 built-in tools organised by domain:
 
 | Domain       | Tools                                                                          |
 |--------------|--------------------------------------------------------------------------------|
@@ -527,7 +529,7 @@ The agent has 19 built-in tools organised by domain:
 | Goals        | query_goals, get_goal, create_goals, update_goal                               |
 | Reading List | query_reading_list, get_reading_item, create_reading_list, update_reading_item |
 | Ideas        | query_ideas, get_idea, create_ideas, update_idea                               |
-| Reminders    | create_reminder, query_reminders, cancel_reminder                              |
+| Reminders    | create_reminder, query_reminders, update_reminder, cancel_reminder             |
 
 #### Agent Runner
 The AgentRunner executes the reasoning and tool-calling loop with safety guardrails:
