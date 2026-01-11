@@ -8,10 +8,11 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from src.agent.models import AgentRunResult, ConfirmationRequest, PendingToolAction
 from src.agent.runner import AgentRunner
+from src.agent.utils.formatting import format_confirmation_message
 from src.agent.utils.tools.registry import create_default_registry
 from src.api.client import AsyncInternalAPIClient, InternalAPIClientError
 from src.database.telegram import create_telegram_message
@@ -36,9 +37,6 @@ REPLY_CONTEXT_TEMPLATE = "[Replying to previous message: {quoted_text}]\n\n{mess
 # Pattern to match Telegram commands (e.g., /newchat, /help)
 # Captures: group 1 = command name, group 2 = optional args (may be None)
 COMMAND_PATTERN = re.compile(r"^/([a-zA-Z_]+)(?:\s+(.*))?$", re.DOTALL)
-
-# Maximum number of tool arguments to show in confirmation message preview
-MAX_ARGS_IN_PREVIEW = 3
 
 # Interval in seconds between typing indicator refreshes
 TYPING_INDICATOR_INTERVAL = 4.0
@@ -453,67 +451,25 @@ class MessageHandler:
         :param confirmation: The confirmation request from the agent.
         :returns: Formatted message for the user.
         """
-        tools = confirmation.tools
+        # Build list of (tool, entity_name) tuples
+        tools_with_names: list[tuple[PendingToolAction, str | None]] = []
 
-        if len(tools) == 1:
-            # Single tool - use simple format with entity name lookup
-            tool = tools[0]
-            formatted_action = await self._format_tool_action(tool)
-            return (
-                f"I need your confirmation to proceed:\n\n"
-                f"{formatted_action}\n\n"
-                f"Reply 'yes' to confirm or 'no' to cancel."
-            )
+        for tool in confirmation.tools:
+            entity_name = await self._lookup_entity_name_for_tool(tool)
+            tools_with_names.append((tool, entity_name))
 
-        # Multiple tools - use numbered list
-        lines = ["I need your confirmation to proceed with these actions:\n"]
+        return format_confirmation_message(tools_with_names)
 
-        for tool in tools:
-            formatted_action = await self._format_tool_action(tool)
-            lines.append(f"{tool.index}. {formatted_action}")
-
-        lines.append("")
-        lines.append("Reply 'yes' to confirm all, 'no' to cancel all,")
-        lines.append("or specify which to approve (e.g., 'yes to 1 and 2, skip 3').")
-        lines.append("You can also provide corrections (e.g., 'yes but change priority to High').")
-
-        return "\n".join(lines)
-
-    async def _format_tool_action(self, tool: PendingToolAction) -> str:
-        """Format a single tool action for display.
-
-        Looks up entity names for ID fields (task_id, goal_id, etc.) and formats
-        the remaining arguments.
+    async def _lookup_entity_name_for_tool(self, tool: PendingToolAction) -> str | None:
+        """Look up the entity name for a tool action.
 
         :param tool: The pending tool action.
-        :returns: Formatted action string like "update_task: 'Task Name' → due_date='2025-01-01'"
+        :returns: The entity name if found, None otherwise.
         """
-        entity_name = None
-        other_args: dict[str, Any] = {}
-
-        # Separate entity ID from other args
         for key, value in tool.input_args.items():
             if key in ENTITY_ID_LOOKUPS and isinstance(value, str):
-                # Look up the entity name
-                entity_name = await self._lookup_entity_name(key, value)
-            else:
-                other_args[key] = value
-
-        # Build the formatted string
-        if entity_name:
-            # Format: "update_task: 'Task Name' → due_date='2025-01-01'"
-            if other_args:
-                args_str = ", ".join(f"{k}={v!r}" for k, v in other_args.items())
-                return f"{tool.tool_name}: '{entity_name}' → {args_str}"
-            return f"{tool.tool_name}: '{entity_name}'"
-
-        # No entity ID found, just format the args
-        args_str = ", ".join(
-            f"{k}={v!r}" for k, v in list(tool.input_args.items())[:MAX_ARGS_IN_PREVIEW]
-        )
-        if len(tool.input_args) > MAX_ARGS_IN_PREVIEW:
-            args_str += ", ..."
-        return f"{tool.tool_name}: {args_str}"
+                return await self._lookup_entity_name(key, value)
+        return None
 
     async def _lookup_entity_name(self, field_name: str, entity_id: str) -> str | None:
         """Look up an entity name by its ID.

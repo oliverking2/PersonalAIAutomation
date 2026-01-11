@@ -1760,6 +1760,21 @@ files = [
 pyreadline3 = {version = "*", markers = "sys_platform == \"win32\" and python_version >= \"3.8\""}
 
 [[package]]
+name = "humanize"
+version = "4.15.0"
+description = "Python humanize utilities"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "humanize-4.15.0-py3-none-any.whl", hash = "sha256:b1186eb9f5a9749cd9cb8565aee77919dd7c8d076161cf44d70e59e3301e1769"},
+    {file = "humanize-4.15.0.tar.gz", hash = "sha256:1dd098483eb1c7ee8e32eb2e99ad1910baefa4b75c3aff3a82f4d78688993b10"},
+]
+
+[package.extras]
+tests = ["freezegun", "pytest", "pytest-cov"]
+
+[[package]]
 name = "identify"
 version = "2.6.15"
 description = "File identification library for Python"
@@ -4912,4 +4927,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "369546243a8b28898db32f1c1a24282d7aa4c4ee8d3d66d462b1c5dbd11017d4"
+content-hash = "74a1c49fb1f12c8595ae48b7e3d9800accee5b9485f61b8697bf558d26ae3179"

@@ -140,13 +140,21 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         # Ensure agent conversation is lazily created
         self.mock_session_manager.ensure_agent_conversation.assert_called_once()
 
+    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
     @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_message_with_confirmation_request(
         self,
         mock_create_message: MagicMock,
+        mock_api_client_class: MagicMock,
     ) -> None:
         """Test handling of messages that trigger confirmation request."""
-        update = self._create_update(123, 12345, "Create a task")
+        # Mock the API client for entity name lookup
+        mock_client = AsyncMock()
+        mock_client.get.return_value = {"task_name": "Review quarterly report"}
+        mock_api_client_class.return_value.__aenter__.return_value = mock_client
+        mock_api_client_class.return_value.__aexit__.return_value = None
+
+        update = self._create_update(123, 12345, "Update the task due date")
 
         mock_session = MagicMock()
         mock_session.id = uuid.uuid4()
@@ -154,11 +162,14 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         self.mock_session_manager.get_or_create_session.return_value = (mock_session, False)
         self.mock_session_manager.ensure_agent_conversation.return_value = mock_session
 
-        mock_tool = MagicMock()
-        mock_tool.index = 1
-        mock_tool.tool_name = "create_task"
-        mock_tool.action_summary = "Create task: Buy groceries"
-        mock_tool.input_args = {"title": "Buy groceries"}
+        mock_tool = PendingToolAction(
+            index=1,
+            tool_use_id="tool-123",
+            tool_name="update_task",
+            tool_description="Update a task",
+            input_args={"task_id": "abc-123", "due_date": "2025-01-15"},
+            action_summary="Update task due date",
+        )
 
         mock_confirmation = MagicMock()
         mock_confirmation.tools = [mock_tool]
@@ -170,8 +181,12 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
 
         result = await self.handler.handle_update(self.mock_db_session, update)
 
-        self.assertIn("confirmation", result.lower())
-        self.assertIn("Buy groceries", result)
+        # New natural format: "I'll update the due date for "Review quarterly report" to 15th Jan 2025 - sound good?"
+        self.assertIn("I'll", result)
+        self.assertIn("sound good?", result)
+        self.assertIn("due date", result)
+        self.assertIn("Review quarterly report", result)
+        self.assertIn("15th Jan 2025", result)
 
     @patch("src.messaging.telegram.handler.create_telegram_message")
     async def test_handle_message_agent_error(
@@ -385,137 +400,6 @@ class TestParseCommand(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "my_command")
-
-
-class TestFormatToolAction(unittest.IsolatedAsyncioTestCase):
-    """Tests for _format_tool_action method."""
-
-    def setUp(self) -> None:
-        """Set up test fixtures."""
-        self.settings = TelegramConfig(
-            bot_token="test-token",
-            allowed_chat_ids="12345",
-            _env_file=None,
-        )
-        self.mock_session_manager = MagicMock()
-        self.handler = MessageHandler(
-            settings=self.settings,
-            session_manager=self.mock_session_manager,
-        )
-
-    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
-    async def test_format_tool_action_with_entity_name_lookup(
-        self,
-        mock_api_client_class: MagicMock,
-    ) -> None:
-        """Test formatting tool action with successful entity name lookup."""
-        mock_client = AsyncMock()
-        mock_client.get.return_value = {"task_name": "Review quarterly report"}
-        mock_api_client_class.return_value.__aenter__.return_value = mock_client
-        mock_api_client_class.return_value.__aexit__.return_value = None
-
-        tool = PendingToolAction(
-            index=1,
-            tool_use_id="tool-123",
-            tool_name="update_task",
-            tool_description="Update a task",
-            input_args={"task_id": "abc-123", "due_date": "2025-01-01"},
-            action_summary="Update task",
-        )
-
-        result = await self.handler._format_tool_action(tool)
-
-        self.assertEqual(result, "update_task: 'Review quarterly report' → due_date='2025-01-01'")
-        mock_client.get.assert_called_once_with("/notion/tasks/abc-123")
-
-    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
-    async def test_format_tool_action_with_entity_lookup_failure(
-        self,
-        mock_api_client_class: MagicMock,
-    ) -> None:
-        """Test formatting tool action when entity lookup fails."""
-        mock_client = AsyncMock()
-        mock_client.get.side_effect = InternalAPIClientError("Not found", 404)
-        mock_api_client_class.return_value.__aenter__.return_value = mock_client
-        mock_api_client_class.return_value.__aexit__.return_value = None
-
-        tool = PendingToolAction(
-            index=1,
-            tool_use_id="tool-123",
-            tool_name="update_task",
-            tool_description="Update a task",
-            input_args={"task_id": "abc-123", "due_date": "2025-01-01"},
-            action_summary="Update task",
-        )
-
-        result = await self.handler._format_tool_action(tool)
-
-        # Falls back to showing the args since lookup failed
-        self.assertIn("update_task:", result)
-        self.assertIn("task_id='abc-123'", result)
-        self.assertIn("due_date='2025-01-01'", result)
-
-    async def test_format_tool_action_without_entity_id(self) -> None:
-        """Test formatting tool action without entity ID field."""
-        tool = PendingToolAction(
-            index=1,
-            tool_use_id="tool-123",
-            tool_name="create_task",
-            tool_description="Create a task",
-            input_args={"title": "New task", "priority": "High"},
-            action_summary="Create task",
-        )
-
-        result = await self.handler._format_tool_action(tool)
-
-        self.assertEqual(result, "create_task: title='New task', priority='High'")
-
-    async def test_format_tool_action_with_many_args_truncates(self) -> None:
-        """Test that tool actions with many args are truncated."""
-        tool = PendingToolAction(
-            index=1,
-            tool_use_id="tool-123",
-            tool_name="create_task",
-            tool_description="Create a task",
-            input_args={
-                "title": "Task",
-                "priority": "High",
-                "due_date": "2025-01-01",
-                "status": "To Do",
-                "notes": "Extra notes",
-            },
-            action_summary="Create task",
-        )
-
-        result = await self.handler._format_tool_action(tool)
-
-        # Should only show first 3 args plus "..."
-        self.assertIn("create_task:", result)
-        self.assertIn("...", result)
-
-    @patch("src.messaging.telegram.handler.AsyncInternalAPIClient")
-    async def test_format_tool_action_entity_only_no_other_args(
-        self,
-        mock_api_client_class: MagicMock,
-    ) -> None:
-        """Test formatting when tool only has entity ID argument."""
-        mock_client = AsyncMock()
-        mock_client.get.return_value = {"goal_name": "Learn Spanish"}
-        mock_api_client_class.return_value.__aenter__.return_value = mock_client
-        mock_api_client_class.return_value.__aexit__.return_value = None
-
-        tool = PendingToolAction(
-            index=1,
-            tool_use_id="tool-123",
-            tool_name="get_goal",
-            tool_description="Get a goal",
-            input_args={"goal_id": "goal-456"},
-            action_summary="Get goal",
-        )
-
-        result = await self.handler._format_tool_action(tool)
-
-        self.assertEqual(result, "get_goal: 'Learn Spanish'")
 
 
 class TestLookupEntityName(unittest.IsolatedAsyncioTestCase):

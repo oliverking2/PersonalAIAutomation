@@ -20,7 +20,8 @@
       "Bash(poetry run mypy:*)",
       "Bash(poetry run ruff:*)",
       "Bash(make lint:*)",
-      "Bash(make format:*)"
+      "Bash(make format:*)",
+      "Bash(poetry show:*)"
     ]
   }
 }

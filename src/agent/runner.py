@@ -325,7 +325,7 @@ class AgentRunner:
             clear_pending_confirmation(conv_state)
 
             return AgentRunResult(
-                response="I couldn't understand your response. Please try again with a clearer answer.",
+                response="Sorry, I didn't quite catch that - could you clarify?",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="classification_error",
@@ -357,7 +357,7 @@ class AgentRunner:
             logger.info("User declined all confirmations")
 
             return AgentRunResult(
-                response="All actions cancelled.",
+                response="No worries, I won't make those changes.",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="user_cancelled",
@@ -410,9 +410,9 @@ class AgentRunner:
         tools = tools_to_execute if tools_to_execute is not None else pending.tools
 
         if not tools:
-            # No tools to execute, just return cancelled message
+            # No tools to execute (edge case)
             return AgentRunResult(
-                response="No actions to execute.",
+                response="Nothing to do here.",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="no_actions",
@@ -579,7 +579,7 @@ class AgentRunner:
             user_msg = cast(dict[str, Any], self.client.create_user_message(user_message))
             append_messages(conv_state, [user_msg])
             return AgentRunResult(
-                response="All actions were rejected.",
+                response="Got it, I'll leave everything as is.",
                 tool_calls=[],
                 steps_taken=0,
                 stop_reason="user_cancelled",
