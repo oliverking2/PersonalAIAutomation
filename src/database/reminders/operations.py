@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-import uuid as uuid_module
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -72,7 +72,7 @@ def create_reminder_instance(
 
 def get_schedule_by_id(
     session: Session,
-    schedule_id: uuid_module.UUID,
+    schedule_id: UUID,
 ) -> ReminderSchedule | None:
     """Get a reminder schedule by ID.
 
@@ -85,7 +85,7 @@ def get_schedule_by_id(
 
 def get_instance_by_id(
     session: Session,
-    instance_id: uuid_module.UUID,
+    instance_id: UUID,
 ) -> ReminderInstance | None:
     """Get a reminder instance by ID.
 
@@ -192,7 +192,7 @@ def mark_instance_sent(
 
 def acknowledge_instance(
     session: Session,
-    instance_id: uuid_module.UUID,
+    instance_id: UUID,
     now: datetime | None = None,
 ) -> ReminderInstance | None:
     """Acknowledge a reminder instance.
@@ -218,7 +218,7 @@ def acknowledge_instance(
 
 def snooze_instance(
     session: Session,
-    instance_id: uuid_module.UUID,
+    instance_id: UUID,
     snooze_until: datetime,
 ) -> ReminderInstance | None:
     """Snooze a reminder instance until a specific time.
@@ -277,7 +277,7 @@ def update_schedule_next_trigger(
 
 def deactivate_schedule(
     session: Session,
-    schedule_id: uuid_module.UUID,
+    schedule_id: UUID,
 ) -> ReminderSchedule | None:
     """Deactivate (cancel) a reminder schedule.
 
@@ -292,6 +292,49 @@ def deactivate_schedule(
     schedule.is_active = False
     session.flush()
     logger.info(f"Deactivated schedule: id={schedule_id}")
+    return schedule
+
+
+def update_reminder_schedule(
+    session: Session,
+    schedule_id: UUID,
+    message: str | None = None,
+    cron_schedule: str | None = None,
+    next_trigger_at: datetime | None = None,
+) -> ReminderSchedule | None:
+    """Update a reminder schedule.
+
+    :param session: Database session.
+    :param schedule_id: Schedule ID to update.
+    :param message: New message (if provided).
+    :param cron_schedule: New cron (if provided). Empty string clears it (one-time).
+    :param next_trigger_at: New trigger time (if provided).
+    :returns: Updated schedule or None if not found.
+    """
+    schedule = get_schedule_by_id(session, schedule_id)
+    if schedule is None:
+        return None
+
+    updated_fields = []
+
+    if message is not None:
+        schedule.message = message
+        updated_fields.append("message")
+
+    if cron_schedule == "":
+        # Empty string means clear the cron (convert to one-time)
+        schedule.cron_schedule = None
+        updated_fields.append("cron_schedule=None")
+    elif cron_schedule is not None:
+        schedule.cron_schedule = cron_schedule
+        updated_fields.append("cron_schedule")
+
+    if next_trigger_at is not None:
+        schedule.next_trigger_at = next_trigger_at
+        updated_fields.append("next_trigger_at")
+
+    session.flush()
+    logger.info(f"Updated schedule: id={schedule_id}, fields={updated_fields}")
     return schedule
 
 
@@ -319,7 +362,7 @@ def list_schedules_for_chat(
 
 def get_active_instance_for_schedule(
     session: Session,
-    schedule_id: uuid_module.UUID,
+    schedule_id: UUID,
 ) -> ReminderInstance | None:
     """Get the active (unresolved) instance for a schedule.
 

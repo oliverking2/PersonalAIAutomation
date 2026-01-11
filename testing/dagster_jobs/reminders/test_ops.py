@@ -76,7 +76,11 @@ class TestFormatReminderMessage(unittest.TestCase):
     """Tests for _format_reminder_message function."""
 
     def test_formats_message_with_send_count(self) -> None:
-        """Test that message includes send count."""
+        """Test that message includes send count.
+
+        send_count is incremented after sending, so display shows send_count + 1.
+        With send_count=1, this would be the 2nd send.
+        """
         schedule = ReminderSchedule(
             id=uuid4(),
             message="Test reminder message",
@@ -94,11 +98,14 @@ class TestFormatReminderMessage(unittest.TestCase):
         result = _format_reminder_message(schedule, instance)
 
         self.assertIn("<b>Reminder</b>", result)
-        self.assertIn("(Send 1/3)", result)
+        self.assertIn("(Send 2/3)", result)
         self.assertIn("Test reminder message", result)
 
     def test_formats_first_send(self) -> None:
-        """Test message format for first send (0/3)."""
+        """Test message format for first send.
+
+        send_count=0 means it hasn't been sent yet, so display shows 1/3.
+        """
         schedule = ReminderSchedule(
             id=uuid4(),
             message="First reminder",
@@ -115,7 +122,7 @@ class TestFormatReminderMessage(unittest.TestCase):
 
         result = _format_reminder_message(schedule, instance)
 
-        self.assertIn("(Send 0/3)", result)
+        self.assertIn("(Send 1/3)", result)
         self.assertIn("First reminder", result)
 
 

@@ -21,6 +21,7 @@ from src.database.reminders.operations import (
     list_schedules_for_chat,
     mark_instance_sent,
     snooze_instance,
+    update_reminder_schedule,
     update_schedule_next_trigger,
 )
 
@@ -334,6 +335,123 @@ class TestDeactivateSchedule(unittest.TestCase):
         mock_session.query.return_value.filter.return_value.first.return_value = None
 
         result = deactivate_schedule(mock_session, uuid4())
+
+        self.assertIsNone(result)
+
+
+class TestUpdateReminderSchedule(unittest.TestCase):
+    """Tests for update_reminder_schedule operation."""
+
+    def test_updates_message_only(self) -> None:
+        """Test updating only the message."""
+        mock_session = MagicMock()
+        schedule_id = uuid4()
+        mock_schedule = ReminderSchedule(
+            id=schedule_id,
+            message="Old message",
+            chat_id=123,
+            next_trigger_at=datetime.now(UTC),
+            cron_schedule="0 9 * * 3",
+        )
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_schedule
+
+        result = update_reminder_schedule(mock_session, schedule_id, message="New message")
+
+        self.assertEqual(result.message, "New message")
+        self.assertEqual(result.cron_schedule, "0 9 * * 3")  # Unchanged
+        mock_session.flush.assert_called_once()
+
+    def test_updates_cron_schedule_only(self) -> None:
+        """Test updating only the cron schedule."""
+        mock_session = MagicMock()
+        schedule_id = uuid4()
+        mock_schedule = ReminderSchedule(
+            id=schedule_id,
+            message="Test",
+            chat_id=123,
+            next_trigger_at=datetime.now(UTC),
+            cron_schedule="0 9 * * 3",
+        )
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_schedule
+
+        result = update_reminder_schedule(mock_session, schedule_id, cron_schedule="0 9 * * 2")
+
+        self.assertEqual(result.cron_schedule, "0 9 * * 2")
+        self.assertEqual(result.message, "Test")  # Unchanged
+        mock_session.flush.assert_called_once()
+
+    def test_updates_next_trigger_at_only(self) -> None:
+        """Test updating only the trigger time."""
+        mock_session = MagicMock()
+        schedule_id = uuid4()
+        old_trigger = datetime.now(UTC)
+        new_trigger = old_trigger + timedelta(days=1)
+        mock_schedule = ReminderSchedule(
+            id=schedule_id,
+            message="Test",
+            chat_id=123,
+            next_trigger_at=old_trigger,
+        )
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_schedule
+
+        result = update_reminder_schedule(mock_session, schedule_id, next_trigger_at=new_trigger)
+
+        self.assertEqual(result.next_trigger_at, new_trigger)
+        self.assertEqual(result.message, "Test")  # Unchanged
+        mock_session.flush.assert_called_once()
+
+    def test_updates_multiple_fields(self) -> None:
+        """Test updating multiple fields at once."""
+        mock_session = MagicMock()
+        schedule_id = uuid4()
+        new_trigger = datetime.now(UTC) + timedelta(days=1)
+        mock_schedule = ReminderSchedule(
+            id=schedule_id,
+            message="Old message",
+            chat_id=123,
+            next_trigger_at=datetime.now(UTC),
+            cron_schedule="0 9 * * 3",
+        )
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_schedule
+
+        result = update_reminder_schedule(
+            mock_session,
+            schedule_id,
+            message="New message",
+            cron_schedule="0 9 * * 2",
+            next_trigger_at=new_trigger,
+        )
+
+        self.assertEqual(result.message, "New message")
+        self.assertEqual(result.cron_schedule, "0 9 * * 2")
+        self.assertEqual(result.next_trigger_at, new_trigger)
+        mock_session.flush.assert_called_once()
+
+    def test_clears_cron_schedule(self) -> None:
+        """Test clearing cron schedule to convert to one-time."""
+        mock_session = MagicMock()
+        schedule_id = uuid4()
+        mock_schedule = ReminderSchedule(
+            id=schedule_id,
+            message="Test",
+            chat_id=123,
+            next_trigger_at=datetime.now(UTC),
+            cron_schedule="0 9 * * 3",
+        )
+        mock_session.query.return_value.filter.return_value.first.return_value = mock_schedule
+
+        # Empty string means "clear the cron schedule"
+        result = update_reminder_schedule(mock_session, schedule_id, cron_schedule="")
+
+        self.assertIsNone(result.cron_schedule)
+        mock_session.flush.assert_called_once()
+
+    def test_returns_none_when_not_found(self) -> None:
+        """Test that None is returned when schedule not found."""
+        mock_session = MagicMock()
+        mock_session.query.return_value.filter.return_value.first.return_value = None
+
+        result = update_reminder_schedule(mock_session, uuid4(), message="Test")
 
         self.assertIsNone(result)
 

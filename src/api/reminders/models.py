@@ -58,6 +58,25 @@ class QueryRemindersRequest(BaseModel):
     limit: int = Field(20, ge=1, le=100, description="Maximum schedules to return")
 
 
+class UpdateReminderRequest(BaseModel):
+    """Request model for updating a reminder."""
+
+    message: str | None = Field(
+        None,
+        min_length=1,
+        max_length=500,
+        description="New reminder message",
+    )
+    trigger_at: datetime | None = Field(
+        None,
+        description="New trigger time (ISO format with timezone)",
+    )
+    cron_schedule: str | None = Field(
+        None,
+        description="New cron schedule (empty string to convert to one-time)",
+    )
+
+
 class QueryRemindersResponse(BaseModel):
     """Response model for querying reminders."""
 

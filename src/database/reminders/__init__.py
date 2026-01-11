@@ -19,15 +19,14 @@ from src.database.reminders.operations import (
     list_schedules_for_chat,
     mark_instance_sent,
     snooze_instance,
+    update_reminder_schedule,
     update_schedule_next_trigger,
 )
 
 __all__ = [
-    # Models
     "ReminderInstance",
     "ReminderSchedule",
     "ReminderStatus",
-    # Operations
     "acknowledge_instance",
     "create_reminder_instance",
     "create_reminder_schedule",
@@ -41,5 +40,6 @@ __all__ = [
     "list_schedules_for_chat",
     "mark_instance_sent",
     "snooze_instance",
+    "update_reminder_schedule",
     "update_schedule_next_trigger",
 ]

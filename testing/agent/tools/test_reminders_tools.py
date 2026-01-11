@@ -19,17 +19,18 @@ from src.agent.tools.reminders import (
 class TestRemindersToolDefinitions(unittest.TestCase):
     """Tests for reminders tool definitions."""
 
-    def test_get_reminders_tools_returns_three_tools(self) -> None:
-        """Test that get_reminders_tools returns all three tools."""
+    def test_get_reminders_tools_returns_four_tools(self) -> None:
+        """Test that get_reminders_tools returns all four tools."""
         tools = get_reminders_tools()
 
-        self.assertEqual(len(tools), 3)
+        self.assertEqual(len(tools), 4)
         tool_names = {t.name for t in tools}
         self.assertEqual(
             tool_names,
             {
                 "create_reminder",
                 "query_reminders",
+                "update_reminder",
                 "cancel_reminder",
             },
         )
@@ -43,10 +44,11 @@ class TestRemindersToolDefinitions(unittest.TestCase):
         self.assertEqual(tool_dict["query_reminders"].risk_level, RiskLevel.SAFE)
 
     def test_sensitive_tools(self) -> None:
-        """Test that cancel tool is marked as sensitive."""
+        """Test that update and cancel tools are marked as sensitive."""
         tools = get_reminders_tools()
         tool_dict = {t.name: t for t in tools}
 
+        self.assertEqual(tool_dict["update_reminder"].risk_level, RiskLevel.SENSITIVE)
         self.assertEqual(tool_dict["cancel_reminder"].risk_level, RiskLevel.SENSITIVE)
 
     def test_tools_have_reminders_tag(self) -> None:

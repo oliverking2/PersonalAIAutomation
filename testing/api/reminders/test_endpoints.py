@@ -216,6 +216,150 @@ class TestGetReminderEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class TestUpdateReminderEndpoint(unittest.TestCase):
+    """Tests for PATCH /reminders/{reminder_id} endpoint."""
+
+    def setUp(self) -> None:
+        """Set up test client."""
+        self.app = app
+        self.client = TestClient(self.app)
+        self.auth_headers = {"Authorization": "Bearer test-auth-token"}
+
+    @patch("src.api.reminders.endpoints.get_session")
+    def test_update_reminder_message_success(self, mock_get_session: MagicMock) -> None:
+        """Test successful update of reminder message."""
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        schedule_id = uuid4()
+
+        with patch("src.api.reminders.endpoints.update_reminder_schedule") as mock_update:
+            mock_update.return_value = ReminderSchedule(
+                id=schedule_id,
+                message="Updated message",
+                chat_id=123456789,
+                next_trigger_at=datetime.now(UTC),
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+
+            response = self.client.patch(
+                f"/reminders/{schedule_id}",
+                headers=self.auth_headers,
+                json={"message": "Updated message"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["message"], "Updated message")
+
+    @patch("src.api.reminders.endpoints.get_session")
+    def test_update_reminder_cron_schedule_success(self, mock_get_session: MagicMock) -> None:
+        """Test successful update of cron schedule."""
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        schedule_id = uuid4()
+
+        with patch("src.api.reminders.endpoints.update_reminder_schedule") as mock_update:
+            mock_update.return_value = ReminderSchedule(
+                id=schedule_id,
+                message="Test",
+                chat_id=123456789,
+                cron_schedule="0 9 * * 2",
+                next_trigger_at=datetime.now(UTC),
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+
+            response = self.client.patch(
+                f"/reminders/{schedule_id}",
+                headers=self.auth_headers,
+                json={"cron_schedule": "0 9 * * 2"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["cron_schedule"], "0 9 * * 2")
+        self.assertTrue(data["is_recurring"])
+
+    @patch("src.api.reminders.endpoints.get_session")
+    def test_update_reminder_clear_cron_schedule(self, mock_get_session: MagicMock) -> None:
+        """Test clearing cron schedule to convert to one-time."""
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        schedule_id = uuid4()
+
+        with patch("src.api.reminders.endpoints.update_reminder_schedule") as mock_update:
+            mock_update.return_value = ReminderSchedule(
+                id=schedule_id,
+                message="Test",
+                chat_id=123456789,
+                cron_schedule=None,
+                next_trigger_at=datetime.now(UTC),
+                is_active=True,
+                created_at=datetime.now(UTC),
+            )
+
+            response = self.client.patch(
+                f"/reminders/{schedule_id}",
+                headers=self.auth_headers,
+                json={"cron_schedule": ""},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNone(data["cron_schedule"])
+        self.assertFalse(data["is_recurring"])
+
+    @patch("src.api.reminders.endpoints.get_session")
+    def test_update_reminder_not_found_returns_404(self, mock_get_session: MagicMock) -> None:
+        """Test that updating non-existent reminder returns 404."""
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.api.reminders.endpoints.update_reminder_schedule") as mock_update:
+            mock_update.return_value = None
+
+            response = self.client.patch(
+                f"/reminders/{uuid4()}",
+                headers=self.auth_headers,
+                json={"message": "Test"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_update_reminder_no_fields_returns_400(self) -> None:
+        """Test that updating with no fields returns 400."""
+        schedule_id = uuid4()
+
+        response = self.client.patch(
+            f"/reminders/{schedule_id}",
+            headers=self.auth_headers,
+            json={},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("At least one field", response.json()["detail"])
+
+    def test_update_reminder_empty_message_returns_422(self) -> None:
+        """Test that empty message returns 422."""
+        schedule_id = uuid4()
+
+        response = self.client.patch(
+            f"/reminders/{schedule_id}",
+            headers=self.auth_headers,
+            json={"message": ""},
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+
 class TestCancelReminderEndpoint(unittest.TestCase):
     """Tests for DELETE /reminders/{reminder_id} endpoint."""
 

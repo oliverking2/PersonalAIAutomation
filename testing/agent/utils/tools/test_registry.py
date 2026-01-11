@@ -234,8 +234,8 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         """Test that create_default_registry creates a populated registry."""
         registry = create_default_registry()
 
-        # Should have 19 tools: 4 reading + 4 goals + 4 tasks + 4 ideas + 3 reminders
-        self.assertEqual(len(registry), 19)
+        # Should have 20 tools: 4 reading + 4 goals + 4 tasks + 4 ideas + 4 reminders
+        self.assertEqual(len(registry), 20)
 
     def test_contains_reading_list_tools(self) -> None:
         """Test that registry contains reading list tools."""
@@ -279,6 +279,7 @@ class TestCreateDefaultRegistry(unittest.TestCase):
 
         self.assertIn("create_reminder", registry)
         self.assertIn("query_reminders", registry)
+        self.assertIn("update_reminder", registry)
         self.assertIn("cancel_reminder", registry)
 
     def test_tools_can_be_retrieved(self) -> None:
@@ -304,7 +305,7 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         self.assertEqual(len(goals_tools), 4)
         self.assertEqual(len(tasks_tools), 4)
         self.assertEqual(len(ideas_tools), 4)
-        self.assertEqual(len(reminders_tools), 3)
+        self.assertEqual(len(reminders_tools), 4)
 
 
 if __name__ == "__main__":
