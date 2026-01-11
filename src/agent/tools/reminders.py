@@ -229,7 +229,7 @@ CREATE_REMINDER_TOOL = ToolDef(
         "For recurring reminders, also provide a cron_schedule (e.g. '0 9 * * 1-5' for "
         "weekdays at 9am). The trigger_at must be in ISO 8601 format with timezone."
     ),
-    tags=frozenset({"reminders", "create"}),
+    tags=frozenset({"domain:reminders", "reminders", "create"}),
     risk_level=RiskLevel.SAFE,
     args_model=CreateReminderArgs,
     handler=_create_reminder_handler,
@@ -242,7 +242,7 @@ QUERY_REMINDERS_TOOL = ToolDef(
         "set include_inactive=true to include cancelled or completed reminders. "
         "Returns reminder ID, message, next trigger time, and whether it's recurring."
     ),
-    tags=frozenset({"reminders", "query", "list"}),
+    tags=frozenset({"domain:reminders", "reminders", "query", "list"}),
     risk_level=RiskLevel.SAFE,
     args_model=QueryRemindersArgs,
     handler=_query_reminders_handler,
@@ -255,7 +255,7 @@ CANCEL_REMINDER_TOOL = ToolDef(
         "triggering or sending any more messages. Use query_reminders first to find "
         "the reminder ID if you don't have it."
     ),
-    tags=frozenset({"reminders", "cancel", "delete", "remove"}),
+    tags=frozenset({"domain:reminders", "reminders", "cancel", "delete", "remove"}),
     risk_level=RiskLevel.SENSITIVE,
     args_model=CancelReminderArgs,
     handler=_cancel_reminder_handler,
@@ -270,7 +270,7 @@ UPDATE_REMINDER_TOOL = ToolDef(
         "To convert a recurring reminder to one-time, set cron_schedule to empty string. "
         "Use query_reminders first to find the reminder ID if you don't have it."
     ),
-    tags=frozenset({"reminders", "update", "edit", "modify"}),
+    tags=frozenset({"domain:reminders", "reminders", "update", "edit", "modify"}),
     risk_level=RiskLevel.SENSITIVE,
     args_model=UpdateReminderArgs,
     handler=_update_reminder_handler,

@@ -76,6 +76,16 @@ class CRUDToolConfig:
     create_fields: frozenset[str] = DEFAULT_CREATE_FIELDS
     update_fields: frozenset[str] = DEFAULT_UPDATE_FIELDS
 
+    @property
+    def domain_tag(self) -> str:
+        """Get the domain tag for tool grouping.
+
+        Used by the ToolSelector to group all tools in a domain together.
+
+        :returns: Domain tag in format 'domain:{domain_plural}'.
+        """
+        return f"domain:{self.domain_plural}"
+
 
 def _get_client() -> InternalAPIClient:
     """Get an API client instance.
@@ -185,7 +195,7 @@ def _create_query_tool(config: CRUDToolConfig) -> ToolDef:
     return ToolDef(
         name=f"query_{config.domain_plural}",
         description=config.query_description,
-        tags=config.tags | {"query", "list"},
+        tags=frozenset({config.domain_tag}) | config.tags | {"query", "list"},
         risk_level=RiskLevel.SAFE,
         args_model=config.query_model,
         handler=query_handler,
@@ -212,7 +222,7 @@ def _create_get_tool(config: CRUDToolConfig) -> ToolDef:
     return ToolDef(
         name=f"get_{config.domain}",
         description=config.get_description,
-        tags=config.tags | {"get", "item"},
+        tags=frozenset({config.domain_tag}) | config.tags | {"get", "item"},
         risk_level=RiskLevel.SAFE,
         args_model=get_args_model,
         handler=get_handler,
@@ -299,7 +309,7 @@ def _create_create_tool(config: CRUDToolConfig) -> ToolDef:
     return ToolDef(
         name=f"create_{config.domain_plural}",
         description=config.create_description,
-        tags=config.tags | {"create", "item"},
+        tags=frozenset({config.domain_tag}) | config.tags | {"create", "item"},
         risk_level=RiskLevel.SAFE,
         args_model=bulk_args_model,
         handler=create_handler,
@@ -344,7 +354,7 @@ def _create_update_tool(config: CRUDToolConfig) -> ToolDef:
     return ToolDef(
         name=f"update_{config.domain}",
         description=config.update_description,
-        tags=config.tags | {"update", "item"},
+        tags=frozenset({config.domain_tag}) | config.tags | {"update", "item"},
         risk_level=RiskLevel.SENSITIVE,
         args_model=update_args_model,
         handler=update_handler,

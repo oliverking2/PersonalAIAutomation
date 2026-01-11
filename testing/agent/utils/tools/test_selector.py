@@ -34,117 +34,141 @@ class TestToolSelector(unittest.TestCase):
         self.registry = ToolRegistry()
         self.mock_client = MagicMock(spec=BedrockClient)
 
-        # Register some test tools
-        self.safe_tool = ToolDef(
+        # Register test tools with domain tags
+        self.query_tool = ToolDef(
             name="query_items",
             description="Query items from the database",
-            tags=frozenset({"query", "read"}),
+            tags=frozenset({"domain:items", "query", "read"}),
             risk_level=RiskLevel.SAFE,
             args_model=DummyArgs,
             handler=dummy_handler,
         )
-        self.sensitive_tool = ToolDef(
+        self.delete_tool = ToolDef(
             name="delete_item",
             description="Delete an item from the database",
-            tags=frozenset({"delete", "write"}),
+            tags=frozenset({"domain:items", "delete", "write"}),
             risk_level=RiskLevel.SENSITIVE,
             args_model=DummyArgs,
             handler=dummy_handler,
         )
-        self.registry.register(self.safe_tool)
-        self.registry.register(self.sensitive_tool)
+        self.registry.register(self.query_tool)
+        self.registry.register(self.delete_tool)
 
         self.selector = ToolSelector(
             registry=self.registry,
             client=self.mock_client,
-            max_tools=5,
+            max_tools=10,
         )
 
     def test_select_with_ai_success(self) -> None:
-        """Test successful AI-based tool selection."""
+        """Test successful AI-based domain selection."""
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "test"}],
         }
         self.mock_client.converse.return_value = {"output": {"message": {}}}
         self.mock_client.parse_text_response.return_value = (
-            '{"tool_names": ["query_items"], "reasoning": "User wants to query"}'
+            '{"domains": ["domain:items"], "reasoning": "User wants to work with items"}'
         )
 
         result = self.selector.select("Show me all items")
 
-        self.assertEqual(result.tool_names, ["query_items"])
-        self.assertEqual(result.reasoning, "User wants to query")
+        # Should return all tools for the domain
+        self.assertIn("query_items", result.tool_names)
+        self.assertIn("delete_item", result.tool_names)
+        self.assertEqual(result.domains, ["domain:items"])
+        self.assertEqual(result.reasoning, "User wants to work with items")
         self.mock_client.converse.assert_called_once()
 
-    def test_select_filters_invalid_tools(self) -> None:
-        """Test that invalid tool names are filtered out."""
+    def test_select_filters_invalid_domains(self) -> None:
+        """Test that invalid domain tags are filtered out."""
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "test"}],
         }
         self.mock_client.converse.return_value = {"output": {"message": {}}}
         self.mock_client.parse_text_response.return_value = (
-            '{"tool_names": ["query_items", "nonexistent"], "reasoning": "test"}'
+            '{"domains": ["domain:items", "domain:nonexistent"], "reasoning": "test"}'
         )
 
         result = self.selector.select("Show me all items")
 
-        self.assertEqual(result.tool_names, ["query_items"])
+        self.assertEqual(result.domains, ["domain:items"])
 
     def test_select_respects_max_tools(self) -> None:
-        """Test that selection respects the max_tools limit."""
-        # Add more tools
-        for i in range(10):
-            self.registry.register(
+        """Test that selection respects the max_tools limit via domain pruning."""
+        # Create a registry with multiple domains
+        registry = ToolRegistry()
+
+        # Add 6 tools in domain A
+        for i in range(6):
+            registry.register(
                 ToolDef(
-                    name=f"tool_{i}",
-                    description=f"Tool {i}",
+                    name=f"tool_a_{i}",
+                    description=f"Domain A tool {i}",
+                    tags=frozenset({"domain:domain_a"}),
                     args_model=DummyArgs,
                     handler=dummy_handler,
                 )
             )
 
-        self.mock_client.create_user_message.return_value = {
-            "role": "user",
-            "content": [{"text": "test"}],
-        }
-        self.mock_client.converse.return_value = {"output": {"message": {}}}
-        # Return more tools than max
-        tool_names = [f"tool_{i}" for i in range(10)]
-        self.mock_client.parse_text_response.return_value = json.dumps(
-            {"tool_names": tool_names, "reasoning": "test"}
+        # Add 6 tools in domain B
+        for i in range(6):
+            registry.register(
+                ToolDef(
+                    name=f"tool_b_{i}",
+                    description=f"Domain B tool {i}",
+                    tags=frozenset({"domain:domain_b"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        selector = ToolSelector(
+            registry=registry,
+            client=self.mock_client,
+            max_tools=10,
         )
 
-        result = self.selector.select("Use all tools")
-
-        self.assertEqual(len(result.tool_names), 5)
-
-    def test_select_deduplicates_tool_names(self) -> None:
-        """Test that duplicate tool names are removed while preserving order."""
         self.mock_client.create_user_message.return_value = {
             "role": "user",
             "content": [{"text": "test"}],
         }
         self.mock_client.converse.return_value = {"output": {"message": {}}}
-        # LLM mistakenly returns the same tool multiple times
+        # Try to select both domains (12 tools total, but max is 10)
+        self.mock_client.parse_text_response.return_value = json.dumps(
+            {"domains": ["domain:domain_a", "domain:domain_b"], "reasoning": "test"}
+        )
+
+        result = selector.select("Use all tools")
+
+        # Should only include first domain (6 tools) since adding second would exceed limit
+        self.assertEqual(len(result.tool_names), 6)
+        self.assertEqual(result.domains, ["domain:domain_a"])
+
+    def test_select_deduplicates_domains(self) -> None:
+        """Test that duplicate domains are removed while preserving order."""
+        self.mock_client.create_user_message.return_value = {
+            "role": "user",
+            "content": [{"text": "test"}],
+        }
+        self.mock_client.converse.return_value = {"output": {"message": {}}}
+        # LLM mistakenly returns the same domain multiple times
         self.mock_client.parse_text_response.return_value = json.dumps(
             {
-                "tool_names": [
-                    "query_items",
-                    "query_items",
-                    "query_items",
-                    "delete_item",
-                    "query_items",
+                "domains": [
+                    "domain:items",
+                    "domain:items",
+                    "domain:items",
                 ],
-                "reasoning": "User wants to query multiple items",
+                "reasoning": "User wants to work with items",
             }
         )
 
-        result = self.selector.select("Add 10 items to my reading list")
+        result = self.selector.select("Show me items")
 
-        # Should deduplicate to unique tools only
-        self.assertEqual(result.tool_names, ["query_items", "delete_item"])
+        # Should deduplicate to unique domains
+        self.assertEqual(result.domains, ["domain:items"])
 
     def test_select_handles_markdown_code_block(self) -> None:
         """Test parsing response wrapped in markdown code block."""
@@ -154,12 +178,12 @@ class TestToolSelector(unittest.TestCase):
         }
         self.mock_client.converse.return_value = {"output": {"message": {}}}
         self.mock_client.parse_text_response.return_value = (
-            '```json\n{"tool_names": ["query_items"], "reasoning": "test"}\n```'
+            '```json\n{"domains": ["domain:items"], "reasoning": "test"}\n```'
         )
 
         result = self.selector.select("Show items")
 
-        self.assertEqual(result.tool_names, ["query_items"])
+        self.assertEqual(result.domains, ["domain:items"])
 
     def test_select_empty_registry(self) -> None:
         """Test selection with empty registry."""
@@ -169,7 +193,8 @@ class TestToolSelector(unittest.TestCase):
         result = selector.select("Do something")
 
         self.assertEqual(result.tool_names, [])
-        self.assertIn("No tools available", result.reasoning)
+        self.assertEqual(result.domains, [])
+        self.assertIn("No domains available", result.reasoning)
         self.mock_client.converse.assert_not_called()
 
     def test_select_falls_back_on_bedrock_error(self) -> None:
@@ -180,28 +205,34 @@ class TestToolSelector(unittest.TestCase):
         }
         self.mock_client.converse.side_effect = BedrockClientError("API error")
 
-        result = self.selector.select("query items from database")
+        result = self.selector.select("show me all items")
 
+        # Fallback should match 'items' to 'domain:items'
+        self.assertIn("domain:items", result.domains)
         self.assertIn("query_items", result.tool_names)
         self.assertIn("fallback", result.reasoning)
 
-    def test_fallback_selection_prefers_safe_tools(self) -> None:
-        """Test that fallback selection prefers safe tools."""
-        result = self.selector._fallback_selection("delete or query", self.registry.list_metadata())
+    def test_fallback_domain_selection_matches_domain_name(self) -> None:
+        """Test that fallback selection matches domain names."""
+        available_domains = {"domain:items", "domain:tasks"}
 
-        # Safe tool should be boosted in score
-        if result.tool_names:
-            # Both might be selected based on keyword matching
-            self.assertIn("fallback", result.reasoning)
-
-    def test_fallback_selection_matches_tags(self) -> None:
-        """Test that fallback selection matches on tags."""
-        result = self.selector._fallback_selection(
-            "I need to read some data", self.registry.list_metadata()
+        result_domains, reasoning = self.selector._fallback_domain_selection(
+            "I need to query items", available_domains
         )
 
-        # 'read' is a tag of query_items
-        self.assertIn("query_items", result.tool_names)
+        self.assertIn("domain:items", result_domains)
+        self.assertIn("fallback", reasoning)
+
+    def test_fallback_domain_selection_matches_singular(self) -> None:
+        """Test that fallback matches singular form of domain names."""
+        available_domains = {"domain:items", "domain:tasks"}
+
+        # 'item' (singular) should match 'items' domain
+        result_domains, _ = self.selector._fallback_domain_selection(
+            "delete the item", available_domains
+        )
+
+        self.assertIn("domain:items", result_domains)
 
     def test_select_by_tags(self) -> None:
         """Test deterministic tag-based selection."""
@@ -210,36 +241,126 @@ class TestToolSelector(unittest.TestCase):
         self.assertEqual(result.tool_names, ["query_items"])
         self.assertIn("tags", result.reasoning)
 
-    def test_select_by_tags_orders_safe_first(self) -> None:
-        """Test that tag selection orders safe tools first."""
-        # Add another safe tool with same tag as sensitive
-        mixed_tool = ToolDef(
-            name="safe_write",
-            description="Safe write operation",
-            tags=frozenset({"write"}),
-            risk_level=RiskLevel.SAFE,
-            args_model=DummyArgs,
-            handler=dummy_handler,
-        )
-        self.registry.register(mixed_tool)
+    def test_select_by_tags_includes_domain(self) -> None:
+        """Test that tag selection includes domain info."""
+        result = self.selector.select_by_tags({"domain:items"})
 
-        result = self.selector.select_by_tags({"write"})
+        self.assertIn("query_items", result.tool_names)
+        self.assertIn("delete_item", result.tool_names)
+        self.assertIn("domain:items", result.domains)
 
-        # Safe tool should come first
-        self.assertEqual(result.tool_names[0], "safe_write")
-
-    def test_parse_selection_response_invalid_json(self) -> None:
+    def test_parse_domain_response_invalid_json(self) -> None:
         """Test that invalid JSON raises ToolSelectionError."""
         with self.assertRaises(ToolSelectionError):
-            self.selector._parse_selection_response("not json", {"tool1"})
+            self.selector._parse_domain_response("not json", {"domain:items"})
 
-    def test_parse_selection_response_missing_keys(self) -> None:
+    def test_parse_domain_response_missing_keys(self) -> None:
         """Test handling of response with missing keys."""
         # Should handle gracefully with defaults
-        result = self.selector._parse_selection_response("{}", {"tool1"})
+        domains, reasoning = self.selector._parse_domain_response("{}", {"domain:items"})
 
-        self.assertEqual(result.tool_names, [])
-        self.assertEqual(result.reasoning, "")
+        self.assertEqual(domains, [])
+        self.assertEqual(reasoning, "")
+
+    def test_tools_to_domains(self) -> None:
+        """Test extracting domains from tool names."""
+        domains = self.selector._tools_to_domains(["query_items", "delete_item"])
+
+        self.assertEqual(domains, ["domain:items"])
+
+    def test_tools_to_domains_preserves_order(self) -> None:
+        """Test that tools_to_domains preserves first occurrence order."""
+        # Add tools in a second domain
+        self.registry.register(
+            ToolDef(
+                name="create_task",
+                description="Create task",
+                tags=frozenset({"domain:tasks"}),
+                args_model=DummyArgs,
+                handler=dummy_handler,
+            )
+        )
+
+        domains = self.selector._tools_to_domains(["query_items", "create_task", "delete_item"])
+
+        self.assertEqual(domains, ["domain:items", "domain:tasks"])
+
+    def test_merge_domains_by_recency(self) -> None:
+        """Test that merge puts intent domains first."""
+        intent = ["domain:tasks"]
+        existing = ["domain:items", "domain:goals"]
+
+        merged = self.selector._merge_domains_by_recency(intent, existing)
+
+        self.assertEqual(merged, ["domain:tasks", "domain:items", "domain:goals"])
+
+    def test_merge_domains_deduplicates(self) -> None:
+        """Test that merge removes duplicates."""
+        intent = ["domain:items"]
+        existing = ["domain:items", "domain:tasks"]
+
+        merged = self.selector._merge_domains_by_recency(intent, existing)
+
+        # items should appear once, at the front
+        self.assertEqual(merged, ["domain:items", "domain:tasks"])
+
+    def test_prune_domains_to_limit(self) -> None:
+        """Test that prune drops oldest domains."""
+        # Create registry with known tool counts
+        registry = ToolRegistry()
+
+        # Domain A: 4 tools
+        for i in range(4):
+            registry.register(
+                ToolDef(
+                    name=f"tool_a_{i}",
+                    description=f"A {i}",
+                    tags=frozenset({"domain:a"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        # Domain B: 4 tools
+        for i in range(4):
+            registry.register(
+                ToolDef(
+                    name=f"tool_b_{i}",
+                    description=f"B {i}",
+                    tags=frozenset({"domain:b"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        # Domain C: 4 tools
+        for i in range(4):
+            registry.register(
+                ToolDef(
+                    name=f"tool_c_{i}",
+                    description=f"C {i}",
+                    tags=frozenset({"domain:c"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        selector = ToolSelector(registry=registry, max_tools=10)
+
+        # Try to include all three domains (12 tools, but max is 10)
+        domains = ["domain:a", "domain:b", "domain:c"]
+        pruned = selector._prune_domains_to_limit(domains)
+
+        # Should keep first two domains (8 tools), drop third
+        self.assertEqual(pruned, ["domain:a", "domain:b"])
+
+    def test_expand_domains_to_tools(self) -> None:
+        """Test expanding domains to tool names."""
+        tools = self.selector._expand_domains_to_tools(["domain:items"])
+
+        self.assertIn("query_items", tools)
+        self.assertIn("delete_item", tools)
+        self.assertEqual(len(tools), 2)
 
 
 class TestToolSelectorIntegration(unittest.TestCase):
@@ -261,6 +382,7 @@ class TestToolSelectorIntegration(unittest.TestCase):
         tool = ToolDef(
             name="test",
             description="Test",
+            tags=frozenset({"domain:test"}),
             args_model=DummyArgs,
             handler=dummy_handler,
         )
@@ -268,12 +390,13 @@ class TestToolSelectorIntegration(unittest.TestCase):
 
         mock_create_msg.return_value = {"role": "user", "content": [{"text": "test"}]}
         mock_converse.return_value = {"output": {"message": {}}}
-        mock_parse.return_value = '{"tool_names": ["test"], "reasoning": "test"}'
+        mock_parse.return_value = '{"domains": ["domain:test"], "reasoning": "test"}'
 
         selector = ToolSelector(registry=registry)
         result = selector.select("Test query")
 
         self.assertEqual(result.tool_names, ["test"])
+        self.assertEqual(result.domains, ["domain:test"])
 
 
 if __name__ == "__main__":

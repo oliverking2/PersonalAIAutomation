@@ -75,10 +75,12 @@ class ToolSelectionResult(BaseModel):
     """Result of tool selection.
 
     :param tool_names: Ordered list of selected tool names.
+    :param domains: Ordered list of domain tags selected (e.g., 'domain:tasks').
     :param reasoning: Explanation for the selection (for debugging).
     """
 
     tool_names: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
     reasoning: str = Field(default="")
 
 
@@ -171,6 +173,7 @@ class ConversationState:
     conversation_id: uuid.UUID
     messages: list[dict[str, Any]] = field(default_factory=list)
     selected_tools: list[str] = field(default_factory=list)
+    selected_domains: list[str] = field(default_factory=list)
     pending_confirmation: PendingConfirmation | None = None
     summary: str | None = None
     message_count: int = 0

@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from src.agent.enums import RiskLevel
-from src.agent.exceptions import DuplicateToolError, ToolNotFoundError
+from src.agent.exceptions import DomainSizeError, DuplicateToolError, ToolNotFoundError
 from src.agent.models import ToolDef, ToolMetadata
 from src.agent.tools import (
     get_goals_tools,
@@ -13,6 +13,9 @@ from src.agent.tools import (
     get_reminders_tools,
     get_tasks_tools,
 )
+
+# Maximum tools per domain - must be <= DEFAULT_MAX_TOOLS in selector
+MAX_TOOLS_PER_DOMAIN = 10
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,9 @@ def create_default_registry() -> "ToolRegistry":
 
     for tool in get_reminders_tools():
         registry.register(tool)
+
+    # Validate no domain exceeds max tool limit
+    registry.validate_domain_sizes()
 
     logger.info(f"Created default registry with {len(registry)} tools")
     return registry
@@ -178,6 +184,55 @@ class ToolRegistry:
         """
         tools = self.get_many(tool_names)
         return {"tools": [tool.to_bedrock_tool_spec() for tool in tools]}
+
+    def get_domains(self) -> set[str]:
+        """Get all unique domain tags from registered tools.
+
+        Domain tags have the format 'domain:{name}' (e.g., 'domain:tasks').
+
+        :returns: Set of unique domain tags.
+        """
+        domains: set[str] = set()
+        for tool in self._tools.values():
+            for tag in tool.tags:
+                if tag.startswith("domain:"):
+                    domains.add(tag)
+        return domains
+
+    def get_tools_by_domain(self, domain_tag: str) -> list[ToolDef]:
+        """Get all tools for a specific domain.
+
+        :param domain_tag: Domain tag (e.g., 'domain:tasks').
+        :returns: List of tools in that domain.
+        """
+        return [tool for tool in self._tools.values() if domain_tag in tool.tags]
+
+    def get_domain_tool_count(self) -> dict[str, int]:
+        """Get count of tools per domain.
+
+        :returns: Dictionary mapping domain tags to tool counts.
+        """
+        counts: dict[str, int] = {}
+        for tool in self._tools.values():
+            for tag in tool.tags:
+                if tag.startswith("domain:"):
+                    counts[tag] = counts.get(tag, 0) + 1
+        return counts
+
+    def validate_domain_sizes(self, max_tools: int = MAX_TOOLS_PER_DOMAIN) -> None:
+        """Validate that no domain exceeds the maximum tool count.
+
+        This should be called after all tools are registered to catch
+        configuration errors early before the agent starts.
+
+        :param max_tools: Maximum allowed tools per domain.
+        :raises DomainSizeError: If any domain exceeds the limit.
+        """
+        counts = self.get_domain_tool_count()
+        for domain, count in counts.items():
+            if count > max_tools:
+                raise DomainSizeError(domain, count, max_tools)
+        logger.debug(f"Domain sizes validated: {counts}")
 
     def __len__(self) -> int:
         """Return the number of registered tools."""

@@ -68,14 +68,32 @@ logger = logging.getLogger(__name__)
 # Default system prompt for the agent (use {current_datetime} placeholder)
 DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, reading lists, ideas, and reminders.
 
-You can:
-- Query, get, create, and update tasks (including changing due dates, status, priority)
-- Query, get, create, and update goals
-- Query, get, create, and update reading list items
-- Query, get, create, and update ideas
-- Create, query, and cancel reminders (one-time or recurring)
+## Your Capabilities
+
+You can work with:
+- **Tasks**: Query, get, create, and update tasks (including changing due dates, status, priority)
+- **Goals**: Query, get, create, and update goals
+- **Reading List**: Query, get, create, and update reading list items
+- **Ideas**: Query, get, create, and update ideas
+- **Reminders**: Create, query, update, and cancel reminders (one-time or recurring)
+
+## Dynamic Tool Selection
+
+Your available tools are dynamically selected based on the conversation context. Tools are organised into domains (e.g., tasks, goals, reminders). When you discuss a topic, all tools for that domain become available.
+
+Key behaviours:
+- When you switch topics, your available tools will change to match the new domain
+- If the conversation spans multiple domains, tools from the most recent domains are prioritised
+- To manage tool limits, older domains may be dropped when you start discussing new topics
+- You can always bring back a domain by mentioning it again
+
+The tools currently available to you reflect what the system thinks you need based on the conversation so far. If a tool you expect is missing, the user may need to mention that topic more explicitly.
+
+## Current Context
 
 The current date and time is {current_datetime}.
+
+## Guidelines
 
 When using tools:
 1. Analyse the user's request carefully
@@ -111,6 +129,14 @@ class _ToolUseContext:
     tool_use_id: str
     tool_name: str
     input_args: dict[str, Any]
+
+
+@dataclass
+class _ResolvedTools:
+    """Result of resolving tools for a run."""
+
+    tool_names: list[str]
+    domains: list[str]
 
 
 class AgentRunner:
@@ -564,7 +590,7 @@ class AgentRunner:
         user_message: str,
         tool_names: list[str] | None,
         conv_state: ConversationState | None,
-    ) -> list[str]:
+    ) -> _ResolvedTools:
         """Resolve the tools to use for this run.
 
         Uses context-aware tool selection:
@@ -577,10 +603,12 @@ class AgentRunner:
         :param user_message: User message for auto-selection.
         :param tool_names: Explicit tool names override.
         :param conv_state: Conversation state with previous tool selection.
-        :returns: List of selected tool names.
+        :returns: ResolvedTools with tool names and domains.
         """
         if tool_names is not None:
-            return tool_names
+            # Explicit tools - extract domains from them
+            domains = self._selector._tools_to_domains(tool_names)
+            return _ResolvedTools(tool_names=tool_names, domains=domains)
 
         # Get current tools from conversation state (if any)
         current_tools = (
@@ -597,36 +625,47 @@ class AgentRunner:
         )
 
         if current_tools:
-            # Additive mode: merge new tools with existing
+            # Selector already handles merging and pruning - use its result directly
             if selection.tool_names:
-                merged = list(dict.fromkeys(current_tools + selection.tool_names))
-                logger.info(f"Added tools {selection.tool_names}, now have: {merged}")
-                return merged
-            logger.debug(f"No new tools needed, keeping: {current_tools}")
-            return current_tools
+                logger.info(
+                    f"Tool selection: {selection.tool_names}, "
+                    f"domains={selection.domains}, reasoning={selection.reasoning}"
+                )
+                return _ResolvedTools(tool_names=selection.tool_names, domains=selection.domains)
+            # No domains selected - keep current tools
+            logger.debug(f"No domains selected, keeping: {current_tools}")
+            prev_domains = conv_state.selected_domains if conv_state else []
+            return _ResolvedTools(tool_names=current_tools, domains=prev_domains)
         # First turn: use full selection
         logger.info(
             f"Initial tool selection: {selection.tool_names}, reasoning={selection.reasoning}"
         )
-        return selection.tool_names
+        return _ResolvedTools(tool_names=selection.tool_names, domains=selection.domains)
 
     def _build_initial_messages(
         self,
         user_message: str,
         conv_state: ConversationState | None,
+        domain_notification: str | None = None,
     ) -> tuple[list[Any], int]:
         """Build initial messages for the agent run.
 
         :param user_message: The user's input message.
         :param conv_state: Optional conversation state for context.
+        :param domain_notification: Optional notification about domain changes.
         :returns: Tuple of (messages, context_length) where context_length is
             the number of messages from conversation history.
         """
+        # Prepend domain notification to user message if present
+        effective_message = user_message
+        if domain_notification:
+            effective_message = f"{domain_notification}\n\n{user_message}"
+
         if conv_state is not None:
             context_messages = build_context_messages(conv_state)
-            new_user_message = self.client.create_user_message(user_message)
+            new_user_message = self.client.create_user_message(effective_message)
             return [*context_messages, new_user_message], len(context_messages)
-        return [self.client.create_user_message(user_message)], 0
+        return [self.client.create_user_message(effective_message)], 0
 
     def _build_tool_config(
         self,
@@ -707,17 +746,23 @@ class AgentRunner:
         :param conv_state: Optional conversation state for context.
         :returns: Result of the agent run.
         """
-        selected_tools = self._resolve_tools(user_message, tool_names, conv_state)
+        resolved = self._resolve_tools(user_message, tool_names, conv_state)
 
         # Merge standard tools with selected tools (deduplicated)
-        all_tool_names = list(dict.fromkeys(self._standard_tool_names + selected_tools))
+        all_tool_names = list(dict.fromkeys(self._standard_tool_names + resolved.tool_names))
 
-        # Update conversation state with selected tools
+        # Check for domain changes and build notification
+        domain_notification = self._build_domain_change_notification(conv_state, resolved.domains)
+
+        # Update conversation state with selected tools and domains
         if conv_state is not None:
-            conv_state.selected_tools = selected_tools
+            conv_state.selected_tools = resolved.tool_names
+            conv_state.selected_domains = resolved.domains
 
         tool_config = self._build_tool_config(all_tool_names)
-        initial_messages, context_length = self._build_initial_messages(user_message, conv_state)
+        initial_messages, context_length = self._build_initial_messages(
+            user_message, conv_state, domain_notification
+        )
 
         state = _RunState(
             messages=initial_messages,
@@ -731,10 +776,48 @@ class AgentRunner:
 
         logger.info(
             f"Starting agent run: tools={all_tool_names or '(none)'}, "
-            f"max_steps={self._config.max_steps}"
+            f"domains={resolved.domains}, max_steps={self._config.max_steps}"
         )
 
         return self._run_agent_loop(state, tool_config, conv_state)
+
+    def _build_domain_change_notification(
+        self,
+        conv_state: ConversationState | None,
+        new_domains: list[str],
+    ) -> str | None:
+        """Build a notification message about domain changes.
+
+        :param conv_state: Conversation state with previous domains.
+        :param new_domains: Newly selected domains.
+        :returns: Notification message or None if no changes.
+        """
+        if conv_state is None or not conv_state.selected_domains:
+            # First turn - no change notification needed
+            return None
+
+        prev_set = set(conv_state.selected_domains)
+        new_set = set(new_domains)
+
+        added = new_set - prev_set
+        removed = prev_set - new_set
+
+        if not added and not removed:
+            return None
+
+        # Build human-readable domain names (strip 'domain:' prefix)
+        def format_domains(domains: set[str]) -> str:
+            return ", ".join(d.replace("domain:", "") for d in sorted(domains))
+
+        parts: list[str] = []
+        if added:
+            parts.append(f"Added domains: {format_domains(added)}")
+        if removed:
+            parts.append(f"Removed domains: {format_domains(removed)}")
+
+        notification = f"[Tool update: {'; '.join(parts)}]"
+        logger.info(f"Domain change notification: {notification}")
+        return notification
 
     def _run_agent_loop(
         self,

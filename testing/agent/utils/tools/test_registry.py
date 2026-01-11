@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from src.agent.enums import RiskLevel
-from src.agent.exceptions import DuplicateToolError, ToolNotFoundError
+from src.agent.exceptions import DomainSizeError, DuplicateToolError, ToolNotFoundError
 from src.agent.models import ToolDef
 from src.agent.utils.tools.registry import ToolRegistry, create_default_registry
 
@@ -226,6 +226,194 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(len(metadata), 1)
         self.assertEqual(metadata[0].name, "test_tool")
 
+    def test_get_domains_empty(self) -> None:
+        """Test get_domains returns empty set when no domain tags."""
+        self.registry.register(self.tool)  # Has tags but no domain: prefix
+
+        domains = self.registry.get_domains()
+
+        self.assertEqual(domains, set())
+
+    def test_get_domains(self) -> None:
+        """Test get_domains returns all unique domain tags."""
+        tool1 = ToolDef(
+            name="tool1",
+            description="Tool 1",
+            tags=frozenset({"domain:tasks", "query"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool2 = ToolDef(
+            name="tool2",
+            description="Tool 2",
+            tags=frozenset({"domain:tasks", "create"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool3 = ToolDef(
+            name="tool3",
+            description="Tool 3",
+            tags=frozenset({"domain:goals", "query"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(tool1)
+        self.registry.register(tool2)
+        self.registry.register(tool3)
+
+        domains = self.registry.get_domains()
+
+        self.assertEqual(domains, {"domain:tasks", "domain:goals"})
+
+    def test_get_tools_by_domain(self) -> None:
+        """Test get_tools_by_domain returns all tools for a domain."""
+        tool1 = ToolDef(
+            name="query_tasks",
+            description="Query tasks",
+            tags=frozenset({"domain:tasks", "query"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool2 = ToolDef(
+            name="create_tasks",
+            description="Create tasks",
+            tags=frozenset({"domain:tasks", "create"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool3 = ToolDef(
+            name="query_goals",
+            description="Query goals",
+            tags=frozenset({"domain:goals", "query"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(tool1)
+        self.registry.register(tool2)
+        self.registry.register(tool3)
+
+        tasks_tools = self.registry.get_tools_by_domain("domain:tasks")
+        goals_tools = self.registry.get_tools_by_domain("domain:goals")
+
+        self.assertEqual(len(tasks_tools), 2)
+        self.assertEqual(len(goals_tools), 1)
+        task_names = {t.name for t in tasks_tools}
+        self.assertEqual(task_names, {"query_tasks", "create_tasks"})
+
+    def test_get_tools_by_domain_empty(self) -> None:
+        """Test get_tools_by_domain returns empty list for unknown domain."""
+        self.registry.register(self.tool)
+
+        tools = self.registry.get_tools_by_domain("domain:nonexistent")
+
+        self.assertEqual(tools, [])
+
+    def test_get_domain_tool_count(self) -> None:
+        """Test get_domain_tool_count returns accurate counts."""
+        tool1 = ToolDef(
+            name="tool1",
+            description="Tool 1",
+            tags=frozenset({"domain:tasks"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool2 = ToolDef(
+            name="tool2",
+            description="Tool 2",
+            tags=frozenset({"domain:tasks"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool3 = ToolDef(
+            name="tool3",
+            description="Tool 3",
+            tags=frozenset({"domain:goals"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(tool1)
+        self.registry.register(tool2)
+        self.registry.register(tool3)
+
+        counts = self.registry.get_domain_tool_count()
+
+        self.assertEqual(counts, {"domain:tasks": 2, "domain:goals": 1})
+
+    def test_get_domain_tool_count_empty(self) -> None:
+        """Test get_domain_tool_count returns empty dict for no domains."""
+        self.registry.register(self.tool)  # No domain tag
+
+        counts = self.registry.get_domain_tool_count()
+
+        self.assertEqual(counts, {})
+
+    def test_validate_domain_sizes_passes_for_small_domains(self) -> None:
+        """Test validate_domain_sizes passes when domains are under limit."""
+        for i in range(4):
+            self.registry.register(
+                ToolDef(
+                    name=f"tool_{i}",
+                    description=f"Tool {i}",
+                    tags=frozenset({"domain:test"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        # Should not raise
+        self.registry.validate_domain_sizes(max_tools=10)
+
+    def test_validate_domain_sizes_raises_for_large_domain(self) -> None:
+        """Test validate_domain_sizes raises when a domain exceeds limit."""
+        for i in range(11):
+            self.registry.register(
+                ToolDef(
+                    name=f"tool_{i}",
+                    description=f"Tool {i}",
+                    tags=frozenset({"domain:test"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        with self.assertRaises(DomainSizeError) as ctx:
+            self.registry.validate_domain_sizes(max_tools=10)
+
+        self.assertEqual(ctx.exception.domain, "domain:test")
+        self.assertEqual(ctx.exception.tool_count, 11)
+        self.assertEqual(ctx.exception.max_tools, 10)
+
+    def test_validate_domain_sizes_with_custom_limit(self) -> None:
+        """Test validate_domain_sizes respects custom max_tools limit."""
+        for i in range(5):
+            self.registry.register(
+                ToolDef(
+                    name=f"tool_{i}",
+                    description=f"Tool {i}",
+                    tags=frozenset({"domain:test"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        # Should pass with limit of 5
+        self.registry.validate_domain_sizes(max_tools=5)
+
+        # Add one more tool
+        self.registry.register(
+            ToolDef(
+                name="tool_5",
+                description="Tool 5",
+                tags=frozenset({"domain:test"}),
+                args_model=DummyArgs,
+                handler=dummy_handler,
+            )
+        )
+
+        # Should fail with limit of 5
+        with self.assertRaises(DomainSizeError):
+            self.registry.validate_domain_sizes(max_tools=5)
+
 
 class TestCreateDefaultRegistry(unittest.TestCase):
     """Tests for create_default_registry function."""
@@ -306,6 +494,47 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         self.assertEqual(len(tasks_tools), 4)
         self.assertEqual(len(ideas_tools), 4)
         self.assertEqual(len(reminders_tools), 4)
+
+    def test_contains_domain_tags(self) -> None:
+        """Test that all tools have domain tags."""
+        registry = create_default_registry()
+
+        domains = registry.get_domains()
+
+        # Should have all expected domains
+        self.assertIn("domain:reading_list", domains)
+        self.assertIn("domain:goals", domains)
+        self.assertIn("domain:tasks", domains)
+        self.assertIn("domain:ideas", domains)
+        self.assertIn("domain:reminders", domains)
+
+    def test_get_tools_by_domain_returns_all_domain_tools(self) -> None:
+        """Test that get_tools_by_domain returns all tools for each domain."""
+        registry = create_default_registry()
+
+        reading_tools = registry.get_tools_by_domain("domain:reading_list")
+        goals_tools = registry.get_tools_by_domain("domain:goals")
+        tasks_tools = registry.get_tools_by_domain("domain:tasks")
+        ideas_tools = registry.get_tools_by_domain("domain:ideas")
+        reminders_tools = registry.get_tools_by_domain("domain:reminders")
+
+        self.assertEqual(len(reading_tools), 4)
+        self.assertEqual(len(goals_tools), 4)
+        self.assertEqual(len(tasks_tools), 4)
+        self.assertEqual(len(ideas_tools), 4)
+        self.assertEqual(len(reminders_tools), 4)
+
+    def test_all_domains_under_max_tools_limit(self) -> None:
+        """Test that all domains in default registry are under max tool limit."""
+        registry = create_default_registry()
+        counts = registry.get_domain_tool_count()
+
+        for domain, count in counts.items():
+            self.assertLessEqual(
+                count,
+                10,
+                f"Domain {domain} has {count} tools, exceeds max of 10",
+            )
 
 
 if __name__ == "__main__":
