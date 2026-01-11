@@ -625,7 +625,7 @@ The agent:
 #### Cost and Token Tracking
 The agent automatically tracks all LLM calls, tokens, and costs. Each Bedrock API call is recorded with:
 - Request messages and response content (stored as JSONB)
-- Input, output, and cache-read token counts
+- Input, output, cache-read, and cache-write token counts
 - Estimated cost based on model pricing
 - Call latency in milliseconds
 - Call type (chat, selector, classifier, or summariser)
@@ -638,11 +638,41 @@ Tracking data is organised in three tables:
 ##### Model Pricing
 Costs are estimated per 1,000 tokens:
 
-| Model  | Input   | Output  | Cache Read |
-|--------|---------|---------|------------|
-| Haiku  | $0.001  | $0.005  | $0.0001    |
-| Sonnet | $0.003  | $0.015  | $0.0003    |
-| Opus   | $0.005  | $0.025  | $0.0005    |
+| Model  | Input   | Output  | Cache Read | Cache Write |
+|--------|---------|---------|------------|-------------|
+| Haiku  | $0.001  | $0.005  | $0.0001    | $0.00125    |
+| Sonnet | $0.003  | $0.015  | $0.0003    | $0.00375    |
+| Opus   | $0.005  | $0.025  | $0.0005    | $0.00625    |
+
+##### Prompt Caching Strategy
+The agent uses AWS Bedrock's prompt caching to reduce costs for multi-turn conversations. Cache reads are charged at 10% of the input rate (90% savings), while cache writes cost 125% of the input rate (25% premium).
+
+**System Prompt Caching**
+The system prompt is fully static with no dynamic content (datetime, user info, etc.). This ensures the ~400 token system prompt is cached once and reused across all turns.
+
+**Tool Configuration Caching**
+Tools are organised by domain (e.g., `domain:tasks`, `domain:goals`). Each domain has a cache point placed after its tools in the tool configuration:
+
+```
+[task_tools...] → cachePoint → [goal_tools...] → cachePoint → [reminder_tools...]
+```
+
+This incremental caching strategy means:
+1. First turn: Cache write for system prompt + selected domains
+2. Subsequent turns with same domains: Cache read (90% savings)
+3. Adding a new domain: Cache read for existing domains + cache write for new domain only
+
+**Domain Ordering for Cache Stability**
+When merging domains across turns, existing domains are placed first to maintain cache order:
+- Turn 1 selects `[tasks]` → cached
+- Turn 2 adds `[goals]` → merged as `[tasks, goals]` → tasks cache hit, goals cache write
+- Turn 3 continues → `[tasks, goals]` cache hit for both
+
+**Expected Cache Efficiency**
+For typical multi-turn conversations:
+- ~86% cache read rate after the first turn
+- Break-even after 2 turns (cache write premium recovered by cache reads)
+- Significant savings for longer conversations
 
 ### Notion Integration
 API wrapper for Notion to query and manage tasks, goals, reading items, and ideas. The generic endpoints work with any data source, while the typed endpoints use pre-configured data sources with validated field values.

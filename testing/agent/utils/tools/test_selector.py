@@ -286,22 +286,23 @@ class TestToolSelector(unittest.TestCase):
         self.assertEqual(domains, ["domain:items", "domain:tasks"])
 
     def test_merge_domains_by_recency(self) -> None:
-        """Test that merge puts intent domains first."""
+        """Test that merge puts existing domains first for cache stability."""
         intent = ["domain:tasks"]
         existing = ["domain:items", "domain:goals"]
 
         merged = self.selector._merge_domains_by_recency(intent, existing)
 
-        self.assertEqual(merged, ["domain:tasks", "domain:items", "domain:goals"])
+        # Existing domains first (cached), then new intent domains
+        self.assertEqual(merged, ["domain:items", "domain:goals", "domain:tasks"])
 
     def test_merge_domains_deduplicates(self) -> None:
-        """Test that merge removes duplicates."""
+        """Test that merge removes duplicates, keeping existing domain position."""
         intent = ["domain:items"]
         existing = ["domain:items", "domain:tasks"]
 
         merged = self.selector._merge_domains_by_recency(intent, existing)
 
-        # items should appear once, at the front
+        # items already in existing, so it stays in its existing position
         self.assertEqual(merged, ["domain:items", "domain:tasks"])
 
     def test_prune_domains_to_limit(self) -> None:

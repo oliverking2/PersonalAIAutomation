@@ -65,7 +65,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Default system prompt for the agent (use {current_datetime} placeholder)
+# System prompt (fully static for caching - no dynamic content)
 DEFAULT_SYSTEM_PROMPT = """You are a helpful AI assistant with access to tools for managing tasks, goals, reading lists, ideas, and reminders.
 
 ## Your Capabilities
@@ -88,10 +88,6 @@ Key behaviours:
 - You can always bring back a domain by mentioning it again
 
 The tools currently available to you reflect what the system thinks you need based on the conversation so far. If a tool you expect is missing, the user may need to mention that topic more explicitly.
-
-## Current Context
-
-The current date and time is {current_datetime}.
 
 ## Guidelines
 
@@ -482,7 +478,11 @@ class AgentRunner:
             context_length=context_length,
         )
 
-        return self._run_agent_loop(state, self._build_tool_config(all_tool_names), conv_state)
+        # Use domains from conv_state for incremental tool caching
+        domains = conv_state.selected_domains if conv_state else None
+        return self._run_agent_loop(
+            state, self._build_tool_config(all_tool_names, domains), conv_state
+        )
 
     def _handle_partial_confirmation(
         self,
@@ -650,16 +650,23 @@ class AgentRunner:
     ) -> tuple[list[Any], int]:
         """Build initial messages for the agent run.
 
+        Dynamic context (current datetime, domain changes) is injected here rather
+        than in the system prompt to keep the system prompt fully static and cacheable.
+
         :param user_message: The user's input message.
         :param conv_state: Optional conversation state for context.
         :param domain_notification: Optional notification about domain changes.
         :returns: Tuple of (messages, context_length) where context_length is
             the number of messages from conversation history.
         """
-        # Prepend domain notification to user message if present
-        effective_message = user_message
+        # Build dynamic context prefix (keeps system prompt static for caching)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M %Z").strip()
+        context_parts = [f"[Current time: {current_time}]"]
         if domain_notification:
-            effective_message = f"{domain_notification}\n\n{user_message}"
+            context_parts.append(domain_notification)
+
+        context_prefix = "\n".join(context_parts)
+        effective_message = f"{context_prefix}\n\n{user_message}"
 
         if conv_state is not None:
             context_messages = build_context_messages(conv_state)
@@ -670,15 +677,28 @@ class AgentRunner:
     def _build_tool_config(
         self,
         tool_names: list[str],
+        domains: list[str] | None = None,
     ) -> ToolConfigurationTypeDef | None:
         """Build Bedrock tool configuration from tool names.
 
+        If domains are provided, uses domain-based caching with cache points
+        after each domain's tools for incremental caching.
+
         :param tool_names: List of tool names to include.
+        :param domains: Optional ordered domain list for cache point placement.
         :returns: Tool configuration or None if no tools.
         """
         if not tool_names:
             logger.info("No tools available for this request")
             return None
+
+        if domains:
+            # Use domain-based caching with cache points after each domain
+            return cast(
+                "ToolConfigurationTypeDef",
+                self.registry.to_bedrock_tool_config_with_cache_points(domains),
+            )
+
         return cast(
             "ToolConfigurationTypeDef",
             self.registry.to_bedrock_tool_config(tool_names),
@@ -759,7 +779,8 @@ class AgentRunner:
             conv_state.selected_tools = resolved.tool_names
             conv_state.selected_domains = resolved.domains
 
-        tool_config = self._build_tool_config(all_tool_names)
+        # Use domains for incremental tool caching (cache point per domain)
+        tool_config = self._build_tool_config(all_tool_names, resolved.domains)
         initial_messages, context_length = self._build_initial_messages(
             user_message, conv_state, domain_notification
         )
@@ -895,16 +916,11 @@ class AgentRunner:
         tool_config: ToolConfigurationTypeDef | None,
     ) -> dict[str, Any]:
         """Call the LLM and return the response."""
-        # Format system prompt with current datetime
-        formatted_prompt = self.system_prompt.format(
-            current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M %Z").strip()
-        )
-
         try:
             return self.client.converse(
                 messages=messages,
                 model_id=self._config.chat_model,
-                system_prompt=formatted_prompt,
+                system_prompt=self.system_prompt,
                 tool_config=tool_config,
                 max_tokens=self._config.max_tokens,
                 cache_system_prompt=True,

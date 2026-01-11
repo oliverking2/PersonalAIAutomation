@@ -185,6 +185,36 @@ class ToolRegistry:
         tools = self.get_many(tool_names)
         return {"tools": [tool.to_bedrock_tool_spec() for tool in tools]}
 
+    def to_bedrock_tool_config_with_cache_points(
+        self,
+        domains: list[str],
+    ) -> dict[str, Any]:
+        """Generate Bedrock toolConfig with cache points after each domain.
+
+        Groups tools by domain and adds a cachePoint after each domain's tools.
+        This enables incremental caching - when a new domain is added, only
+        the new domain's tools need to be cache-written while previous domains
+        are cache-read.
+
+        :param domains: Ordered list of domains (order determines cache point placement).
+        :returns: Bedrock-compatible toolConfig with cache points.
+        """
+        tools_list: list[dict[str, Any]] = []
+
+        for domain in domains:
+            # Get all tools for this domain
+            domain_tools = [tool for tool in self._tools.values() if domain in tool.tags]
+
+            # Add tool specs for this domain
+            for tool in domain_tools:
+                tools_list.append(tool.to_bedrock_tool_spec())
+
+            # Add cache point after this domain's tools (if we added any tools)
+            if domain_tools:
+                tools_list.append({"cachePoint": {"type": "default"}})
+
+        return {"tools": tools_list}
+
     def get_domains(self) -> set[str]:
         """Get all unique domain tags from registered tools.
 

@@ -32,6 +32,7 @@ class LLMCallRecord:
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_write_tokens: int
     estimated_cost_usd: Decimal
     latency_ms: int
     called_at: datetime
@@ -71,13 +72,15 @@ class TrackingContext:
         usage = response.get("usage", {})
         input_tokens = usage.get("inputTokens", 0)
         output_tokens = usage.get("outputTokens", 0)
-        cache_read_tokens = usage.get("cacheReadInputTokenCount", 0)
+        cache_read_tokens = usage.get("cacheReadInputTokens", 0)
+        cache_write_tokens = usage.get("cacheWriteInputTokens", 0)
 
         cost = calculate_cost(
             model_alias=model_alias,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
         )
 
         record = LLMCallRecord(
@@ -90,6 +93,7 @@ class TrackingContext:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
             estimated_cost_usd=cost,
             latency_ms=latency_ms,
             called_at=datetime.now(UTC),
@@ -117,6 +121,11 @@ class TrackingContext:
     def total_cache_read_tokens(self) -> int:
         """Total cache read tokens across all calls."""
         return sum(call.cache_read_tokens for call in self.llm_calls)
+
+    @property
+    def total_cache_write_tokens(self) -> int:
+        """Total cache write tokens across all calls."""
+        return sum(call.cache_write_tokens for call in self.llm_calls)
 
     @property
     def total_estimated_cost(self) -> Decimal:

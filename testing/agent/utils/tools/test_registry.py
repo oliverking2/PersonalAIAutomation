@@ -153,6 +153,82 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(len(config["tools"]), 1)
         self.assertIn("toolSpec", config["tools"][0])
 
+    def test_to_bedrock_tool_config_with_cache_points(self) -> None:
+        """Test generating Bedrock tool config with cache points per domain."""
+        # Register tools in two domains
+        tool_a1 = ToolDef(
+            name="tool_a1",
+            description="Domain A tool 1",
+            tags=frozenset({"domain:a"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool_a2 = ToolDef(
+            name="tool_a2",
+            description="Domain A tool 2",
+            tags=frozenset({"domain:a"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool_b1 = ToolDef(
+            name="tool_b1",
+            description="Domain B tool 1",
+            tags=frozenset({"domain:b"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(tool_a1)
+        self.registry.register(tool_a2)
+        self.registry.register(tool_b1)
+
+        config = self.registry.to_bedrock_tool_config_with_cache_points(["domain:a", "domain:b"])
+
+        tools_list = config["tools"]
+        # Should have: tool_a1, tool_a2, cachePoint, tool_b1, cachePoint
+        self.assertEqual(len(tools_list), 5)
+
+        # First two should be toolSpecs for domain A
+        self.assertIn("toolSpec", tools_list[0])
+        self.assertIn("toolSpec", tools_list[1])
+
+        # Third should be cachePoint
+        self.assertIn("cachePoint", tools_list[2])
+        self.assertEqual(tools_list[2]["cachePoint"]["type"], "default")
+
+        # Fourth should be toolSpec for domain B
+        self.assertIn("toolSpec", tools_list[3])
+
+        # Fifth should be cachePoint
+        self.assertIn("cachePoint", tools_list[4])
+
+    def test_to_bedrock_tool_config_with_cache_points_preserves_order(self) -> None:
+        """Test that domain order is preserved for cache stability."""
+        tool_a = ToolDef(
+            name="tool_a",
+            description="Domain A",
+            tags=frozenset({"domain:a"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        tool_b = ToolDef(
+            name="tool_b",
+            description="Domain B",
+            tags=frozenset({"domain:b"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(tool_a)
+        self.registry.register(tool_b)
+
+        # Order A, B
+        config_ab = self.registry.to_bedrock_tool_config_with_cache_points(["domain:a", "domain:b"])
+        # Order B, A
+        config_ba = self.registry.to_bedrock_tool_config_with_cache_points(["domain:b", "domain:a"])
+
+        # First tool in each config should match the first domain
+        self.assertEqual(config_ab["tools"][0]["toolSpec"]["name"], "tool_a")
+        self.assertEqual(config_ba["tools"][0]["toolSpec"]["name"], "tool_b")
+
     def test_contains(self) -> None:
         """Test the __contains__ method."""
         self.registry.register(self.tool)

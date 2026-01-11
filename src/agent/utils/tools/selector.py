@@ -20,29 +20,34 @@ DEFAULT_MAX_DOMAINS = 3
 # Number of retries for AI selection before falling back
 DEFAULT_MAX_RETRIES = 3
 
-DOMAIN_SELECTION_SYSTEM_PROMPT = """You are a domain selector. Given a user request, identify which domains are relevant.
+# System prompts are fully static for prompt caching - dynamic content goes in user message
+DOMAIN_SELECTION_SYSTEM_PROMPT = f"""You are a domain selector. Given a user request, identify which domains are relevant.
 
 A domain is a category of tools (e.g., tasks, goals, reminders). When you select a domain, ALL tools for that domain become available.
+
+The user message contains:
+1. The available domains and their tools
+2. The user's request
 
 Rules:
 1. Select domains where the user might need ANY operation (query, create, update, delete)
 2. A conversation about "tasks" should select the entire "tasks" domain
-3. Select at most {max_domains} domains
+3. Select at most {DEFAULT_MAX_DOMAINS} domains
 4. Order by relevance (most relevant first)
 5. If no domains are relevant, return an empty list
 
-Available domains:
-{domain_descriptions}
-
 Respond with valid JSON only, no other text:
-{{
+{{{{
   "domains": ["domain:tasks", "domain:goals"],
   "reasoning": "User wants to work with tasks and goals"
-}}
+}}}}"""
 
-"""
+ADDITIVE_DOMAIN_SELECTION_PROMPT = f"""You are a domain selector for continuing conversations.
 
-ADDITIVE_DOMAIN_SELECTION_PROMPT = """You are a domain selector. The user is continuing a conversation where these domains are already selected: {current_domains}
+The user message contains:
+1. The currently selected domains
+2. The available domains (excluding already selected)
+3. The user's new message
 
 Determine if the user's message requires ADDITIONAL domains.
 
@@ -50,24 +55,19 @@ Rules:
 1. If the user is still working within the current domains, return an empty list
 2. Only add domains if the user explicitly mentions a new topic area
 3. Clarification messages (providing details, dates, confirmations) usually don't need new domains
-4. Select at most {max_domains} additional domains
-
-Available domains (excluding already selected):
-{domain_descriptions}
+4. Select at most {DEFAULT_MAX_DOMAINS} additional domains
 
 Respond with valid JSON only, no other text:
-{{
+{{{{
   "domains": [],
   "reasoning": "User is still working with current domains"
-}}
+}}}}
 
 or if new domains are needed:
-{{
+{{{{
   "domains": ["domain:reminders"],
   "reasoning": "User is now asking about reminders"
-}}
-
-"""
+}}}}"""
 
 
 class ToolSelector:
@@ -82,7 +82,6 @@ class ToolSelector:
         registry: ToolRegistry,
         client: BedrockClient | None = None,
         max_tools: int = DEFAULT_MAX_TOOLS,
-        max_domains: int = DEFAULT_MAX_DOMAINS,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> None:
         """Initialise the tool selector.
@@ -90,13 +89,11 @@ class ToolSelector:
         :param registry: Tool registry containing available tools.
         :param client: Bedrock client for LLM calls. Creates one if not provided.
         :param max_tools: Maximum number of tools to include.
-        :param max_domains: Maximum number of domains to select per request.
         :param max_retries: Number of retries for AI selection before falling back.
         """
         self.registry = registry
         self.client = client or BedrockClient()
         self.max_tools = max_tools
-        self.max_domains = max_domains
         self.max_retries = max_retries
 
     def _format_domain_descriptions(self, domains: set[str]) -> str:
@@ -149,17 +146,18 @@ class ToolSelector:
         intent_domains: list[str],
         existing_domains: list[str],
     ) -> list[str]:
-        """Merge domains with current intent taking priority.
+        """Merge domains with existing domains taking priority for cache stability.
 
-        Current intent domains are placed first (most relevant),
-        followed by existing domains in their original order.
+        Existing domains are placed first (already cached and should be preserved),
+        followed by new intent domains. This ensures that when pruning occurs,
+        new domains are dropped rather than existing ones, maximising cache hits.
 
-        :param intent_domains: Domains from current user intent (highest priority).
-        :param existing_domains: Domains already in conversation (by recency).
-        :returns: Merged list with intent domains first.
+        :param intent_domains: Domains from current user intent (to be added).
+        :param existing_domains: Domains already in conversation (preserved for caching).
+        :returns: Merged list with existing domains first.
         """
-        # Use dict to preserve order while deduplicating
-        return list(dict.fromkeys(intent_domains + existing_domains))
+        # Existing domains first for cache stability, then new domains
+        return list(dict.fromkeys(existing_domains + intent_domains))
 
     def _prune_domains_to_limit(self, domains: list[str]) -> list[str]:
         """Prune domains to stay within tool limit.
@@ -225,7 +223,7 @@ class ToolSelector:
 
             # Filter to valid domains, deduplicate, respect limit
             valid_domains = list(dict.fromkeys(d for d in domains if d in available_domains))[
-                : self.max_domains
+                :DEFAULT_MAX_DOMAINS
             ]
 
             return valid_domains, reasoning
@@ -245,31 +243,34 @@ class ToolSelector:
     ) -> tuple[list[str], str]:
         """Select domains using LLM.
 
+        Dynamic content (domain descriptions, current domains) is passed in the user
+        message to keep system prompts static for caching.
+
         :param user_intent: The user's request text.
         :param available_domains: Set of available domain tags.
         :param current_domains: Already selected domains (for additive mode).
         :param model: Optional model override.
         :returns: Tuple of (selected domains, reasoning).
         """
-        # In additive mode, exclude already-selected domains
+        # Build user message with dynamic content (keeps system prompt static for caching)
         if current_domains:
             available_for_selection = available_domains - set(current_domains)
             if not available_for_selection:
                 return [], "All domains already selected"
             domain_descriptions = self._format_domain_descriptions(available_for_selection)
-            system_prompt = ADDITIVE_DOMAIN_SELECTION_PROMPT.format(
-                current_domains=current_domains,
-                max_domains=self.max_domains,
-                domain_descriptions=domain_descriptions,
+            system_prompt = ADDITIVE_DOMAIN_SELECTION_PROMPT
+            user_message = (
+                f"Currently selected domains: {', '.join(current_domains)}\n\n"
+                f"Available domains:\n{domain_descriptions}\n\n"
+                f"User message: {user_intent}"
             )
         else:
             domain_descriptions = self._format_domain_descriptions(available_domains)
-            system_prompt = DOMAIN_SELECTION_SYSTEM_PROMPT.format(
-                max_domains=self.max_domains,
-                domain_descriptions=domain_descriptions,
+            system_prompt = DOMAIN_SELECTION_SYSTEM_PROMPT
+            user_message = (
+                f"Available domains:\n{domain_descriptions}\n\nUser message: {user_intent}"
             )
 
-        user_message = f"User message: {user_intent}"
         effective_model = model or "haiku"
 
         last_error: Exception | None = None
@@ -393,8 +394,8 @@ class ToolSelector:
             ):
                 matched.append(domain)
 
-        # Limit to max_domains
-        matched = matched[: self.max_domains]
+        # Limit to max domains
+        matched = matched[:DEFAULT_MAX_DOMAINS]
 
         logger.info(f"Fallback domain selection: intent='{user_intent[:50]}...', matched={matched}")
 

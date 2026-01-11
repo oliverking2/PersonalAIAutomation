@@ -30,6 +30,7 @@ class TestLLMCallRecord(unittest.TestCase):
             input_tokens=100,
             output_tokens=50,
             cache_read_tokens=25,
+            cache_write_tokens=15,
             estimated_cost_usd=Decimal("0.001"),
             latency_ms=500,
             called_at=datetime.now(UTC),
@@ -40,6 +41,7 @@ class TestLLMCallRecord(unittest.TestCase):
         self.assertEqual(record.input_tokens, 100)
         self.assertEqual(record.output_tokens, 50)
         self.assertEqual(record.cache_read_tokens, 25)
+        self.assertEqual(record.cache_write_tokens, 15)
         self.assertEqual(record.estimated_cost_usd, Decimal("0.001"))
         self.assertEqual(record.latency_ms, 500)
 
@@ -73,7 +75,8 @@ class TestTrackingContext(unittest.TestCase):
             "usage": {
                 "inputTokens": 100,
                 "outputTokens": 50,
-                "cacheReadInputTokenCount": 10,
+                "cacheReadInputTokens": 10,
+                "cacheWriteInputTokens": 5,
             },
             "output": {"message": {"content": [{"text": "Response"}]}},
         }
@@ -93,6 +96,7 @@ class TestTrackingContext(unittest.TestCase):
         self.assertEqual(record.input_tokens, 100)
         self.assertEqual(record.output_tokens, 50)
         self.assertEqual(record.cache_read_tokens, 10)
+        self.assertEqual(record.cache_write_tokens, 5)
         self.assertEqual(record.latency_ms, 250)
 
     def test_record_call_calculates_cost(self) -> None:
@@ -173,7 +177,7 @@ class TestTrackingContext(unittest.TestCase):
                 call_type=CallType.CHAT,
                 request_messages=[],
                 response={
-                    "usage": {"cacheReadInputTokenCount": 10 * (i + 1)},
+                    "usage": {"cacheReadInputTokens": 10 * (i + 1)},
                     "output": {},
                 },
                 latency_ms=100,
@@ -181,6 +185,24 @@ class TestTrackingContext(unittest.TestCase):
 
         # 10 + 20 + 30 = 60
         self.assertEqual(self.context.total_cache_read_tokens, 60)
+
+    def test_total_cache_write_tokens(self) -> None:
+        """Should sum cache write tokens across all calls."""
+        for i in range(3):
+            self.context.record_call(
+                model_alias="haiku",
+                model_id="test",
+                call_type=CallType.CHAT,
+                request_messages=[],
+                response={
+                    "usage": {"cacheWriteInputTokens": 5 * (i + 1)},
+                    "output": {},
+                },
+                latency_ms=100,
+            )
+
+        # 5 + 10 + 15 = 30
+        self.assertEqual(self.context.total_cache_write_tokens, 30)
 
     def test_total_estimated_cost(self) -> None:
         """Should sum estimated costs across all calls."""
@@ -206,6 +228,7 @@ class TestTrackingContext(unittest.TestCase):
         self.assertEqual(self.context.total_input_tokens, 0)
         self.assertEqual(self.context.total_output_tokens, 0)
         self.assertEqual(self.context.total_cache_read_tokens, 0)
+        self.assertEqual(self.context.total_cache_write_tokens, 0)
         self.assertEqual(self.context.total_estimated_cost, Decimal("0"))
 
 

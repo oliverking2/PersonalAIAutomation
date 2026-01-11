@@ -110,6 +110,7 @@ def _llm_call_from_record(
         input_tokens=call_record.input_tokens,
         output_tokens=call_record.output_tokens,
         cache_read_tokens=call_record.cache_read_tokens,
+        cache_write_tokens=call_record.cache_write_tokens,
         estimated_cost_usd=call_record.estimated_cost_usd,
         latency_ms=call_record.latency_ms,
         called_at=call_record.called_at,
@@ -143,6 +144,7 @@ def complete_agent_run(  # noqa: PLR0913 - Agent run completion requires multipl
     agent_run.total_input_tokens = tracking_context.total_input_tokens
     agent_run.total_output_tokens = tracking_context.total_output_tokens
     agent_run.total_cache_read_tokens = tracking_context.total_cache_read_tokens
+    agent_run.total_cache_write_tokens = tracking_context.total_cache_write_tokens
     agent_run.total_estimated_cost_usd = tracking_context.total_estimated_cost
 
     # Create LLM call records
@@ -204,6 +206,7 @@ def _update_conversation_totals(session: Session, conversation_id: uuid.UUID) ->
     conversation.total_input_tokens = sum(r.total_input_tokens for r in runs)
     conversation.total_output_tokens = sum(r.total_output_tokens for r in runs)
     conversation.total_cache_read_tokens = sum(r.total_cache_read_tokens for r in runs)
+    conversation.total_cache_write_tokens = sum(r.total_cache_write_tokens for r in runs)
     conversation.total_estimated_cost_usd = sum(
         (r.total_estimated_cost_usd for r in runs), Decimal("0")
     )
