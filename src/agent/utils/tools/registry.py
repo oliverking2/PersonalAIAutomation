@@ -5,7 +5,7 @@ from typing import Any
 
 from src.agent.enums import RiskLevel
 from src.agent.exceptions import DomainSizeError, DuplicateToolError, ToolNotFoundError
-from src.agent.models import ToolDef, ToolMetadata
+from src.agent.models import ToolDef
 from src.agent.tools import (
     get_goals_tools,
     get_ideas_tools,
@@ -108,23 +108,6 @@ class ToolRegistry:
         """
         return list(self._tools.values())
 
-    def list_metadata(self) -> list[ToolMetadata]:
-        """List metadata for all registered tools.
-
-        Useful for tool selection without exposing full tool definitions.
-
-        :returns: List of tool metadata.
-        """
-        return [
-            ToolMetadata(
-                name=tool.name,
-                description=tool.description,
-                tags=tool.tags,
-                risk_level=tool.risk_level,
-            )
-            for tool in self._tools.values()
-        ]
-
     def filter_by_tags(self, tags: set[str]) -> list[ToolDef]:
         """Filter tools by tags.
 
@@ -163,39 +146,13 @@ class ToolRegistry:
         """
         return [tool for tool in self._tools.values() if "system" not in tool.tags]
 
-    def list_selectable_metadata(self) -> list[ToolMetadata]:
-        """List metadata for selectable tools.
-
-        Used by ToolSelector to present only domain tools for selection.
-
-        :returns: List of selectable tool metadata.
-        """
-        return [
-            ToolMetadata(
-                name=tool.name,
-                description=tool.description,
-                tags=tool.tags,
-                risk_level=tool.risk_level,
-            )
-            for tool in self.get_selectable_tools()
-        ]
-
-    def to_bedrock_tool_config(self, tool_names: list[str]) -> dict[str, Any]:
-        """Generate Bedrock toolConfig for specified tools.
-
-        :param tool_names: Names of tools to include in the config.
-        :returns: Bedrock-compatible toolConfig dictionary.
-        :raises ToolNotFoundError: If any tool is not found.
-        """
-        tools = self.get_many(tool_names)
-        return {"tools": [tool.to_bedrock_tool_spec() for tool in tools]}
-
     def to_bedrock_tool_config_with_cache_points(
         self,
         domains: list[str],
     ) -> dict[str, Any]:
         """Generate Bedrock toolConfig with cache points after each domain.
 
+        System tools are always included first, followed by domain tools.
         Groups tools by domain and adds a cachePoint after each domain's tools.
         This enables incremental caching - when a new domain is added, only
         the new domain's tools need to be cache-written while previous domains
@@ -205,6 +162,14 @@ class ToolRegistry:
         :returns: Bedrock-compatible toolConfig with cache points.
         """
         tools_list: list[dict[str, Any]] = []
+
+        # Always include system tools first (e.g., memory tools)
+        system_tools = self.get_system_tools()
+        if system_tools:
+            for tool in system_tools:
+                tools_list.append(tool.to_bedrock_tool_spec())
+            # Add cache point after system tools for stable caching
+            tools_list.append({"cachePoint": {"type": "default"}})
 
         for domain in domains:
             # Get all tools for this domain

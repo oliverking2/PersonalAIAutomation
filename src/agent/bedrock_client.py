@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
@@ -273,32 +272,6 @@ class BedrockClient:
 
         return "\n".join(text_parts)
 
-    def create_tool_result_message(
-        self,
-        tool_use_id: str,
-        result: dict[str, Any],
-        is_error: bool = False,
-    ) -> dict[str, Any]:
-        """Create a tool result message for the conversation.
-
-        :param tool_use_id: ID of the tool use being responded to.
-        :param result: Result data from the tool execution.
-        :param is_error: Whether the result represents an error.
-        :returns: Message with tool result content.
-        """
-        return {
-            "role": "user",
-            "content": [
-                {
-                    "toolResult": {
-                        "toolUseId": tool_use_id,
-                        "content": [{"json": result}],
-                        "status": "error" if is_error else "success",
-                    }
-                }
-            ],
-        }
-
     def create_user_message(self, text: str) -> dict[str, Any]:
         """Create a user message.
 
@@ -306,32 +279,6 @@ class BedrockClient:
         :returns: User message dictionary.
         """
         return {"role": "user", "content": [{"text": text}]}
-
-    def create_assistant_tool_use_message(
-        self,
-        tool_use_id: str,
-        name: str,
-        input_args: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Create an assistant message containing a tool use request.
-
-        :param tool_use_id: Unique ID for this tool use.
-        :param name: Name of the tool being called.
-        :param input_args: Arguments for the tool.
-        :returns: Assistant message with tool use content.
-        """
-        return {
-            "role": "assistant",
-            "content": [
-                {
-                    "toolUse": {
-                        "toolUseId": tool_use_id,
-                        "name": name,
-                        "input": input_args,
-                    }
-                }
-            ],
-        }
 
     def get_stop_reason(self, response: dict[str, Any]) -> str:
         """Extract stop reason from a Converse response.
@@ -377,11 +324,3 @@ class BedrockClient:
             return text
 
         return "\n".join(json_lines).strip()
-
-    def format_tool_use_as_json(self, tool_uses: list[dict[str, Any]]) -> str:
-        """Format tool uses as JSON for logging/debugging.
-
-        :param tool_uses: List of tool use dictionaries.
-        :returns: JSON string representation.
-        """
-        return json.dumps(tool_uses, indent=2, default=str)

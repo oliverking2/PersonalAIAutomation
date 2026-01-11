@@ -141,8 +141,6 @@ class _RunState:
     tool_calls: list[ToolCall]
     steps_taken: int
     tools: dict[str, ToolDef]
-    confirmed_tool_use_ids: set[str]
-    all_tool_names: list[str]
     context_length: int = 0  # Number of messages from conversation context
 
 
@@ -213,11 +211,6 @@ class AgentRunner:
 
         # Create internal tool selector
         self._selector = ToolSelector(registry=registry, client=self.client)
-
-        # Cache system tool names (always available, bypass selection)
-        self._system_tool_names = [t.name for t in registry.get_system_tools()]
-        if self._system_tool_names:
-            logger.debug(f"System tools cached: {self._system_tool_names}")
 
     def _build_system_prompt(self, session: Session) -> None:
         """Build and store the run-scoped system prompt with memory context.
@@ -497,13 +490,9 @@ class AgentRunner:
             )
 
             tool_result_contents.append(
-                {
-                    "toolResult": {
-                        "toolUseId": tool_action.tool_use_id,
-                        "content": [{"json": tool_result}],
-                        "status": "error" if tool_call.is_error else "success",
-                    }
-                }
+                self._build_tool_result_block(
+                    tool_action.tool_use_id, tool_result, tool_call.is_error
+                )
             )
 
         tool_result_msg: dict[str, Any] = {"role": "user", "content": tool_result_contents}
@@ -516,23 +505,21 @@ class AgentRunner:
         ]
 
         # Build tool config and state, then hand off to agent loop
-        all_tool_names = pending.selected_tools or []
+        tool_names = pending.selected_tools or []
 
         state = _RunState(
             messages=messages,
             tool_calls=tool_calls,
             steps_taken=1,
-            tools=self._build_tools_dict(all_tool_names),
-            confirmed_tool_use_ids=set(),
-            all_tool_names=all_tool_names,
+            tools=self._build_tools_dict(tool_names),
             context_length=context_length,
         )
 
         # Use domains from conv_state for incremental tool caching
-        domains = conv_state.selected_domains if conv_state else None
+        domains = conv_state.selected_domains if conv_state else []
         return self._run_agent_loop(
             state,
-            self._build_tool_config(all_tool_names, domains),
+            self._build_tool_config(domains),
             conv_state,
         )
 
@@ -726,32 +713,19 @@ class AgentRunner:
 
     def _build_tool_config(
         self,
-        tool_names: list[str],
-        domains: list[str] | None = None,
-    ) -> ToolConfigurationTypeDef | None:
-        """Build Bedrock tool configuration from tool names.
+        domains: list[str],
+    ) -> ToolConfigurationTypeDef:
+        """Build Bedrock tool configuration from domains.
 
-        If domains are provided, uses domain-based caching with cache points
-        after each domain's tools for incremental caching.
+        Uses domain-based caching with cache points after each domain's tools.
+        System tools are always included automatically.
 
-        :param tool_names: List of tool names to include.
-        :param domains: Optional ordered domain list for cache point placement.
-        :returns: Tool configuration or None if no tools.
+        :param domains: Ordered domain list for cache point placement.
+        :returns: Tool configuration (always includes at least system tools).
         """
-        if not tool_names:
-            logger.info("No tools available for this request")
-            return None
-
-        if domains:
-            # Use domain-based caching with cache points after each domain
-            return cast(
-                "ToolConfigurationTypeDef",
-                self.registry.to_bedrock_tool_config_with_cache_points(domains),
-            )
-
         return cast(
             "ToolConfigurationTypeDef",
-            self.registry.to_bedrock_tool_config(tool_names),
+            self.registry.to_bedrock_tool_config_with_cache_points(domains),
         )
 
     def _build_tools_dict(self, tool_names: list[str]) -> dict[str, ToolDef]:
@@ -818,9 +792,6 @@ class AgentRunner:
         """
         resolved = self._resolve_tools(user_message, tool_names, conv_state)
 
-        # Merge system tools with selected tools (deduplicated)
-        all_tool_names = list(dict.fromkeys(self._system_tool_names + resolved.tool_names))
-
         # Check for domain changes and build notification
         domain_notification = self._build_domain_change_notification(conv_state, resolved.domains)
 
@@ -829,24 +800,26 @@ class AgentRunner:
             conv_state.selected_tools = resolved.tool_names
             conv_state.selected_domains = resolved.domains
 
-        # Use domains for incremental tool caching (cache point per domain)
-        tool_config = self._build_tool_config(all_tool_names, resolved.domains)
+        # Build tool config (includes system tools automatically) and tools dict
+        tool_config = self._build_tool_config(resolved.domains)
         initial_messages, context_length = self._build_initial_messages(
             user_message, conv_state, domain_notification
         )
+
+        # Build tools dict including system tools for execution lookup
+        system_tools = [t.name for t in self.registry.get_system_tools()]
+        all_tool_names = list(dict.fromkeys(system_tools + resolved.tool_names))
 
         state = _RunState(
             messages=initial_messages,
             tool_calls=[],
             steps_taken=0,
             tools=self._build_tools_dict(all_tool_names),
-            confirmed_tool_use_ids=set(),
-            all_tool_names=all_tool_names,
             context_length=context_length,
         )
 
         logger.info(
-            f"Starting agent run: tools={all_tool_names or '(none)'}, "
+            f"Starting agent run: tools={list(state.tools.keys()) or '(none)'}, "
             f"domains={resolved.domains}, max_steps={self._config.max_steps}"
         )
 
@@ -1042,11 +1015,7 @@ class AgentRunner:
 
         for ctx in contexts:
             tool = state.tools[ctx.tool_name]
-            if (
-                self.require_confirmation
-                and tool.risk_level == RiskLevel.SENSITIVE
-                and ctx.tool_use_id not in state.confirmed_tool_use_ids
-            ):
+            if self.require_confirmation and tool.risk_level == RiskLevel.SENSITIVE:
                 sensitive_contexts.append(ctx)
             else:
                 safe_contexts.append(ctx)
@@ -1099,13 +1068,7 @@ class AgentRunner:
             )
             state.tool_calls.append(tool_call)
             tool_result_contents.append(
-                {
-                    "toolResult": {
-                        "toolUseId": ctx.tool_use_id,
-                        "content": [{"json": tool_result}],
-                        "status": "error" if tool_call.is_error else "success",
-                    }
-                }
+                self._build_tool_result_block(ctx.tool_use_id, tool_result, tool_call.is_error)
             )
 
         # Add single message with ALL tool results
@@ -1164,13 +1127,7 @@ class AgentRunner:
                 )
             )
             tool_result_contents.append(
-                {
-                    "toolResult": {
-                        "toolUseId": tool_use_id,
-                        "content": [{"json": error_result}],
-                        "status": "error",
-                    }
-                }
+                self._build_tool_result_block(tool_use_id, error_result, is_error=True)
             )
 
         # Add single message with ALL tool results
@@ -1258,25 +1215,15 @@ class AgentRunner:
                 )
                 state.tool_calls.append(tool_call)
                 tool_result_contents.append(
-                    {
-                        "toolResult": {
-                            "toolUseId": ctx.tool_use_id,
-                            "content": [{"json": tool_result}],
-                            "status": "error" if tool_call.is_error else "success",
-                        }
-                    }
+                    self._build_tool_result_block(ctx.tool_use_id, tool_result, tool_call.is_error)
                 )
 
             # Add placeholder results for sensitive tools (we'll execute them after confirmation)
             for ctx in sensitive_contexts:
                 tool_result_contents.append(
-                    {
-                        "toolResult": {
-                            "toolUseId": ctx.tool_use_id,
-                            "content": [{"json": {"status": "awaiting_confirmation"}}],
-                            "status": "success",
-                        }
-                    }
+                    self._build_tool_result_block(
+                        ctx.tool_use_id, {"status": "awaiting_confirmation"}
+                    )
                 )
 
             # Add single message with ALL tool results
@@ -1311,7 +1258,7 @@ class AgentRunner:
         if conv_state is not None:
             pending = PendingConfirmation(
                 tools=pending_tools,
-                selected_tools=state.all_tool_names,
+                selected_tools=list(state.tools.keys()),
             )
             set_pending_confirmation(conv_state, pending)
 
@@ -1426,6 +1373,27 @@ class AgentRunner:
             if field in input_args and isinstance(input_args[field], str):
                 return input_args[field]
         return None
+
+    @staticmethod
+    def _build_tool_result_block(
+        tool_use_id: str,
+        result: dict[str, Any],
+        is_error: bool = False,
+    ) -> dict[str, Any]:
+        """Build a toolResult content block for Bedrock.
+
+        :param tool_use_id: ID of the tool use being responded to.
+        :param result: Result data from the tool execution.
+        :param is_error: Whether the result represents an error.
+        :returns: toolResult content block.
+        """
+        return {
+            "toolResult": {
+                "toolUseId": tool_use_id,
+                "content": [{"json": result}],
+                "status": "error" if is_error else "success",
+            }
+        }
 
     def _fetch_previous_values(
         self,

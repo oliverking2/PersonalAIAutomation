@@ -4,7 +4,6 @@ Provides templates for formatting sensitive tool actions into natural language
 for HITL (Human-in-the-Loop) confirmation messages.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -284,22 +283,6 @@ def _format_inline_diff(old_content: str | None, new_content: str) -> str:
     return "\n".join(lines)
 
 
-@dataclass
-class ContentChange:
-    """A single content change for diff display.
-
-    :param entity_name: Name of the item being changed.
-    :param old_content: Previous content (None if new item).
-    :param new_content: New content being set.
-    :param changed: Whether actual change occurred (False if no change needed).
-    """
-
-    entity_name: str
-    old_content: str | None
-    new_content: str
-    changed: bool = True
-
-
 def _truncate_content(content: str, max_length: int = DIFF_CONTENT_TRUNCATION_LENGTH) -> str:
     """Truncate content if it exceeds max length.
 
@@ -310,116 +293,3 @@ def _truncate_content(content: str, max_length: int = DIFF_CONTENT_TRUNCATION_LE
     if len(content) <= max_length:
         return content
     return content[:max_length].strip() + "..."
-
-
-def format_content_diff(
-    entity_name: str,
-    old_content: str | None,
-    new_content: str,
-) -> str:
-    """Format a before/after diff for content changes.
-
-    :param entity_name: Name of the item being changed.
-    :param old_content: Previous content (None if new item).
-    :param new_content: New content being set.
-    :returns: Formatted diff string.
-    """
-    lines = [f'"{entity_name}":\n']
-
-    if old_content is not None:
-        truncated_old = _truncate_content(old_content)
-        lines.append(f'Before: "{truncated_old}"')
-    else:
-        lines.append("Before: (empty)")
-
-    truncated_new = _truncate_content(new_content)
-    lines.append(f'After: "{truncated_new}"')
-
-    return "\n".join(lines)
-
-
-def _format_changes_list(changes: list[ContentChange]) -> list[str]:
-    """Format a list of content changes as lines.
-
-    :param changes: List of changes with entity name, old/new content.
-    :returns: List of formatted lines (without header).
-    """
-    lines: list[str] = []
-
-    for change in changes:
-        if not change.changed:
-            lines.append(f"{change.entity_name}:")
-            lines.append("  No changes needed (already clean)\n")
-            continue
-
-        lines.append(f"{change.entity_name}:")
-
-        if change.old_content is not None:
-            truncated_old = _truncate_content(change.old_content)
-            lines.append(f'  Before: "{truncated_old}"')
-        else:
-            lines.append("  Before: (empty)")
-
-        truncated_new = _truncate_content(change.new_content)
-        lines.append(f'  After: "{truncated_new}"\n')
-
-    return lines
-
-
-def format_batch_diff(changes: list[ContentChange]) -> str:
-    """Format multiple content changes as a summary (for confirmation).
-
-    :param changes: List of changes with entity name, old/new content.
-    :returns: Formatted batch diff string.
-    """
-    if not changes:
-        return "No changes to show."
-
-    lines = _format_changes_list(changes)
-    return "\n".join(lines).strip()
-
-
-def format_execution_diff(
-    entity_name: str,
-    old_content: str | None,
-    new_content: str,
-) -> str:
-    """Format a diff for post-execution display (single item).
-
-    :param entity_name: Name of the item that was changed.
-    :param old_content: Previous content (None if was empty).
-    :param new_content: New content that was set.
-    :returns: Formatted diff string for display after execution.
-    """
-    lines = [f'Done! I\'ve tidied up "{entity_name}":\n', "Before:"]
-
-    if old_content is not None:
-        truncated_old = _truncate_content(old_content)
-        lines.append(f'  "{truncated_old}"')
-    else:
-        lines.append("  (empty)")
-
-    lines.append("\nAfter:")
-    truncated_new = _truncate_content(new_content)
-    lines.append(f'  "{truncated_new}"')
-
-    return "\n".join(lines)
-
-
-def format_batch_execution_diff(changes: list[ContentChange]) -> str:
-    """Format multiple content changes for post-execution display.
-
-    :param changes: List of changes that were made.
-    :returns: Formatted batch diff string for display after execution.
-    """
-    if not changes:
-        return "No changes were made."
-
-    actual_changes = [c for c in changes if c.changed]
-    if not actual_changes:
-        return "No changes were needed (all items already clean)."
-
-    lines = [f"Done! Updated {len(actual_changes)} item(s):\n"]
-    lines.extend(_format_changes_list(changes))
-
-    return "\n".join(lines).strip()

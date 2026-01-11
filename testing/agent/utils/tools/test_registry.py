@@ -94,18 +94,6 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(len(all_tools), 1)
         self.assertEqual(all_tools[0].name, "test_tool")
 
-    def test_list_metadata(self) -> None:
-        """Test listing tool metadata."""
-        self.registry.register(self.tool)
-
-        metadata = self.registry.list_metadata()
-
-        self.assertEqual(len(metadata), 1)
-        self.assertEqual(metadata[0].name, "test_tool")
-        self.assertEqual(metadata[0].description, "A test tool")
-        self.assertEqual(metadata[0].tags, frozenset({"test"}))
-        self.assertEqual(metadata[0].risk_level, RiskLevel.SAFE)
-
     def test_filter_by_tags(self) -> None:
         """Test filtering tools by tags."""
         tool2 = ToolDef(
@@ -143,19 +131,9 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(len(sensitive_tools), 1)
         self.assertEqual(sensitive_tools[0].name, "sensitive")
 
-    def test_to_bedrock_tool_config(self) -> None:
-        """Test generating Bedrock tool config."""
-        self.registry.register(self.tool)
-
-        config = self.registry.to_bedrock_tool_config(["test_tool"])
-
-        self.assertIn("tools", config)
-        self.assertEqual(len(config["tools"]), 1)
-        self.assertIn("toolSpec", config["tools"][0])
-
     def test_to_bedrock_tool_config_with_cache_points(self) -> None:
         """Test generating Bedrock tool config with cache points per domain."""
-        # Register tools in two domains
+        # Register tools in two domains (no system tools in this test)
         tool_a1 = ToolDef(
             name="tool_a1",
             description="Domain A tool 1",
@@ -185,6 +163,7 @@ class TestToolRegistry(unittest.TestCase):
 
         tools_list = config["tools"]
         # Should have: tool_a1, tool_a2, cachePoint, tool_b1, cachePoint
+        # (no system tools registered in this test)
         self.assertEqual(len(tools_list), 5)
 
         # First two should be toolSpecs for domain A
@@ -201,8 +180,53 @@ class TestToolRegistry(unittest.TestCase):
         # Fifth should be cachePoint
         self.assertIn("cachePoint", tools_list[4])
 
+    def test_to_bedrock_tool_config_with_cache_points_includes_system_tools(self) -> None:
+        """Test that system tools are always included before domain tools."""
+        # Register a system tool
+        system_tool = ToolDef(
+            name="system_memory",
+            description="System memory tool",
+            tags=frozenset({"system", "memory"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        # Register a domain tool
+        domain_tool = ToolDef(
+            name="domain_task",
+            description="Domain task tool",
+            tags=frozenset({"domain:tasks"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(system_tool)
+        self.registry.register(domain_tool)
+
+        config = self.registry.to_bedrock_tool_config_with_cache_points(["domain:tasks"])
+
+        tools_list = config["tools"]
+        # Should have: system_memory, cachePoint, domain_task, cachePoint
+        self.assertEqual(len(tools_list), 4)
+
+        # First should be system tool
+        self.assertIn("toolSpec", tools_list[0])
+        self.assertEqual(tools_list[0]["toolSpec"]["name"], "system_memory")
+
+        # Second should be cachePoint (after system tools)
+        self.assertIn("cachePoint", tools_list[1])
+
+        # Third should be domain tool
+        self.assertIn("toolSpec", tools_list[2])
+        self.assertEqual(tools_list[2]["toolSpec"]["name"], "domain_task")
+
+        # Fourth should be cachePoint (after domain)
+        self.assertIn("cachePoint", tools_list[3])
+
     def test_to_bedrock_tool_config_with_cache_points_preserves_order(self) -> None:
-        """Test that domain order is preserved for cache stability."""
+        """Test that domain order is preserved for cache stability.
+
+        Note: System tools are always first, so domain tools start after them.
+        This test uses a registry with no system tools to verify domain ordering.
+        """
         tool_a = ToolDef(
             name="tool_a",
             description="Domain A",
@@ -220,7 +244,7 @@ class TestToolRegistry(unittest.TestCase):
         self.registry.register(tool_a)
         self.registry.register(tool_b)
 
-        # Order A, B
+        # Order A, B (no system tools registered, so domain tools are first)
         config_ab = self.registry.to_bedrock_tool_config_with_cache_points(["domain:a", "domain:b"])
         # Order B, A
         config_ba = self.registry.to_bedrock_tool_config_with_cache_points(["domain:b", "domain:a"])
@@ -284,23 +308,6 @@ class TestToolRegistry(unittest.TestCase):
 
         self.assertEqual(len(selectable), 1)
         self.assertEqual(selectable[0].name, "test_tool")
-
-    def test_list_selectable_metadata(self) -> None:
-        """Test list_selectable_metadata excludes system tools."""
-        system_tool = ToolDef(
-            name="system_tool",
-            description="A system tool",
-            tags=frozenset({"system"}),
-            args_model=DummyArgs,
-            handler=dummy_handler,
-        )
-        self.registry.register(self.tool)
-        self.registry.register(system_tool)
-
-        metadata = self.registry.list_selectable_metadata()
-
-        self.assertEqual(len(metadata), 1)
-        self.assertEqual(metadata[0].name, "test_tool")
 
     def test_get_domains_empty(self) -> None:
         """Test get_domains returns empty set when no domain tags."""

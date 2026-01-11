@@ -9,70 +9,8 @@ from src.agent.models import PendingConfirmation, PendingToolAction
 from src.agent.utils.confirmation_classifier import (
     ClassificationParseError,
     _parse_batch_classification_response,
-    _parse_classification_response,
     classify_batch_confirmation_response,
 )
-
-
-class TestParseClassificationResponse(unittest.TestCase):
-    """Tests for _parse_classification_response function."""
-
-    def test_parse_confirm(self) -> None:
-        """Test parsing CONFIRM response."""
-        response = '{"classification": "CONFIRM", "reasoning": "User said yes"}'
-        result = _parse_classification_response(response)
-        self.assertEqual(result, ConfirmationType.CONFIRM)
-
-    def test_parse_deny(self) -> None:
-        """Test parsing DENY response."""
-        response = '{"classification": "DENY", "reasoning": "User said no"}'
-        result = _parse_classification_response(response)
-        self.assertEqual(result, ConfirmationType.DENY)
-
-    def test_parse_new_intent(self) -> None:
-        """Test parsing NEW_INTENT response."""
-        response = '{"classification": "NEW_INTENT", "reasoning": "New request"}'
-        result = _parse_classification_response(response)
-        self.assertEqual(result, ConfirmationType.NEW_INTENT)
-
-    def test_parse_lowercase(self) -> None:
-        """Test parsing lowercase classification."""
-        response = '{"classification": "confirm", "reasoning": "User agreed"}'
-        result = _parse_classification_response(response)
-        self.assertEqual(result, ConfirmationType.CONFIRM)
-
-    def test_parse_markdown_code_block_extracts_json(self) -> None:
-        """Test that markdown code block is handled and JSON is extracted."""
-        response = '```json\n{"classification": "CONFIRM", "reasoning": "Yes"}\n```'
-        result = _parse_classification_response(response)
-        self.assertEqual(result, ConfirmationType.CONFIRM)
-
-    def test_parse_markdown_code_block_without_language_tag(self) -> None:
-        """Test that markdown code block without language tag is handled."""
-        response = '```\n{"classification": "DENY", "reasoning": "No"}\n```'
-        result = _parse_classification_response(response)
-        self.assertEqual(result, ConfirmationType.DENY)
-
-    def test_parse_invalid_json_raises_error(self) -> None:
-        """Test that invalid JSON raises ClassificationParseError."""
-        response = "not valid json"
-        with self.assertRaises(ClassificationParseError) as ctx:
-            _parse_classification_response(response)
-        self.assertIn("Invalid JSON", str(ctx.exception))
-
-    def test_parse_missing_classification_raises_error(self) -> None:
-        """Test that missing classification field raises error."""
-        response = '{"reasoning": "Some reason"}'
-        with self.assertRaises(ClassificationParseError) as ctx:
-            _parse_classification_response(response)
-        self.assertIn("missing 'classification' field", str(ctx.exception))
-
-    def test_parse_unknown_classification_raises_error(self) -> None:
-        """Test that unknown classification value raises error."""
-        response = '{"classification": "UNKNOWN", "reasoning": "Unclear"}'
-        with self.assertRaises(ClassificationParseError) as ctx:
-            _parse_classification_response(response)
-        self.assertIn("Unknown classification value", str(ctx.exception))
 
 
 class TestParseBatchClassificationResponse(unittest.TestCase):

@@ -397,36 +397,6 @@ class TestBedrockClient(unittest.TestCase):
         self.assertEqual(text, "Hello\nWorld")
 
     @patch("src.agent.bedrock_client.boto3.client")
-    def test_create_tool_result_message(self, mock_boto_client: MagicMock) -> None:
-        """Test creating tool result message."""
-        client = BedrockClient()
-
-        message = client.create_tool_result_message(
-            tool_use_id="tool-1",
-            result={"data": "success"},
-            is_error=False,
-        )
-
-        self.assertEqual(message["role"], "user")
-        tool_result = message["content"][0]["toolResult"]
-        self.assertEqual(tool_result["toolUseId"], "tool-1")
-        self.assertEqual(tool_result["status"], "success")
-
-    @patch("src.agent.bedrock_client.boto3.client")
-    def test_create_tool_result_message_error(self, mock_boto_client: MagicMock) -> None:
-        """Test creating error tool result message."""
-        client = BedrockClient()
-
-        message = client.create_tool_result_message(
-            tool_use_id="tool-1",
-            result={"error": "failed"},
-            is_error=True,
-        )
-
-        tool_result = message["content"][0]["toolResult"]
-        self.assertEqual(tool_result["status"], "error")
-
-    @patch("src.agent.bedrock_client.boto3.client")
     def test_create_user_message(self, mock_boto_client: MagicMock) -> None:
         """Test creating user message."""
         client = BedrockClient()
@@ -446,24 +416,6 @@ class TestBedrockClient(unittest.TestCase):
 
         response_empty: dict[str, Any] = {}
         self.assertEqual(client.get_stop_reason(response_empty), "")
-
-    @patch("src.agent.bedrock_client.boto3.client")
-    def test_create_assistant_tool_use_message(self, mock_boto_client: MagicMock) -> None:
-        """Test creating assistant tool use message."""
-        client = BedrockClient()
-
-        message = client.create_assistant_tool_use_message(
-            tool_use_id="tool-123",
-            name="create_task",
-            input_args={"name": "Test Task"},
-        )
-
-        self.assertEqual(message["role"], "assistant")
-        self.assertEqual(len(message["content"]), 1)
-        tool_use = message["content"][0]["toolUse"]
-        self.assertEqual(tool_use["toolUseId"], "tool-123")
-        self.assertEqual(tool_use["name"], "create_task")
-        self.assertEqual(tool_use["input"], {"name": "Test Task"})
 
 
 class TestExtractJsonFromMarkdown(unittest.TestCase):
