@@ -198,5 +198,44 @@ class TestGlitchTipTestEndpoint(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
 
+class TestGlitchTipTriggerErrorEndpoint(unittest.TestCase):
+    """Tests for the GlitchTip trigger error endpoint."""
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.client = TestClient(app, raise_server_exceptions=False)
+        self.valid_token = "test-webhook-secret"
+
+    @patch("src.api.webhooks.glitchtip.endpoints._get_webhook_secret")
+    def test_trigger_error_raises_exception(self, mock_get_secret: MagicMock) -> None:
+        """Test that trigger error endpoint raises an unhandled exception."""
+        mock_get_secret.return_value = self.valid_token
+
+        response = self.client.post(
+            f"/webhooks/glitchtip/trigger-error?token={self.valid_token}",
+        )
+
+        # Should return 500 due to unhandled exception
+        self.assertEqual(response.status_code, 500)
+
+    @patch("src.api.webhooks.glitchtip.endpoints._get_webhook_secret")
+    def test_trigger_error_requires_auth(self, mock_get_secret: MagicMock) -> None:
+        """Test that trigger error endpoint requires authentication."""
+        mock_get_secret.return_value = self.valid_token
+
+        response = self.client.post("/webhooks/glitchtip/trigger-error")
+
+        self.assertEqual(response.status_code, 401)
+
+    @patch("src.api.webhooks.glitchtip.endpoints._get_webhook_secret")
+    def test_trigger_error_invalid_token(self, mock_get_secret: MagicMock) -> None:
+        """Test that trigger error endpoint rejects invalid token."""
+        mock_get_secret.return_value = self.valid_token
+
+        response = self.client.post("/webhooks/glitchtip/trigger-error?token=wrong")
+
+        self.assertEqual(response.status_code, 401)
+
+
 if __name__ == "__main__":
     unittest.main()

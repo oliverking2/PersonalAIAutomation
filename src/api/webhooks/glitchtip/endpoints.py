@@ -33,11 +33,11 @@ def _get_telegram_client() -> TelegramClient:
     :returns: Configured TelegramClient.
     :raises ValueError: If required environment variables are not set.
     """
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    bot_token = os.environ.get("TELEGRAM_ERROR_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_ERROR_CHAT_ID")
 
     if not bot_token:
-        raise ValueError("TELEGRAM_BOT_TOKEN not configured")
+        raise ValueError("TELEGRAM_ERROR_BOT_TOKEN not configured")
     if not chat_id:
         raise ValueError("TELEGRAM_ERROR_CHAT_ID not configured")
 
@@ -161,3 +161,35 @@ def send_test_alert(
         ) from e
 
     return WebhookResponse(status="ok", message="Test alert sent to Telegram")
+
+
+class GlitchTipTestError(Exception):
+    """Test exception to verify GlitchTip error tracking."""
+
+    pass
+
+
+@router.post(
+    "/trigger-error",
+    response_model=WebhookResponse,
+    summary="Trigger a test error",
+    description="Raises an unhandled exception to verify GlitchTip is capturing errors.",
+)
+def trigger_test_error(
+    token: str | None = Query(None, description="Webhook authentication token"),
+) -> WebhookResponse:
+    """Trigger an unhandled exception to test error tracking.
+
+    This endpoint intentionally raises an exception that should be captured
+    by GlitchTip/Sentry to verify the error tracking integration is working.
+
+    :param token: Authentication token from query parameter.
+    :returns: Never returns - always raises an exception.
+    :raises GlitchTipTestError: Always raised to test error tracking.
+    """
+    _verify_token(token)
+
+    logger.info("Triggering test error for GlitchTip verification")
+    raise GlitchTipTestError(
+        "This is a test error to verify GlitchTip is capturing exceptions correctly."
+    )
