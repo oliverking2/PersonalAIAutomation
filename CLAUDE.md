@@ -142,7 +142,7 @@ This ensures:
 - Tests live under `testing/` and mirror `src/` structure.
 - Do not create new top-level folders unless explicitly asked.
 - Review `ROADMAP.md` before starting work and update it when completing features.
-- Review existing PRDs in `.claude/prds/` before implementing new features.
+- Review existing PRDs in `prds/` before implementing new features.
 
 ## Coding Standards
 
