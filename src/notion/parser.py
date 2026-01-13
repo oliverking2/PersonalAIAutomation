@@ -9,7 +9,14 @@ from datetime import date
 from enum import StrEnum
 from typing import Any
 
-from src.notion.models import NotionGoal, NotionIdea, NotionReadingItem, NotionTask, TaskFilter
+from src.notion.models import (
+    NotionGoal,
+    NotionIdea,
+    NotionProject,
+    NotionReadingItem,
+    NotionTask,
+    TaskFilter,
+)
 
 
 class FieldType(StrEnum):
@@ -22,6 +29,7 @@ class FieldType(StrEnum):
     RICH_TEXT = "rich_text"
     NUMBER = "number"
     URL = "url"
+    RELATION = "relation"
 
 
 @dataclass(frozen=True)
@@ -40,6 +48,7 @@ TASK_FIELDS: dict[str, TaskField] = {
     "priority": TaskField("Priority", FieldType.SELECT),
     "effort_level": TaskField("Effort level", FieldType.SELECT),
     "task_group": TaskField("Task Group", FieldType.SELECT),
+    "project_id": TaskField("Project", FieldType.RELATION),
 }
 
 GOAL_FIELDS: dict[str, TaskField] = {
@@ -66,6 +75,13 @@ IDEA_FIELDS: dict[str, TaskField] = {
     "idea_group": TaskField("Idea Group", FieldType.SELECT),
 }
 
+PROJECT_FIELDS: dict[str, TaskField] = {
+    "project_name": TaskField("Project name", FieldType.TITLE),
+    "status": TaskField("Status", FieldType.STATUS),
+    "priority": TaskField("Priority", FieldType.SELECT),
+    "project_group": TaskField("Project Group", FieldType.SELECT),
+}
+
 
 def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
     """Parse a Notion page response into a NotionTask model.
@@ -83,6 +99,7 @@ def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
         priority=_extract_select(properties.get("Priority", {})),
         effort_level=_extract_select(properties.get("Effort level", {})),
         task_group=_extract_select(properties.get("Task Group", {})),
+        project_id=_extract_single_relation(properties.get("Project", {})),
     )
 
 
@@ -140,6 +157,23 @@ def parse_page_to_idea(page: dict[str, Any]) -> NotionIdea:
     )
 
 
+def parse_page_to_project(page: dict[str, Any]) -> NotionProject:
+    """Parse a Notion page response into a NotionProject model.
+
+    :param page: Raw page object from Notion API response.
+    :returns: Parsed NotionProject with extracted properties.
+    """
+    properties = page.get("properties", {})
+
+    return NotionProject(
+        id=page["id"],
+        project_name=_extract_title(properties.get("Project name", {})),
+        status=_extract_status(properties.get("Status", {})),
+        priority=_extract_select(properties.get("Priority", {})),
+        project_group=_extract_select(properties.get("Project Group", {})),
+    )
+
+
 def _extract_title(prop: dict[str, Any]) -> str:
     """Extract plain text from a title property."""
     title_items = prop.get("title", [])
@@ -190,6 +224,18 @@ def _extract_number(prop: dict[str, Any]) -> float | None:
 def _extract_url(prop: dict[str, Any]) -> str | None:
     """Extract URL from a url property."""
     return prop.get("url")
+
+
+def _extract_single_relation(prop: dict[str, Any]) -> str | None:
+    """Extract a single related page ID from a relation property.
+
+    :param prop: Relation property from Notion API.
+    :returns: Related page ID or None if no relation set.
+    """
+    relation = prop.get("relation", [])
+    if relation and len(relation) > 0:
+        return relation[0].get("id")
+    return None
 
 
 def build_query_filter(filter_: TaskFilter) -> dict[str, Any]:
@@ -252,6 +298,10 @@ def _build_property(field: TaskField, value: Any) -> dict[str, Any]:  # noqa: PL
             return {field.notion_name: {"number": value}}
         case FieldType.URL:
             return {field.notion_name: {"url": value}}
+        case FieldType.RELATION:
+            # Accept either a single ID or list of IDs
+            ids = [value] if isinstance(value, str) else list(value)
+            return {field.notion_name: {"relation": [{"id": id_} for id_ in ids]}}
 
 
 def _build_properties(field_registry: dict[str, TaskField], **kwargs: Any) -> dict[str, Any]:
@@ -317,3 +367,13 @@ def build_idea_properties(**kwargs: Any) -> dict[str, Any]:
     :raises ValueError: If an unknown field name is provided.
     """
     return _build_properties(IDEA_FIELDS, **kwargs)
+
+
+def build_project_properties(**kwargs: Any) -> dict[str, Any]:
+    """Build project properties payload from keyword arguments.
+
+    :param kwargs: Field name to value mappings.
+    :returns: Combined properties object for the Notion API.
+    :raises ValueError: If an unknown field name is provided.
+    """
+    return _build_properties(PROJECT_FIELDS, **kwargs)

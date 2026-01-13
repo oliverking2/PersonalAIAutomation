@@ -10,6 +10,7 @@ from src.agent.tools import (
     get_goals_tools,
     get_ideas_tools,
     get_memory_tools,
+    get_projects_tools,
     get_reading_list_tools,
     get_reminders_tools,
     get_tasks_tools,
@@ -46,6 +47,9 @@ def create_default_registry() -> "ToolRegistry":
         registry.register(tool)
 
     for tool in get_ideas_tools():
+        registry.register(tool)
+
+    for tool in get_projects_tools():
         registry.register(tool)
 
     for tool in get_reminders_tools():

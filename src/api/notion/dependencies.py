@@ -59,3 +59,8 @@ def get_reading_data_source_id() -> str:
 def get_ideas_data_source_id() -> str:
     """Get the configured ideas data source ID from environment."""
     return _get_env_or_error("NOTION_IDEAS_DATA_SOURCE_ID")
+
+
+def get_projects_data_source_id() -> str:
+    """Get the configured projects data source ID from environment."""
+    return _get_env_or_error("NOTION_PROJECTS_DATA_SOURCE_ID")

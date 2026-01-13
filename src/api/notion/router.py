@@ -9,6 +9,7 @@ from src.api.notion.common.datasources.endpoints import router as datasources_ro
 from src.api.notion.common.pages.endpoints import router as pages_router
 from src.api.notion.goals.endpoints import router as goals_router
 from src.api.notion.ideas.endpoints import router as ideas_router
+from src.api.notion.projects.endpoints import router as projects_router
 from src.api.notion.reading_list.endpoints import router as reading_router
 from src.api.notion.tasks.endpoints import router as tasks_router
 
@@ -21,5 +22,6 @@ router.include_router(datasources_router)
 router.include_router(goals_router)
 router.include_router(ideas_router)
 router.include_router(pages_router)
+router.include_router(projects_router)
 router.include_router(reading_router)
 router.include_router(tasks_router)

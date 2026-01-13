@@ -19,6 +19,7 @@ class TaskResponse(BaseModel):
     priority: str | None = Field(None, description="Task priority")
     effort_level: str | None = Field(None, description="Task effort level")
     task_group: str | None = Field(None, description="Work or Personal category")
+    project_id: str | None = Field(None, description="Related project page ID")
     content: str | None = Field(None, description="Page content in markdown format")
 
 
@@ -40,6 +41,7 @@ class TaskCreateRequest(BaseModel):
         description=f"Task effort level (default: {EffortLevel.SMALL}) ({', '.join(EffortLevel)})",
     )
     task_group: TaskGroup = Field(..., description=f"Task group category ({', '.join(TaskGroup)})")
+    project_id: str | None = Field(None, description="Project to link this task to")
     content: str | None = Field(None, description="Markdown content for the task page body")
 
 
@@ -56,6 +58,7 @@ class TaskUpdateRequest(BaseModel):
     task_group: TaskGroup | None = Field(
         None, description=f"Task group category ({', '.join(TaskGroup)})"
     )
+    project_id: str | None = Field(None, description="Project to link this task to")
     content: str | None = Field(
         None, description="Markdown content to replace page body (if provided)"
     )
@@ -82,6 +85,7 @@ class TaskQueryRequest(BaseModel):
     task_group: TaskGroup | None = Field(
         None, description=f"Filter by task group ({', '.join(TaskGroup)})"
     )
+    project_id: str | None = Field(None, description="Filter by project ID")
     due_before: date | None = Field(
         None, description="Filter tasks due before this date (exclusive)"
     )

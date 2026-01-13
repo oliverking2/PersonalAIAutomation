@@ -71,3 +71,22 @@ def build_idea_content(notes: str | None = None) -> str:
         lines.append("(Add details here)")
 
     return "\n".join(lines)
+
+
+def build_project_content(
+    description: str | None = None,
+    notes: str | None = None,
+) -> str:
+    """Build markdown content for a project page.
+
+    :param description: Project scope and objectives.
+    :param notes: Additional context or references.
+    :returns: Formatted markdown string.
+    """
+    lines: list[str] = []
+    if description:
+        lines.extend(["## Description", description, ""])
+    if notes:
+        lines.extend(["## Notes", notes])
+
+    return "\n".join(lines)

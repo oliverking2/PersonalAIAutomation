@@ -16,6 +16,9 @@ from src.notion.enums import (
     IdeaGroup,
     IdeaStatus,
     Priority,
+    ProjectGroup,
+    ProjectPriority,
+    ProjectStatus,
     ReadingCategory,
     ReadingStatus,
     ReadingType,
@@ -56,6 +59,10 @@ class AgentTaskCreateArgs(BaseModel):
     effort_level: EffortLevel | None = Field(
         default=EffortLevel.SMALL,
         description=f"Task effort level (default: {EffortLevel.SMALL})",
+    )
+    project_id: str | None = Field(
+        None,
+        description="Project ID to link this task to (use query_projects to find IDs)",
     )
 
 
@@ -157,6 +164,10 @@ class AgentTaskUpdateArgs(BaseModel):
     effort_level: EffortLevel | None = Field(
         None,
         description=f"Task effort level ({', '.join(EffortLevel)})",
+    )
+    project_id: str | None = Field(
+        None,
+        description="Project ID to link this task to",
     )
 
 
@@ -269,4 +280,60 @@ class AgentIdeaUpdateArgs(BaseModel):
     idea_group: IdeaGroup | None = Field(
         None,
         description=f"Idea group ({', '.join(IdeaGroup)})",
+    )
+
+
+class AgentProjectCreateArgs(BaseModel):
+    """Agent arguments for creating a project.
+
+    Uses description and notes instead of raw content.
+    The tool handler builds formatted content from these fields.
+    """
+
+    project_name: str = Field(..., min_length=1, description="Project title")
+    description: str | None = Field(
+        None,
+        description="Project scope and objectives",
+    )
+    notes: str | None = Field(
+        None,
+        description="Additional context, references, or related tasks",
+    )
+    project_group: ProjectGroup = Field(
+        ...,
+        description=f"Work or Personal category ({', '.join(ProjectGroup)})",
+    )
+    status: ProjectStatus | None = Field(
+        default=ProjectStatus.NOT_STARTED,
+        description=f"Project status (default: {ProjectStatus.NOT_STARTED})",
+    )
+    priority: ProjectPriority | None = Field(
+        default=ProjectPriority.LOW,
+        description=f"Project priority (default: {ProjectPriority.LOW})",
+    )
+
+
+class AgentProjectUpdateArgs(BaseModel):
+    """Agent arguments for updating a project.
+
+    Uses content field for raw markdown. Agent must fetch existing content
+    via get_project, merge changes, and pass the complete content.
+    """
+
+    project_name: str | None = Field(None, min_length=1, description="Project title")
+    content: str | None = Field(
+        None,
+        description="Complete page content in markdown (replaces all existing content)",
+    )
+    status: ProjectStatus | None = Field(
+        None,
+        description=f"Project status ({', '.join(ProjectStatus)})",
+    )
+    priority: ProjectPriority | None = Field(
+        None,
+        description=f"Project priority ({', '.join(ProjectPriority)})",
+    )
+    project_group: ProjectGroup | None = Field(
+        None,
+        description=f"Work or Personal category ({', '.join(ProjectGroup)})",
     )

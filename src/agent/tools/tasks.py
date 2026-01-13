@@ -49,13 +49,13 @@ TASK_TOOL_CONFIG = CRUDToolConfig(
         f"by task name (e.g. 'email' matches 'Read emails'). "
         f"By default excludes completed tasks; set include_done=true to include them. "
         f"Can filter by status ({_status_options}), priority ({_priority_options}), "
-        f"effort level ({_effort_options}), and task group ({_group_options}). "
+        f"effort level ({_effort_options}), task group ({_group_options}), or project_id. "
         f"Response includes fuzzy_match_quality ('good' or 'weak') - ask for clarification if 'weak'. "
         f"Does NOT return page content; use get_task to retrieve a task's content."
     ),
     get_description=(
         "Get details of a specific task by its ID. "
-        "Returns task name, status, due date, priority, effort level, task group, "
+        "Returns task name, status, due date, priority, effort level, task group, project_id, "
         "and page content (in markdown format)."
     ),
     create_description=(
@@ -65,13 +65,15 @@ TASK_TOOL_CONFIG = CRUDToolConfig(
         f"Better: 'Send Q4 report to finance', 'Team standup', 'Call John re: project'. "
         f"If vague, ask the user for more details. "
         f"Title case the task name. For high effort tasks, add a description. "
+        f"**Project linking**: If the task is clearly part of a larger initiative, "
+        f"use query_projects to find relevant projects and suggest linking with project_id. "
         f"Optional: description, notes, status ({_status_options}), "
-        f"priority ({_priority_options}), effort ({_effort_options})."
+        f"priority ({_priority_options}), effort ({_effort_options}), project_id."
     ),
     update_description=(
         f"Update an existing task. Requires the task_id. "
         f"Can update task name, status ({_status_options}), priority ({_priority_options}), "
-        f"effort level ({_effort_options}), task group ({_group_options}), or due date. "
+        f"effort level ({_effort_options}), task group ({_group_options}), project_id, or due date. "
         f"IMPORTANT: Before updating description/notes, you MUST first call get_task to retrieve "
         f"the current content, then merge existing content with your changes. The content field "
         f"will REPLACE all existing page content. If get_task fails due to unsupported blocks, "

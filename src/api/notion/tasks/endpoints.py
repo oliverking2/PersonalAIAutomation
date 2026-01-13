@@ -162,6 +162,7 @@ def create_tasks(
                 priority=request.priority,
                 effort_level=request.effort_level,
                 task_group=request.task_group,
+                project_id=request.project_id,
             )
             data = client.create_page(
                 data_source_id=data_source_id,
@@ -234,6 +235,7 @@ def update_task(
             priority=request.priority,
             effort_level=request.effort_level,
             task_group=request.task_group,
+            project_id=request.project_id,
         )
 
         if not properties and request.content is None:
@@ -316,6 +318,9 @@ def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
             {"property": "Task Group", "select": {"equals": request.task_group.value}}
         )
 
+    if request.project_id:
+        conditions.append({"property": "Project", "relation": {"contains": request.project_id}})
+
     if request.due_before:
         conditions.append(
             {"property": "Due date", "date": {"before": request.due_before.isoformat()}}
@@ -353,5 +358,6 @@ def _task_to_response(task: NotionTask, content: str | None = None) -> TaskRespo
         priority=task.priority,
         effort_level=task.effort_level,
         task_group=task.task_group,
+        project_id=task.project_id,
         content=content,
     )

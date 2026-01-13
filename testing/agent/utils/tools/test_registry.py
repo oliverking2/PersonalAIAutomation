@@ -505,9 +505,9 @@ class TestCreateDefaultRegistry(unittest.TestCase):
         """Test that create_default_registry creates a populated registry."""
         registry = create_default_registry()
 
-        # Should have 22 tools:
-        # 2 memory (system) + 4 reading + 4 goals + 4 tasks + 4 ideas + 4 reminders
-        self.assertEqual(len(registry), 22)
+        # Should have 26 tools:
+        # 2 memory (system) + 4 reading + 4 goals + 4 tasks + 4 ideas + 4 projects + 4 reminders
+        self.assertEqual(len(registry), 26)
 
     def test_contains_reading_list_tools(self) -> None:
         """Test that registry contains reading list tools."""

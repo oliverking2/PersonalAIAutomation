@@ -19,6 +19,7 @@ class NotionTask(BaseModel):
     priority: str | None = Field(None, description="Task priority level")
     effort_level: str | None = Field(None, description="Task effort level")
     task_group: str | None = Field(None, description="Work or Personal category")
+    project_id: str | None = Field(None, description="Related project page ID")
 
 
 class TaskFilter(BaseModel):
@@ -95,3 +96,17 @@ class NotionIdea(BaseModel):
     idea: str = Field(..., min_length=1, description="Idea title")
     status: str | None = Field(None, description="Idea status")
     idea_group: str | None = Field(None, description="Idea group (Work/Personal)")
+
+
+class NotionProject(BaseModel):
+    """A project from Notion with parsed properties.
+
+    Represents a page from the projects data source
+    with project-specific properties extracted and normalised.
+    """
+
+    id: str = Field(..., min_length=1, description="Notion page ID")
+    project_name: str = Field(..., min_length=1, description="Project title")
+    status: str | None = Field(None, description="Project status")
+    priority: str | None = Field(None, description="Project priority level")
+    project_group: str | None = Field(None, description="Work or Personal category")

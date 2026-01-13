@@ -93,3 +93,27 @@ class IdeaStatus(StrEnum):
     IN_PROGRESS = "In Progress"
     ARCHIVED = "Archived"
     DONE = "Done"
+
+
+class ProjectStatus(StrEnum):
+    """Valid status values for projects (separate from TaskStatus)."""
+
+    NOT_STARTED = "Not started"
+    IN_PROGRESS = "In progress"
+    ON_HOLD = "On Hold"
+    COMPLETED = "Completed"
+
+
+class ProjectPriority(StrEnum):
+    """Valid priority values for projects (separate from task Priority)."""
+
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+
+
+class ProjectGroup(StrEnum):
+    """Valid group values for projects (separate from TaskGroup)."""
+
+    PERSONAL = "Personal"
+    WORK = "Work"
