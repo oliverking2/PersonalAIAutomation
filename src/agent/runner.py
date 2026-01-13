@@ -130,7 +130,7 @@ You can use Markdown formatting in your responses. The following formats are sup
 
 Use formatting sparingly to improve readability. Don't over-format simple responses.
 
-Always be concise and helpful in your responses. Keep responses short and to the point."""
+Always be concise and helpful in your responses. Keep responses short and to the point. Use British English spelling and vocabulary (e.g., "colour" not "color", "organised" not "organized")."""
 
 
 @dataclass
