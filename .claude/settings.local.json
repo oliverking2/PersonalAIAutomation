@@ -21,7 +21,8 @@
       "Bash(poetry run ruff:*)",
       "Bash(make lint:*)",
       "Bash(make format:*)",
-      "Bash(poetry show:*)"
+      "Bash(poetry show:*)",
+      "Bash(grep:*)"
     ]
   }
 }
