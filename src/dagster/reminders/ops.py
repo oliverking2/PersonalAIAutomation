@@ -5,12 +5,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from croniter import croniter
+from sqlalchemy.orm import Session
 
 from dagster import Backoff, Jitter, OpExecutionContext, RetryPolicy, op
 from src.database.connection import get_session
 from src.database.reminders.models import ReminderInstance, ReminderSchedule
 from src.database.reminders.operations import (
     create_reminder_instance,
+    deactivate_schedule,
     expire_instance,
     get_active_instance_for_schedule,
     get_instances_to_send,
@@ -181,6 +183,32 @@ def _send_reminder(
     )
 
 
+def _handle_instance_expiry(
+    session: Session,
+    instance: ReminderInstance,
+    now: datetime,
+    context: OpExecutionContext,
+) -> None:
+    """Handle expiry for an instance that has reached max sends.
+
+    Expires the instance and deactivates one-time schedules to prevent
+    new instances from being created.
+
+    :param session: Database session.
+    :param instance: The instance to expire.
+    :param now: Current timestamp.
+    :param context: Dagster execution context for logging.
+    """
+    expire_instance(session, instance, now)
+    context.log.info(f"Expired instance {instance.id} after {instance.send_count} sends")
+
+    # Deactivate one-time schedules after expiry to prevent new instances
+    schedule = instance.schedule
+    if not schedule.is_recurring:
+        deactivate_schedule(session, schedule.id)
+        context.log.info(f"Deactivated one-time schedule {schedule.id} after instance expiry")
+
+
 @op(
     name="process_reminders",
     retry_policy=REMINDER_RETRY_POLICY,
@@ -255,11 +283,8 @@ def process_reminders_op(context: OpExecutionContext) -> ReminderStats:
             try:
                 # Check if max sends reached - expire instead of sending
                 if instance.send_count >= instance.max_sends:
-                    expire_instance(session, instance, now)
+                    _handle_instance_expiry(session, instance, now, context)
                     stats.reminders_expired += 1
-                    context.log.info(
-                        f"Expired instance {instance.id} after {instance.send_count} sends"
-                    )
                     continue
 
                 # Send the reminder

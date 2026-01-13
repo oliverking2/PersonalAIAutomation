@@ -467,6 +467,120 @@ class TestProcessRemindersOp(unittest.TestCase):
     @patch("src.dagster.reminders.ops.get_session")
     @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
     @patch("src.dagster.reminders.ops.get_instances_to_send")
+    @patch("src.dagster.reminders.ops.expire_instance")
+    @patch("src.dagster.reminders.ops.deactivate_schedule")
+    def test_deactivates_one_time_schedule_on_expiry(  # noqa: PLR0913
+        self,
+        mock_deactivate: MagicMock,
+        mock_expire: MagicMock,
+        mock_get_instances: MagicMock,
+        mock_get_schedules: MagicMock,
+        mock_get_session: MagicMock,
+        mock_telegram_client: MagicMock,
+        mock_settings: MagicMock,
+    ) -> None:
+        """Test that one-time schedule is deactivated when instance expires."""
+        mock_settings.return_value = MagicMock(
+            bot_token="test-token",
+            chat_id="123456",
+            error_bot_token=None,
+            error_chat_id=None,
+        )
+
+        # One-time schedule (no cron_schedule)
+        schedule = ReminderSchedule(
+            id=uuid4(),
+            message="One-time reminder",
+            chat_id=123,
+            next_trigger_at=datetime.now(UTC),
+            cron_schedule=None,
+        )
+        instance = ReminderInstance(
+            id=uuid4(),
+            schedule_id=schedule.id,
+            status=ReminderStatus.ACTIVE.value,
+            send_count=3,  # Already sent 3 times (max)
+            max_sends=3,
+            next_send_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        instance.schedule = schedule
+
+        mock_get_schedules.return_value = []
+        mock_get_instances.return_value = [instance]
+
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        context = build_op_context()
+        result = process_reminders_op(context)
+
+        self.assertEqual(result.reminders_expired, 1)
+        mock_expire.assert_called_once()
+        mock_deactivate.assert_called_once_with(mock_session, schedule.id)
+
+    @patch("src.dagster.reminders.ops.get_telegram_settings")
+    @patch("src.dagster.reminders.ops.TelegramClient")
+    @patch("src.dagster.reminders.ops.get_session")
+    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
+    @patch("src.dagster.reminders.ops.get_instances_to_send")
+    @patch("src.dagster.reminders.ops.expire_instance")
+    @patch("src.dagster.reminders.ops.deactivate_schedule")
+    def test_does_not_deactivate_recurring_schedule_on_expiry(  # noqa: PLR0913
+        self,
+        mock_deactivate: MagicMock,
+        mock_expire: MagicMock,
+        mock_get_instances: MagicMock,
+        mock_get_schedules: MagicMock,
+        mock_get_session: MagicMock,
+        mock_telegram_client: MagicMock,
+        mock_settings: MagicMock,
+    ) -> None:
+        """Test that recurring schedule is NOT deactivated when instance expires."""
+        mock_settings.return_value = MagicMock(
+            bot_token="test-token",
+            chat_id="123456",
+            error_bot_token=None,
+            error_chat_id=None,
+        )
+
+        # Recurring schedule (has cron_schedule)
+        schedule = ReminderSchedule(
+            id=uuid4(),
+            message="Daily reminder",
+            chat_id=123,
+            next_trigger_at=datetime.now(UTC),
+            cron_schedule="0 9 * * *",  # Daily at 9am
+        )
+        instance = ReminderInstance(
+            id=uuid4(),
+            schedule_id=schedule.id,
+            status=ReminderStatus.ACTIVE.value,
+            send_count=3,  # Already sent 3 times (max)
+            max_sends=3,
+            next_send_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        instance.schedule = schedule
+
+        mock_get_schedules.return_value = []
+        mock_get_instances.return_value = [instance]
+
+        mock_session = MagicMock()
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        context = build_op_context()
+        result = process_reminders_op(context)
+
+        self.assertEqual(result.reminders_expired, 1)
+        mock_expire.assert_called_once()
+        mock_deactivate.assert_not_called()
+
+    @patch("src.dagster.reminders.ops.get_telegram_settings")
+    @patch("src.dagster.reminders.ops.TelegramClient")
+    @patch("src.dagster.reminders.ops.get_session")
+    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
+    @patch("src.dagster.reminders.ops.get_instances_to_send")
     @patch("src.dagster.reminders.ops.get_active_instance_for_schedule")
     @patch("src.dagster.reminders.ops.create_reminder_instance")
     @patch("src.dagster.reminders.ops.update_schedule_next_trigger")
