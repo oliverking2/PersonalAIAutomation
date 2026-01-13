@@ -697,7 +697,7 @@ class AgentRunner:
             the number of messages from conversation history.
         """
         # Build dynamic context prefix (keeps system prompt static for caching)
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M %Z").strip()
+        current_time = datetime.now().strftime("%A, %Y-%m-%d %H:%M %Z").strip()
         context_parts = [f"[Current time: {current_time}]"]
         if domain_notification:
             context_parts.append(domain_notification)
