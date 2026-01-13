@@ -160,11 +160,10 @@ def _update_memory_handler(args: BaseModel) -> dict[str, Any]:
 ADD_TO_MEMORY_TOOL = ToolDef(
     name="add_to_memory",
     description=(
-        "Store important information for future conversations. Use this when the user "
-        "shares facts about people, expresses preferences, or provides context that would "
-        "be useful to remember. If the user explicitly asks you to remember something, "
-        "store it immediately. Only ask for confirmation if you are proactively suggesting "
-        "to remember something the user mentioned."
+        "Store important information for future conversations. Be proactive - when the user "
+        "shares facts about people, preferences, ongoing projects, or useful context, store it "
+        "immediately and briefly acknowledge what you've remembered. Don't ask for permission "
+        "first; just store and inform."
     ),
     args_model=AddToMemoryArgs,
     handler=_add_to_memory_handler,
