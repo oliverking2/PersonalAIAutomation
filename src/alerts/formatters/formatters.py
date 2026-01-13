@@ -1,6 +1,9 @@
 """Alert formatters for converting AlertData to Telegram messages."""
 
+from datetime import date
 from urllib.parse import urlparse
+
+import humanize
 
 from src.alerts.enums import AlertType
 from src.alerts.formatters.summariser import summarise_description
@@ -30,6 +33,22 @@ def format_newsletter_alert(alert: AlertData) -> tuple[str, str]:
     return format_message(markdown)
 
 
+def _format_due_date_human(iso_date: str) -> str:
+    """Convert ISO date to human-readable format with day name.
+
+    :param iso_date: Date string in ISO format (YYYY-MM-DD).
+    :returns: Date like "Tuesday 13th Jan 2026" or original string if parsing fails.
+    """
+    try:
+        dt = date.fromisoformat(iso_date)
+        day_name = dt.strftime("%A")
+        ordinal_day = humanize.ordinal(dt.day)
+        month_year = dt.strftime("%b %Y")
+        return f"{day_name} {ordinal_day} {month_year}"
+    except ValueError:
+        return iso_date
+
+
 def _format_task_section(
     items: list[AlertItem],
     header: str,
@@ -55,7 +74,7 @@ def _format_task_section(
             suffix = f" ({days} days)"
         elif include_due_date:
             due = item.metadata.get("due_date", "")
-            suffix = f" (Due: {due})" if due else ""
+            suffix = f" (Due: {_format_due_date_human(due)})" if due else ""
         lines.append(f"  • {item.name}{suffix}")
     lines.append("")
     return lines

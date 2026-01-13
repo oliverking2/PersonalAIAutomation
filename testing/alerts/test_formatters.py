@@ -147,6 +147,28 @@ class TestFormatTaskAlert(unittest.TestCase):
         self.assertNotIn("HIGH PRIORITY", text)
         self.assertIn("DUE TODAY", text)
 
+    def test_formats_due_date_as_human_readable(self) -> None:
+        """Test that due dates are shown in human-readable format with day names."""
+        alert = AlertData(
+            alert_type=AlertType.DAILY_TASK_WORK,
+            source_id="2025-01-15-work",
+            title="Work Tasks",
+            items=[
+                AlertItem(
+                    name="Important task",
+                    metadata={"section": "high_priority_week", "due_date": "2025-01-18"},
+                ),
+            ],
+        )
+
+        text, _parse_mode = format_task_alert(alert)
+
+        # Should show "Saturday 18th Jan 2025" format
+        self.assertIn("Saturday", text)
+        self.assertIn("18th", text)
+        self.assertIn("Jan", text)
+        self.assertNotIn("2025-01-18", text)
+
 
 class TestFormatGoalAlert(unittest.TestCase):
     """Tests for format_goal_alert."""
