@@ -1,14 +1,15 @@
 """Dagster definitions for alert jobs and schedules."""
 
 from dagster import Definitions
-from src.dagster.alerts.jobs import (
+
+from src.orchestration.alerts.jobs import (
     overdue_task_alerts_job,
     personal_task_alerts_job,
     weekly_goal_alerts_job,
     weekly_reading_alerts_job,
     work_task_alerts_job,
 )
-from src.dagster.alerts.schedules import (
+from src.orchestration.alerts.schedules import (
     overdue_task_alert_schedule,
     personal_task_alert_weekday_schedule,
     personal_task_alert_weekend_schedule,

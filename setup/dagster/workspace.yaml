@@ -1,4 +1,4 @@
 load_from:
   - python_module:
-      module_name: src.dagster.definitions
+      module_name: src.orchestration.definitions
       attribute: defs

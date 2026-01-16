@@ -1,12 +1,13 @@
 """Dagster definitions for newsletter automation."""
 
 from dagster import Definitions
-from src.dagster.newsletters.jobs import (
+
+from src.orchestration.newsletters.jobs import (
     medium_pipeline_job,
     newsletter_pipeline_job,
     substack_pipeline_job,
 )
-from src.dagster.newsletters.schedules import (
+from src.orchestration.newsletters.schedules import (
     daily_medium_schedule,
     hourly_newsletter_schedule,
     hourly_substack_schedule,

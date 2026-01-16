@@ -218,7 +218,7 @@ def format_article_link(article: Article) -> str:
 ```python
 # src/dagster/newsletters/ops.py (updated)
 
-from dagster import op, OpExecutionContext
+from orchestration import op, OpExecutionContext
 
 from src.database.connection import get_session
 from src.newsletters.alert_service import NewsletterAlertService

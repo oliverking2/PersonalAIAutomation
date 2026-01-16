@@ -6,11 +6,13 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-# Set required env vars before importing src.dagster modules
+# Set required env vars before importing src.orchestration modules
 os.environ.setdefault("GRAPH_TARGET_UPN", "test@example.com")
 
 from dagster import build_op_context
-from src.dagster.reminders.ops import (
+
+from src.database.reminders.models import ReminderInstance, ReminderSchedule, ReminderStatus
+from src.orchestration.reminders.ops import (
     REMINDER_CALLBACK_PREFIX,
     ReminderStats,
     _build_reminder_keyboard,
@@ -18,7 +20,6 @@ from src.dagster.reminders.ops import (
     calculate_next_cron_trigger,
     process_reminders_op,
 )
-from src.database.reminders.models import ReminderInstance, ReminderSchedule, ReminderStatus
 
 
 class TestCalculateNextCronTrigger(unittest.TestCase):
@@ -217,11 +218,11 @@ class TestReminderStats(unittest.TestCase):
 class TestProcessRemindersOp(unittest.TestCase):
     """Tests for process_reminders_op."""
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
     def test_returns_stats_with_no_work(
         self,
         mock_get_instances: MagicMock,
@@ -251,13 +252,13 @@ class TestProcessRemindersOp(unittest.TestCase):
         self.assertEqual(result.reminders_sent, 0)
         self.assertEqual(result.errors, [])
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
-    @patch("src.dagster.reminders.ops.get_active_instance_for_schedule")
-    @patch("src.dagster.reminders.ops.create_reminder_instance")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.get_active_instance_for_schedule")
+    @patch("src.orchestration.reminders.ops.create_reminder_instance")
     def test_creates_instance_for_triggered_schedule(  # noqa: PLR0913
         self,
         mock_create_instance: MagicMock,
@@ -304,12 +305,12 @@ class TestProcessRemindersOp(unittest.TestCase):
         self.assertEqual(result.instances_created, 1)
         mock_create_instance.assert_called_once()
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
-    @patch("src.dagster.reminders.ops.get_active_instance_for_schedule")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.get_active_instance_for_schedule")
     def test_skips_schedule_with_existing_active_instance(  # noqa: PLR0913
         self,
         mock_get_active: MagicMock,
@@ -354,13 +355,13 @@ class TestProcessRemindersOp(unittest.TestCase):
         self.assertEqual(result.schedules_triggered, 1)
         self.assertEqual(result.instances_created, 0)
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
-    @patch("src.dagster.reminders.ops.mark_instance_sent")
-    @patch("src.dagster.reminders.ops._send_reminder")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.mark_instance_sent")
+    @patch("src.orchestration.reminders.ops._send_reminder")
     def test_sends_reminder_for_pending_instance(  # noqa: PLR0913
         self,
         mock_send_reminder: MagicMock,
@@ -409,12 +410,12 @@ class TestProcessRemindersOp(unittest.TestCase):
         mock_send_reminder.assert_called_once()
         mock_mark_sent.assert_called_once()
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
-    @patch("src.dagster.reminders.ops.expire_instance")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.expire_instance")
     def test_expires_instance_at_max_sends(  # noqa: PLR0913
         self,
         mock_expire: MagicMock,
@@ -462,13 +463,13 @@ class TestProcessRemindersOp(unittest.TestCase):
         self.assertEqual(result.reminders_sent, 0)
         mock_expire.assert_called_once()
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
-    @patch("src.dagster.reminders.ops.expire_instance")
-    @patch("src.dagster.reminders.ops.deactivate_schedule")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.expire_instance")
+    @patch("src.orchestration.reminders.ops.deactivate_schedule")
     def test_deactivates_one_time_schedule_on_expiry(  # noqa: PLR0913
         self,
         mock_deactivate: MagicMock,
@@ -519,13 +520,13 @@ class TestProcessRemindersOp(unittest.TestCase):
         mock_expire.assert_called_once()
         mock_deactivate.assert_called_once_with(mock_session, schedule.id)
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
-    @patch("src.dagster.reminders.ops.expire_instance")
-    @patch("src.dagster.reminders.ops.deactivate_schedule")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.expire_instance")
+    @patch("src.orchestration.reminders.ops.deactivate_schedule")
     def test_does_not_deactivate_recurring_schedule_on_expiry(  # noqa: PLR0913
         self,
         mock_deactivate: MagicMock,
@@ -576,14 +577,14 @@ class TestProcessRemindersOp(unittest.TestCase):
         mock_expire.assert_called_once()
         mock_deactivate.assert_not_called()
 
-    @patch("src.dagster.reminders.ops.get_telegram_settings")
-    @patch("src.dagster.reminders.ops.TelegramClient")
-    @patch("src.dagster.reminders.ops.get_session")
-    @patch("src.dagster.reminders.ops.get_schedules_to_trigger")
-    @patch("src.dagster.reminders.ops.get_instances_to_send")
-    @patch("src.dagster.reminders.ops.get_active_instance_for_schedule")
-    @patch("src.dagster.reminders.ops.create_reminder_instance")
-    @patch("src.dagster.reminders.ops.update_schedule_next_trigger")
+    @patch("src.orchestration.reminders.ops.get_telegram_settings")
+    @patch("src.orchestration.reminders.ops.TelegramClient")
+    @patch("src.orchestration.reminders.ops.get_session")
+    @patch("src.orchestration.reminders.ops.get_schedules_to_trigger")
+    @patch("src.orchestration.reminders.ops.get_instances_to_send")
+    @patch("src.orchestration.reminders.ops.get_active_instance_for_schedule")
+    @patch("src.orchestration.reminders.ops.create_reminder_instance")
+    @patch("src.orchestration.reminders.ops.update_schedule_next_trigger")
     def test_updates_next_trigger_for_recurring_schedule(  # noqa: PLR0913
         self,
         mock_update_trigger: MagicMock,

@@ -1,11 +1,12 @@
 """Combine all dagster definitions."""
 
 from dagster import Definitions, EnvVar
-from src.dagster.alerts.definitions import defs as alerts_defs
-from src.dagster.newsletters.definitions import defs as newsletters_defs
-from src.dagster.reminders.definitions import defs as reminders_defs
-from src.dagster.resources import TelegramResource
-from src.dagster.utils.sensors import util_sensor_defs
+
+from src.orchestration.alerts.definitions import defs as alerts_defs
+from src.orchestration.newsletters.definitions import defs as newsletters_defs
+from src.orchestration.reminders.definitions import defs as reminders_defs
+from src.orchestration.resources import TelegramResource
+from src.orchestration.utils.sensors import util_sensor_defs
 
 core_defs = Definitions(
     resources={

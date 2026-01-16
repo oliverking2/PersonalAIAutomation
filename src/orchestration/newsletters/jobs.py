@@ -1,7 +1,8 @@
 """Dagster jobs for newsletter automation."""
 
 from dagster import job
-from src.dagster.newsletters.ops import (
+
+from src.orchestration.newsletters.ops import (
     process_medium_digests_op,
     process_newsletters_op,
     process_substack_posts_op,

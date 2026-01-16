@@ -291,28 +291,28 @@ def _identify_at_risk_goals(goals: list[GoalResponse]) -> list[GoalResponse]:
 ```python
 # src/dagster/reminders/jobs.py
 
-from dagster import job
+from orchestration import job
 
-from src.dagster.reminders.ops import (
-    send_daily_task_reminder_op,
-    send_monthly_goal_review_op,
-    send_reading_list_reminder_op,
+from src.orchestration.reminders.ops import (
+   send_daily_task_reminder_op,
+   send_monthly_goal_review_op,
+   send_reading_list_reminder_op,
 )
 
 
 @job(description="Send daily task reminder via Telegram")
 def daily_task_reminder_job():
-    send_daily_task_reminder_op()
+   send_daily_task_reminder_op()
 
 
 @job(description="Send monthly goal review via Telegram")
 def monthly_goal_review_job():
-    send_monthly_goal_review_op()
+   send_monthly_goal_review_op()
 
 
 @job(description="Send weekly reading list reminder via Telegram")
 def reading_list_reminder_job():
-    send_reading_list_reminder_op()
+   send_reading_list_reminder_op()
 ```
 
 ### Dagster Schedules
@@ -320,33 +320,33 @@ def reading_list_reminder_job():
 ```python
 # src/dagster/reminders/schedules.py
 
-from dagster import ScheduleDefinition
+from orchestration import ScheduleDefinition
 
-from src.dagster.reminders.jobs import (
-    daily_task_reminder_job,
-    monthly_goal_review_job,
-    reading_list_reminder_job,
+from src.orchestration.reminders.jobs import (
+   daily_task_reminder_job,
+   monthly_goal_review_job,
+   reading_list_reminder_job,
 )
 
 # Daily at 8:00 AM UK time
 daily_task_reminder_schedule = ScheduleDefinition(
-    job=daily_task_reminder_job,
-    cron_schedule="0 8 * * *",
-    execution_timezone="Europe/London",
+   job=daily_task_reminder_job,
+   cron_schedule="0 8 * * *",
+   execution_timezone="Europe/London",
 )
 
 # 1st of each month at 9:00 AM UK time
 monthly_goal_review_schedule = ScheduleDefinition(
-    job=monthly_goal_review_job,
-    cron_schedule="0 9 1 * *",
-    execution_timezone="Europe/London",
+   job=monthly_goal_review_job,
+   cron_schedule="0 9 1 * *",
+   execution_timezone="Europe/London",
 )
 
 # Every Sunday at 6:00 PM UK time
 reading_list_reminder_schedule = ScheduleDefinition(
-    job=reading_list_reminder_job,
-    cron_schedule="0 18 * * 0",
-    execution_timezone="Europe/London",
+   job=reading_list_reminder_job,
+   cron_schedule="0 18 * * 0",
+   execution_timezone="Europe/London",
 )
 ```
 

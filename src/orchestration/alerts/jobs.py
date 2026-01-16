@@ -1,7 +1,8 @@
 """Dagster jobs for sending alerts."""
 
 from dagster import job
-from src.dagster.alerts.ops import (
+
+from src.orchestration.alerts.ops import (
     send_overdue_task_alerts_op,
     send_personal_task_alerts_op,
     send_weekly_goal_alerts_op,

@@ -1,7 +1,8 @@
 """Dagster schedules for newsletter automation."""
 
 from dagster import ScheduleDefinition
-from src.dagster.newsletters.jobs import (
+
+from src.orchestration.newsletters.jobs import (
     medium_pipeline_job,
     newsletter_pipeline_job,
     substack_pipeline_job,

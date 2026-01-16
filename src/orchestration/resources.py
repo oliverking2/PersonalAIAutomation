@@ -1,8 +1,8 @@
 """Resources for Dagster pipelines."""
 
+from dagster import ConfigurableResource
 from pydantic import Field
 
-from dagster import ConfigurableResource
 from src.messaging.telegram import SendMessageResult, TelegramClient
 
 

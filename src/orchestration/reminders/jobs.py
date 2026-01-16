@@ -1,7 +1,8 @@
 """Dagster jobs for processing user reminders."""
 
 from dagster import job
-from src.dagster.reminders.ops import process_reminders_op
+
+from src.orchestration.reminders.ops import process_reminders_op
 
 
 @job(
