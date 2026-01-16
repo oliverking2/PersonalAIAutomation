@@ -359,5 +359,6 @@ def _task_to_response(task: NotionTask, content: str | None = None) -> TaskRespo
         effort_level=task.effort_level,
         task_group=task.task_group,
         project_id=task.project_id,
+        project_name=task.project_name,
         content=content,
     )

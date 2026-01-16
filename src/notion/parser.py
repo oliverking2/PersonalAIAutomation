@@ -100,6 +100,7 @@ def parse_page_to_task(page: dict[str, Any]) -> NotionTask:
         effort_level=_extract_select(properties.get("Effort level", {})),
         task_group=_extract_select(properties.get("Task Group", {})),
         project_id=_extract_single_relation(properties.get("Project", {})),
+        project_name=_extract_rollup_title(properties.get("Project Name", {})),
     )
 
 
@@ -235,6 +236,32 @@ def _extract_single_relation(prop: dict[str, Any]) -> str | None:
     relation = prop.get("relation", [])
     if relation and len(relation) > 0:
         return relation[0].get("id")
+    return None
+
+
+def _extract_rollup_title(prop: dict[str, Any]) -> str | None:
+    """Extract title text from a rollup property.
+
+    Handles rollups that pull a title property from a related page.
+    The rollup returns an array of title objects.
+
+    :param prop: Rollup property from Notion API.
+    :returns: Title text or None if rollup is empty.
+    """
+    rollup = prop.get("rollup")
+    if rollup is None:
+        return None
+
+    array = rollup.get("array", [])
+    if not array:
+        return None
+
+    # First item in array contains the title
+    first_item = array[0]
+    if first_item.get("type") == "title":
+        title_items = first_item.get("title", [])
+        return "".join(item.get("plain_text", "") for item in title_items) or None
+
     return None
 
 

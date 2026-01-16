@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from src.notion.models import TaskFilter
 from src.notion.parser import (
+    _extract_rollup_title,
+    _extract_single_relation,
     build_goal_properties,
     build_query_filter,
     build_reading_properties,
@@ -45,6 +47,53 @@ class TestParsePageToTask(unittest.TestCase):
         self.assertEqual(task.priority, "High")
         self.assertEqual(task.effort_level, "Medium")
         self.assertEqual(task.task_group, "Work")
+
+    def test_parse_page_with_project_relation_and_rollup(self) -> None:
+        """Test parsing a page with project relation and project name rollup."""
+        page = {
+            "id": "page-with-project",
+            "url": "https://notion.so/Task-With-Project",
+            "properties": {
+                "Task name": {"title": [{"plain_text": "Task With Project"}]},
+                "Status": {"status": {"name": "Not started"}},
+                "Project": {"relation": [{"id": "project-abc-123"}]},
+                "Project Name": {
+                    "rollup": {
+                        "type": "array",
+                        "array": [
+                            {
+                                "type": "title",
+                                "title": [{"plain_text": "My Project"}],
+                            }
+                        ],
+                    }
+                },
+            },
+        }
+
+        task = parse_page_to_task(page)
+
+        self.assertEqual(task.id, "page-with-project")
+        self.assertEqual(task.task_name, "Task With Project")
+        self.assertEqual(task.project_id, "project-abc-123")
+        self.assertEqual(task.project_name, "My Project")
+
+    def test_parse_page_with_empty_project_relation(self) -> None:
+        """Test parsing a page with no project linked."""
+        page = {
+            "id": "page-no-project",
+            "url": "https://notion.so/Task-Without-Project",
+            "properties": {
+                "Task name": {"title": [{"plain_text": "Task Without Project"}]},
+                "Project": {"relation": []},
+                "Project Name": {"rollup": {"type": "array", "array": []}},
+            },
+        }
+
+        task = parse_page_to_task(page)
+
+        self.assertIsNone(task.project_id)
+        self.assertIsNone(task.project_name)
 
     def test_parse_page_with_missing_optional_properties(self) -> None:
         """Test parsing a page with missing optional properties."""
@@ -445,6 +494,135 @@ class TestBuildReadingProperties(unittest.TestCase):
             build_reading_properties(unknown_field="value")
 
         self.assertIn("Unknown field", str(context.exception))
+
+
+class TestExtractSingleRelation(unittest.TestCase):
+    """Tests for _extract_single_relation helper function."""
+
+    def test_extract_single_relation_with_one_relation(self) -> None:
+        """Test extracting a single relation ID."""
+        prop = {"relation": [{"id": "page-abc-123"}]}
+
+        result = _extract_single_relation(prop)
+
+        self.assertEqual(result, "page-abc-123")
+
+    def test_extract_single_relation_with_multiple_relations_returns_first(self) -> None:
+        """Test extracting returns first ID when multiple relations exist."""
+        prop = {"relation": [{"id": "first-id"}, {"id": "second-id"}]}
+
+        result = _extract_single_relation(prop)
+
+        self.assertEqual(result, "first-id")
+
+    def test_extract_single_relation_with_empty_list(self) -> None:
+        """Test extracting from empty relation list returns None."""
+        prop = {"relation": []}
+
+        result = _extract_single_relation(prop)
+
+        self.assertIsNone(result)
+
+    def test_extract_single_relation_with_missing_key(self) -> None:
+        """Test extracting from property without relation key returns None."""
+        prop = {}
+
+        result = _extract_single_relation(prop)
+
+        self.assertIsNone(result)
+
+
+class TestExtractRollupTitle(unittest.TestCase):
+    """Tests for _extract_rollup_title helper function."""
+
+    def test_extract_rollup_title_with_single_title(self) -> None:
+        """Test extracting title from a rollup with one title item."""
+        prop = {
+            "rollup": {
+                "type": "array",
+                "array": [
+                    {
+                        "type": "title",
+                        "title": [{"plain_text": "Project Name"}],
+                    }
+                ],
+            }
+        }
+
+        result = _extract_rollup_title(prop)
+
+        self.assertEqual(result, "Project Name")
+
+    def test_extract_rollup_title_with_multi_segment_title(self) -> None:
+        """Test extracting title with multiple text segments."""
+        prop = {
+            "rollup": {
+                "type": "array",
+                "array": [
+                    {
+                        "type": "title",
+                        "title": [
+                            {"plain_text": "Part 1 "},
+                            {"plain_text": "Part 2"},
+                        ],
+                    }
+                ],
+            }
+        }
+
+        result = _extract_rollup_title(prop)
+
+        self.assertEqual(result, "Part 1 Part 2")
+
+    def test_extract_rollup_title_with_empty_array(self) -> None:
+        """Test extracting from rollup with empty array returns None."""
+        prop = {"rollup": {"type": "array", "array": []}}
+
+        result = _extract_rollup_title(prop)
+
+        self.assertIsNone(result)
+
+    def test_extract_rollup_title_with_no_rollup_key(self) -> None:
+        """Test extracting from property without rollup key returns None."""
+        prop = {}
+
+        result = _extract_rollup_title(prop)
+
+        self.assertIsNone(result)
+
+    def test_extract_rollup_title_with_none_rollup(self) -> None:
+        """Test extracting from property with None rollup returns None."""
+        prop = {"rollup": None}
+
+        result = _extract_rollup_title(prop)
+
+        self.assertIsNone(result)
+
+    def test_extract_rollup_title_with_empty_title_list(self) -> None:
+        """Test extracting from rollup with empty title list returns None."""
+        prop = {
+            "rollup": {
+                "type": "array",
+                "array": [{"type": "title", "title": []}],
+            }
+        }
+
+        result = _extract_rollup_title(prop)
+
+        self.assertIsNone(result)
+
+    def test_extract_rollup_title_with_non_title_type(self) -> None:
+        """Test extracting from rollup with non-title type returns None."""
+        prop = {
+            "rollup": {
+                "type": "array",
+                "array": [{"type": "number", "number": 42}],
+            }
+        }
+
+        result = _extract_rollup_title(prop)
+
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

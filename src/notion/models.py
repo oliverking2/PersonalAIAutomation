@@ -20,6 +20,7 @@ class NotionTask(BaseModel):
     effort_level: str | None = Field(None, description="Task effort level")
     task_group: str | None = Field(None, description="Work or Personal category")
     project_id: str | None = Field(None, description="Related project page ID")
+    project_name: str | None = Field(None, description="Name of related project (from rollup)")
 
 
 class TaskFilter(BaseModel):
