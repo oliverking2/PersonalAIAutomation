@@ -42,17 +42,6 @@ class TaskFilter(BaseModel):
     )
 
 
-class QueryResult(BaseModel):
-    """Result from querying a Notion data source.
-
-    Contains the list of tasks and pagination information.
-    """
-
-    tasks: list[NotionTask] = Field(default_factory=list)
-    has_more: bool = Field(default=False)
-    next_cursor: str | None = Field(None)
-
-
 class NotionGoal(BaseModel):
     """A goal from Notion with parsed properties.
 
