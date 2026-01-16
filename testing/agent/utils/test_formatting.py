@@ -214,6 +214,44 @@ class TestFormatAction(unittest.TestCase):
         # Full content should not appear
         self.assertNotIn("A" * 100, result)
 
+    def test_update_project_id_only_link(self) -> None:
+        """Test formatting when only project_id is set (linking to project)."""
+        result = format_action(
+            "update_task",
+            "My task",
+            {"task_id": "abc-123", "project_id": "project-456"},
+        )
+        self.assertEqual(result, 'link "My task" to a project')
+
+    def test_update_project_id_only_unlink(self) -> None:
+        """Test formatting when project_id is cleared (unlinking from project)."""
+        result = format_action(
+            "update_task",
+            "My task",
+            {"task_id": "abc-123", "project_id": None},
+        )
+        self.assertEqual(result, 'unlink "My task" from its project')
+
+    def test_update_project_id_with_other_fields(self) -> None:
+        """Test formatting when project_id is set with other fields."""
+        result = format_action(
+            "update_task",
+            "My task",
+            {"task_id": "abc-123", "project_id": "project-456", "status": "In Progress"},
+        )
+        self.assertIn('update "My task"', result)
+        self.assertIn("status: In Progress", result)
+        self.assertIn("link to project", result)
+
+    def test_update_project_id_without_entity_name(self) -> None:
+        """Test formatting project link without entity name."""
+        result = format_action(
+            "update_task",
+            None,
+            {"task_id": "abc-123", "project_id": "project-456"},
+        )
+        self.assertEqual(result, "link to a project")
+
 
 class TestFormatConfirmationMessage(unittest.TestCase):
     """Tests for format_confirmation_message function."""

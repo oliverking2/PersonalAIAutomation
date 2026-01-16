@@ -130,20 +130,33 @@ def _format_update_action(entity_name: str | None, args: dict[str, Any]) -> str:
     :param args: The update arguments (excluding the entity ID).
     :returns: Lowercase action description.
     """
-    # Remove ID fields from args for display
+    # Extract project_id separately - it's meaningful but needs special formatting
+    project_id = args.get("project_id")
+    has_project_change = "project_id" in args
+
+    # Remove ID fields from args for display (except we handle project_id specially)
     display_args = {k: v for k, v in args.items() if not k.endswith("_id")}
 
+    # Handle project linking as a special case
+    if has_project_change and not display_args:
+        # Only change is project_id
+        if project_id:
+            return f'link "{entity_name}" to a project' if entity_name else "link to a project"
+        return f'unlink "{entity_name}" from its project' if entity_name else "unlink from project"
+
     # No actual changes specified
-    if not display_args:
+    if not display_args and not has_project_change:
         return f'update "{entity_name}"' if entity_name else "update item"
 
     # Single field updates get specific templates
-    if len(display_args) == 1:
+    if len(display_args) == 1 and not has_project_change:
         field, value = next(iter(display_args.items()))
         return _format_single_field_update(entity_name, field, _format_value(field, value))
 
     # Multiple fields - list them
     changes = [f"{k}: {_format_value(k, v)}" for k, v in display_args.items()]
+    if has_project_change:
+        changes.append("link to project" if project_id else "unlink from project")
     changes_str = ", ".join(changes)
 
     return (

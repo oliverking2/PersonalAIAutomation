@@ -75,8 +75,12 @@ PROJECT_TOOL_CONFIG = CRUDToolConfig(
 
 
 def get_projects_tools() -> list[ToolDef]:
-    """Get all project tool definitions.
+    """Get all project tool definitions."""
+    tools = create_crud_tools(PROJECT_TOOL_CONFIG)
 
-    :returns: List of ToolDef instances for project operations.
-    """
-    return create_crud_tools(PROJECT_TOOL_CONFIG)
+    # Add domain:tasks to read tools so they're available when working with tasks
+    for i, tool in enumerate(tools):
+        if tool.name in ("query_projects", "get_project"):
+            tools[i] = tool.model_copy(update={"tags": tool.tags | {"domain:tasks"}})
+
+    return tools

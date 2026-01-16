@@ -604,7 +604,7 @@ class TestCreateDefaultRegistry(unittest.TestCase):
 
         self.assertEqual(len(reading_tools), 4)
         self.assertEqual(len(goals_tools), 4)
-        self.assertEqual(len(tasks_tools), 4)
+        self.assertEqual(len(tasks_tools), 6)  # 4 task + 2 project read tools
         self.assertEqual(len(ideas_tools), 4)
         self.assertEqual(len(reminders_tools), 4)
 
