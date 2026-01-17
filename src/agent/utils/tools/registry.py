@@ -162,26 +162,36 @@ class ToolRegistry:
         the new domain's tools need to be cache-written while previous domains
         are cache-read.
 
+        Tools with multiple domain tags are only included once (in the first
+        matching domain) to avoid duplicates.
+
         :param domains: Ordered list of domains (order determines cache point placement).
         :returns: Bedrock-compatible toolConfig with cache points.
         """
         tools_list: list[dict[str, Any]] = []
+        seen_tools: set[str] = set()
 
         # Always include system tools first (e.g., memory tools)
         system_tools = self.get_system_tools()
         if system_tools:
             for tool in system_tools:
                 tools_list.append(tool.to_bedrock_tool_spec())
+                seen_tools.add(tool.name)
             # Add cache point after system tools for stable caching
             tools_list.append({"cachePoint": {"type": "default"}})
 
         for domain in domains:
-            # Get all tools for this domain
-            domain_tools = [tool for tool in self._tools.values() if domain in tool.tags]
+            # Get all tools for this domain that haven't been added yet
+            domain_tools = [
+                tool
+                for tool in self._tools.values()
+                if domain in tool.tags and tool.name not in seen_tools
+            ]
 
             # Add tool specs for this domain
             for tool in domain_tools:
                 tools_list.append(tool.to_bedrock_tool_spec())
+                seen_tools.add(tool.name)
 
             # Add cache point after this domain's tools (if we added any tools)
             if domain_tools:

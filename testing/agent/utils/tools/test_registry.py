@@ -253,6 +253,59 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(config_ab["tools"][0]["toolSpec"]["name"], "tool_a")
         self.assertEqual(config_ba["tools"][0]["toolSpec"]["name"], "tool_b")
 
+    def test_to_bedrock_tool_config_deduplicates_multi_domain_tools(self) -> None:
+        """Test that tools with multiple domain tags are only included once.
+
+        When a tool belongs to multiple domains (e.g., query_projects has both
+        domain:projects and domain:tasks), it should only appear once in the
+        tool config, in the first matching domain.
+        """
+        # Tool in domain A only
+        tool_a = ToolDef(
+            name="tool_a",
+            description="Domain A only",
+            tags=frozenset({"domain:a"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        # Tool in both domains (like query_projects with domain:tasks and domain:projects)
+        tool_shared = ToolDef(
+            name="tool_shared",
+            description="Shared between A and B",
+            tags=frozenset({"domain:a", "domain:b"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        # Tool in domain B only
+        tool_b = ToolDef(
+            name="tool_b",
+            description="Domain B only",
+            tags=frozenset({"domain:b"}),
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(tool_a)
+        self.registry.register(tool_shared)
+        self.registry.register(tool_b)
+
+        # Request both domains
+        config = self.registry.to_bedrock_tool_config_with_cache_points(["domain:a", "domain:b"])
+
+        # Extract tool names
+        tool_names = [item["toolSpec"]["name"] for item in config["tools"] if "toolSpec" in item]
+
+        # Each tool should appear exactly once
+        self.assertEqual(len(tool_names), 3)
+        self.assertEqual(tool_names.count("tool_a"), 1)
+        self.assertEqual(tool_names.count("tool_shared"), 1)
+        self.assertEqual(tool_names.count("tool_b"), 1)
+
+        # tool_shared should appear in domain A (first requested domain)
+        # Find the position of tool_shared
+        shared_index = tool_names.index("tool_shared")
+        # It should be in the domain:a block (before the first cachePoint after domain:a tools)
+        self.assertIn(shared_index, [0, 1])  # Should be in first domain
+
     def test_contains(self) -> None:
         """Test the __contains__ method."""
         self.registry.register(self.tool)
