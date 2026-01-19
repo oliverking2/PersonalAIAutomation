@@ -60,6 +60,10 @@ class AgentConversation(Base):
         JSONB,
         nullable=True,
     )
+    selected_domains: Mapped[list[str] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
     pending_confirmation: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,
         nullable=True,

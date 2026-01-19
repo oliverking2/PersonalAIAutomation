@@ -54,6 +54,9 @@ def load_conversation_state(
         conversation_id=conversation.id,
         messages=list(conversation.messages_json) if conversation.messages_json else [],
         selected_tools=list(conversation.selected_tools) if conversation.selected_tools else [],
+        selected_domains=list(conversation.selected_domains)
+        if conversation.selected_domains
+        else [],
         pending_confirmation=pending,
         summary=conversation.summary,
         message_count=conversation.message_count,
@@ -87,6 +90,7 @@ def save_conversation_state(
     # Create copies to ensure SQLAlchemy detects changes to mutable JSONB fields
     conversation.messages_json = list(state.messages)
     conversation.selected_tools = list(state.selected_tools) if state.selected_tools else []
+    conversation.selected_domains = list(state.selected_domains) if state.selected_domains else []
     conversation.pending_confirmation = (
         state.pending_confirmation.model_dump() if state.pending_confirmation else None
     )
