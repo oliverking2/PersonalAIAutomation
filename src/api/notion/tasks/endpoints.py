@@ -296,6 +296,9 @@ def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
     """
     conditions: list[dict[str, object]] = []
 
+    # Always filter out tasks with empty titles - they fail validation
+    conditions.append({"property": "Task name", "title": {"is_not_empty": True}})
+
     # Exclude Done tasks by default unless include_done is True
     if not request.include_done:
         conditions.append(
@@ -336,8 +339,7 @@ def _build_task_filter(request: TaskQueryRequest) -> dict[str, object] | None:
             {"property": "Due date", "date": {"equals": request.due_date.isoformat()}}
         )
 
-    if not conditions:
-        return None
+    # Always have at least one condition (is_not_empty), so compound if multiple
     if len(conditions) == 1:
         return conditions[0]
     return {"and": conditions}
