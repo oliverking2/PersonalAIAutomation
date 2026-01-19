@@ -6,9 +6,10 @@ import concurrent.futures
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
+import humanize
 from pydantic import ValidationError
 
 from src.agent.bedrock_client import BedrockClient, ToolUseBlock
@@ -703,8 +704,21 @@ class AgentRunner:
             the number of messages from conversation history.
         """
         # Build dynamic context prefix (keeps system prompt static for caching)
-        current_time = datetime.now().strftime("%A, %Y-%m-%d %H:%M %Z").strip()
-        context_parts = [f"[Current time: {current_time}]"]
+        now = datetime.now()
+        current_time = now.strftime("%A, %Y-%m-%d %H:%M %Z").strip()
+
+        # Build week calendar to prevent LLM date calculation errors
+        # Find Monday of current week
+        days_since_monday = now.weekday()
+        monday = now - timedelta(days=days_since_monday)
+        week_dates = []
+        day_abbrevs = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        for i in range(7):
+            day = monday + timedelta(days=i)
+            week_dates.append(f"{day_abbrevs[i]} {humanize.ordinal(day.day)}")
+        week_calendar = " | ".join(week_dates)
+
+        context_parts = [f"[Current time: {current_time}]", f"[This week: {week_calendar}]"]
         if domain_notification:
             context_parts.append(domain_notification)
 
