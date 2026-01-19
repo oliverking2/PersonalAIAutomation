@@ -297,23 +297,23 @@ class TestToolSelector(unittest.TestCase):
         self.assertEqual(domains, ["domain:items", "domain:tasks"])
 
     def test_merge_domains_by_recency(self) -> None:
-        """Test that merge puts existing domains first for cache stability."""
+        """Test that merge puts intent domains first to prioritise user request."""
         intent = ["domain:tasks"]
         existing = ["domain:items", "domain:goals"]
 
         merged = self.selector._merge_domains_by_recency(intent, existing)
 
-        # Existing domains first (cached), then new intent domains
-        self.assertEqual(merged, ["domain:items", "domain:goals", "domain:tasks"])
+        # Intent domains first (user's current request), then existing domains
+        self.assertEqual(merged, ["domain:tasks", "domain:items", "domain:goals"])
 
     def test_merge_domains_deduplicates(self) -> None:
-        """Test that merge removes duplicates, keeping existing domain position."""
+        """Test that merge removes duplicates, keeping intent domain position."""
         intent = ["domain:items"]
         existing = ["domain:items", "domain:tasks"]
 
         merged = self.selector._merge_domains_by_recency(intent, existing)
 
-        # items already in existing, so it stays in its existing position
+        # items in intent first, duplicate from existing is removed
         self.assertEqual(merged, ["domain:items", "domain:tasks"])
 
     def test_prune_domains_to_limit(self) -> None:
@@ -365,6 +365,78 @@ class TestToolSelector(unittest.TestCase):
 
         # Should keep first two domains (8 tools), drop third
         self.assertEqual(pruned, ["domain:a", "domain:b"])
+
+    def test_mid_conversation_domain_expansion_prioritises_intent(self) -> None:
+        """Test that new domain requests are honoured even when at tool limit.
+
+        Regression test for bug where asking about a new domain mid-conversation
+        would fail because existing domains filled the tool limit and the new
+        intent domain was dropped during pruning.
+
+        Scenario: User is chatting about tasks/projects (at tool limit), then asks
+        about reminders. The reminders domain should be added and old domains
+        dropped if necessary.
+        """
+        # Create registry simulating real scenario
+        registry = ToolRegistry()
+
+        # Domain "tasks": 6 tools (like real tasks domain)
+        for i in range(6):
+            registry.register(
+                ToolDef(
+                    name=f"task_tool_{i}",
+                    description=f"Task tool {i}",
+                    tags=frozenset({"domain:tasks"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        # Domain "projects": 4 tools
+        for i in range(4):
+            registry.register(
+                ToolDef(
+                    name=f"project_tool_{i}",
+                    description=f"Project tool {i}",
+                    tags=frozenset({"domain:projects"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        # Domain "reminders": 4 tools
+        for i in range(4):
+            registry.register(
+                ToolDef(
+                    name=f"reminder_tool_{i}",
+                    description=f"Reminder tool {i}",
+                    tags=frozenset({"domain:reminders"}),
+                    args_model=DummyArgs,
+                    handler=dummy_handler,
+                )
+            )
+
+        selector = ToolSelector(registry=registry, max_tools=10)
+
+        # Simulate mid-conversation: user was working with tasks+projects (10 tools)
+        existing_domains = ["domain:tasks", "domain:projects"]
+
+        # User now asks about reminders
+        intent_domains = ["domain:reminders"]
+
+        # Merge should put intent first
+        merged = selector._merge_domains_by_recency(intent_domains, existing_domains)
+        self.assertEqual(merged, ["domain:reminders", "domain:tasks", "domain:projects"])
+
+        # Prune should keep reminders (4) + tasks (6) = 10, drop projects
+        pruned = selector._prune_domains_to_limit(merged)
+        self.assertEqual(pruned, ["domain:reminders", "domain:tasks"])
+
+        # Verify reminders tools are included
+        tools = selector._expand_domains_to_tools(pruned)
+        self.assertIn("reminder_tool_0", tools)
+        self.assertIn("task_tool_0", tools)
+        self.assertNotIn("project_tool_0", tools)
 
     def test_expand_domains_to_tools(self) -> None:
         """Test expanding domains to tool names."""

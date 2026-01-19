@@ -146,18 +146,18 @@ class ToolSelector:
         intent_domains: list[str],
         existing_domains: list[str],
     ) -> list[str]:
-        """Merge domains with existing domains taking priority for cache stability.
+        """Merge domains with intent domains taking priority.
 
-        Existing domains are placed first (already cached and should be preserved),
-        followed by new intent domains. This ensures that when pruning occurs,
-        new domains are dropped rather than existing ones, maximising cache hits.
+        Intent domains are placed first (user's current request should be honoured),
+        followed by existing domains. This ensures that when pruning occurs due to
+        tool limits, old domains are dropped rather than the user's current intent.
 
-        :param intent_domains: Domains from current user intent (to be added).
-        :param existing_domains: Domains already in conversation (preserved for caching).
-        :returns: Merged list with existing domains first.
+        :param intent_domains: Domains from current user intent (prioritised).
+        :param existing_domains: Domains already in conversation (may be pruned).
+        :returns: Merged list with intent domains first.
         """
-        # Existing domains first for cache stability, then new domains
-        return list(dict.fromkeys(existing_domains + intent_domains))
+        # Intent domains first to prioritise user's current request
+        return list(dict.fromkeys(intent_domains + existing_domains))
 
     def _prune_domains_to_limit(self, domains: list[str]) -> list[str]:
         """Prune domains to stay within tool limit.
