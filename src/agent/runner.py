@@ -653,21 +653,21 @@ class AgentRunner:
             domains = self._selector._tools_to_domains(tool_names)
             return _ResolvedTools(tool_names=tool_names, domains=domains)
 
-        # Get current tools from conversation state (if any)
-        current_tools = (
-            conv_state.selected_tools
-            if conv_state is not None and conv_state.selected_tools
+        # Get current domains from conversation state (if any)
+        current_domains = (
+            conv_state.selected_domains
+            if conv_state is not None and conv_state.selected_domains
             else None
         )
 
-        # Select tools - additive mode if we have current tools
+        # Select tools - additive mode if we have current domains
         selection = self._selector.select(
             user_message,
             model=self._config.selector_model,
-            current_tools=current_tools,
+            current_domains=current_domains,
         )
 
-        if current_tools:
+        if current_domains:
             # Selector already handles merging and pruning - use its result directly
             if selection.tool_names:
                 logger.info(
@@ -675,10 +675,10 @@ class AgentRunner:
                     f"domains={selection.domains}, reasoning={selection.reasoning}"
                 )
                 return _ResolvedTools(tool_names=selection.tool_names, domains=selection.domains)
-            # No domains selected - keep current tools
-            logger.debug(f"No domains selected, keeping: {current_tools}")
-            prev_domains = conv_state.selected_domains if conv_state else []
-            return _ResolvedTools(tool_names=current_tools, domains=prev_domains)
+            # No domains selected - keep current tools unchanged
+            prev_tools = conv_state.selected_tools if conv_state else []
+            logger.debug(f"No domains selected, keeping: {prev_tools}")
+            return _ResolvedTools(tool_names=prev_tools, domains=current_domains)
         # First turn: use full selection
         logger.info(
             f"Initial tool selection: {selection.tool_names}, reasoning={selection.reasoning}"

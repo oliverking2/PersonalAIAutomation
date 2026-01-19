@@ -311,7 +311,7 @@ class ToolSelector:
         self,
         user_intent: str,
         model: str | None = None,
-        current_tools: list[str] | None = None,
+        current_domains: list[str] | None = None,
     ) -> ToolSelectionResult:
         """Select tools using domain-based grouping.
 
@@ -322,7 +322,7 @@ class ToolSelector:
 
         :param user_intent: The user's request or intent text.
         :param model: Optional model ID/alias override for selection.
-        :param current_tools: Tools already selected in this conversation.
+        :param current_domains: Domains already selected in this conversation.
         :returns: Tool selection result with tool names and domains.
         """
         # Get available domains from selectable tools
@@ -336,8 +336,7 @@ class ToolSelector:
                 reasoning="No domains available in registry",
             )
 
-        # Get existing domains from current tools
-        existing_domains = self._tools_to_domains(current_tools) if current_tools else []
+        existing_domains = list(current_domains) if current_domains else []
 
         # Select domains from current intent
         intent_domains, reasoning = self._select_domains(
