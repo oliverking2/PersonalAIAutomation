@@ -1304,6 +1304,132 @@ class TestMessageDuplicationPrevention(unittest.TestCase):
         self.assertEqual(len(saved_state.messages), 4)
 
 
+class TestEmptyContentHandling(unittest.TestCase):
+    """Tests for handling LLM responses with empty content.
+
+    When Claude returns end_turn with empty content, subsequent conversation
+    turns would fail because Bedrock requires non-empty content arrays.
+    This test verifies the fix adds a placeholder message.
+    """
+
+    def setUp(self) -> None:
+        """Set up test fixtures."""
+        self.registry = ToolRegistry()
+        self.mock_session, self.mock_conversation, self.mock_run = _create_mock_db_objects()
+
+        self.safe_tool = ToolDef(
+            name="safe_tool",
+            description="A safe test tool",
+            tags=frozenset({"test"}),
+            risk_level=RiskLevel.SAFE,
+            args_model=DummyArgs,
+            handler=dummy_handler,
+        )
+        self.registry.register(self.safe_tool)
+        self.mock_client = MagicMock()
+
+    def _make_user_message(self, text: str) -> dict[str, Any]:
+        """Create a user message dict."""
+        return {"role": "user", "content": [{"text": text}]}
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_empty_content_replaced_with_placeholder(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that empty content from LLM is replaced with a placeholder.
+
+        This prevents Bedrock ValidationException on subsequent turns when
+        the message with empty content is loaded from conversation history.
+        """
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        user_msg = self._make_user_message("Do something")
+
+        # Simulate LLM returning end_turn with EMPTY content
+        empty_response = {
+            "output": {"message": {"role": "assistant", "content": []}},
+            "stopReason": "end_turn",
+        }
+
+        self.mock_client.create_user_message.return_value = user_msg
+        self.mock_client.converse.return_value = empty_response
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = ""  # Empty since no content
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        result = runner.run("Do something", self.mock_session, tool_names=["safe_tool"])
+
+        # Response should be empty (handled by caller with fallback)
+        self.assertEqual(result.response, "")
+
+        # But the stored message should have placeholder content
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]
+
+        # Should have 2 messages: user + assistant with placeholder
+        self.assertEqual(len(saved_state.messages), 2)
+
+        # Assistant message should have non-empty content (the placeholder)
+        assistant_msg = saved_state.messages[1]
+        self.assertEqual(assistant_msg["role"], "assistant")
+        self.assertTrue(len(assistant_msg["content"]) > 0)
+        self.assertIn("text", assistant_msg["content"][0])
+
+    @patch("src.agent.runner.save_conversation_state")
+    @patch("src.agent.runner.complete_agent_run")
+    @patch("src.agent.runner.create_agent_run")
+    @patch("src.agent.runner.create_agent_conversation")
+    def test_normal_content_not_modified(
+        self,
+        mock_create_conv: MagicMock,
+        mock_create_run: MagicMock,
+        mock_complete_run: MagicMock,
+        mock_save_state: MagicMock,
+    ) -> None:
+        """Test that normal (non-empty) content is stored as-is."""
+        mock_create_conv.return_value = self.mock_conversation
+        mock_create_run.return_value = self.mock_run
+
+        user_msg = self._make_user_message("Hello")
+        assistant_msg = {"role": "assistant", "content": [{"text": "Hi there!"}]}
+
+        self.mock_client.create_user_message.return_value = user_msg
+        self.mock_client.converse.return_value = {
+            "output": {"message": assistant_msg},
+            "stopReason": "end_turn",
+        }
+        self.mock_client.get_stop_reason.return_value = "end_turn"
+        self.mock_client.parse_text_response.return_value = "Hi there!"
+
+        runner = AgentRunner(
+            registry=self.registry,
+            client=self.mock_client,
+        )
+
+        result = runner.run("Hello", self.mock_session, tool_names=["safe_tool"])
+
+        self.assertEqual(result.response, "Hi there!")
+
+        mock_save_state.assert_called_once()
+        saved_state = mock_save_state.call_args[0][2]
+
+        # Assistant message should have original content
+        stored_assistant = saved_state.messages[1]
+        self.assertEqual(stored_assistant["content"][0]["text"], "Hi there!")
+
+
 class TestToolTimeout(unittest.TestCase):
     """Tests for tool execution timeout."""
 

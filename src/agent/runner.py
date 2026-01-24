@@ -1311,8 +1311,19 @@ class AgentRunner:
 
         # Update conversation state with messages from this run
         if conv_state is not None:
-            # Add the final assistant message
-            state.messages.append(response["output"]["message"])
+            assistant_message = response["output"]["message"]
+
+            # Validate message has content - Bedrock requires non-empty content arrays
+            # Edge case: Claude can return end_turn with empty content, which breaks
+            # subsequent conversation turns when loaded from history
+            if not assistant_message.get("content"):
+                logger.warning("LLM returned end_turn with empty content, adding placeholder")
+                assistant_message = {
+                    "role": "assistant",
+                    "content": [{"text": "Done."}],
+                }
+
+            state.messages.append(assistant_message)
             # Only append new messages (skip context that's already stored)
             new_messages = state.messages[state.context_length :]
             append_messages(conv_state, new_messages)
