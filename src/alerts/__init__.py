@@ -3,6 +3,7 @@
 from src.alerts.enums import AlertType
 from src.alerts.formatters import (
     format_alert,
+    format_bin_schedule_alert,
     format_goal_alert,
     format_medium_alert,
     format_newsletter_alert,
@@ -13,6 +14,8 @@ from src.alerts.formatters import (
 from src.alerts.models import AlertData, AlertItem, AlertSendResult
 from src.alerts.providers import (
     AlertProvider,
+    BinScheduleAlertProvider,
+    BinType,
     GoalAlertProvider,
     MediumAlertProvider,
     NewsletterAlertProvider,
@@ -31,6 +34,8 @@ __all__ = [
     "AlertSendResult",
     "AlertService",
     "AlertType",
+    "BinScheduleAlertProvider",
+    "BinType",
     "GoalAlertProvider",
     "MediumAlertProvider",
     "NewsletterAlertProvider",
@@ -40,6 +45,7 @@ __all__ = [
     "SubstackAlertProvider",
     "WorkTaskAlertProvider",
     "format_alert",
+    "format_bin_schedule_alert",
     "format_goal_alert",
     "format_medium_alert",
     "format_newsletter_alert",

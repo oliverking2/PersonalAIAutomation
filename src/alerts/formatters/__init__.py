@@ -2,6 +2,7 @@
 
 from src.alerts.formatters.formatters import (
     format_alert,
+    format_bin_schedule_alert,
     format_goal_alert,
     format_medium_alert,
     format_newsletter_alert,
@@ -13,6 +14,7 @@ from src.alerts.formatters.summariser import summarise_description
 
 __all__ = [
     "format_alert",
+    "format_bin_schedule_alert",
     "format_goal_alert",
     "format_medium_alert",
     "format_newsletter_alert",

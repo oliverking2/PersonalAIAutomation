@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
+from src.alerts.providers.base import AlertProvider
 from src.database.substack import get_unsent_substack_posts, mark_substack_post_alerted
 
 logger = logging.getLogger(__name__)
 
 
-class SubstackAlertProvider:
+class SubstackAlertProvider(AlertProvider):
     """Provider for Substack newsletter alerts.
 
     Returns one alert per publication, each containing the unsent posts

@@ -3,6 +3,7 @@
 from dagster import ScheduleDefinition
 
 from src.orchestration.alerts.jobs import (
+    bin_schedule_alerts_job,
     overdue_task_alerts_job,
     personal_task_alerts_job,
     weekly_goal_alerts_job,
@@ -51,5 +52,12 @@ weekly_goal_alert_schedule = ScheduleDefinition(
 weekly_reading_alert_schedule = ScheduleDefinition(
     job=weekly_reading_alerts_job,
     cron_schedule="0 18 * * 0",
+    execution_timezone="Europe/London",
+)
+
+# Bin schedule alerts: Sunday at 8:00 PM Europe/London
+bin_schedule_alert_schedule = ScheduleDefinition(
+    job=bin_schedule_alerts_job,
+    cron_schedule="0 20 * * 0",
     execution_timezone="Europe/London",
 )

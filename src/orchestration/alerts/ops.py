@@ -8,6 +8,7 @@ from dagster import Backoff, Jitter, OpExecutionContext, RetryPolicy, op
 from src.alerts import (
     AlertService,
     AlertType,
+    BinScheduleAlertProvider,
     GoalAlertProvider,
     OverdueTaskAlertProvider,
     PersonalTaskAlertProvider,
@@ -319,5 +320,48 @@ def send_weekly_reading_alerts_op(context: OpExecutionContext) -> AlertStats:
     )
 
     _notify_errors(context, "Weekly Reading Alerts", stats.errors)
+
+    return stats
+
+
+@op(
+    name="send_bin_schedule_alerts",
+    retry_policy=ALERT_RETRY_POLICY,
+    description="Send weekly bin collection reminder alerts (Sunday 8pm).",
+)
+def send_bin_schedule_alerts_op(context: OpExecutionContext) -> AlertStats:
+    """Send bin collection reminder alerts.
+
+    Sends a reminder indicating which bin (General Waste or Recycling)
+    to put out for collection the next day.
+
+    :param context: Dagster execution context.
+    :returns: Stats with counts of sent/skipped alerts.
+    """
+    context.log.info("Starting bin schedule alerts")
+
+    telegram_client = _get_telegram_client()
+    provider = BinScheduleAlertProvider()
+
+    with get_session() as session:
+        service = AlertService(
+            session=session,
+            telegram_client=telegram_client,
+            providers=[provider],
+        )
+        result = service.send_alerts(alert_types=[AlertType.BIN_SCHEDULE])
+
+    stats = AlertStats(
+        alerts_sent=result.alerts_sent,
+        alerts_skipped=result.alerts_skipped,
+        errors=result.errors,
+    )
+
+    context.log.info(
+        f"Bin schedule alerts complete: {stats.alerts_sent} sent, "
+        f"{stats.alerts_skipped} skipped, {len(stats.errors)} errors"
+    )
+
+    _notify_errors(context, "Bin Schedule Alerts", stats.errors)
 
     return stats

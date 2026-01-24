@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
+from src.alerts.providers.base import AlertProvider
 from src.api.client import InternalAPIClient
 from src.notion.enums import Priority, TaskGroup
 
@@ -84,7 +85,7 @@ def _create_alert_item(task: dict[str, Any], section: str, today: date) -> Alert
     )
 
 
-class WorkTaskAlertProvider:
+class WorkTaskAlertProvider(AlertProvider):
     """Provider for daily work task reminders.
 
     Sends work tasks due today. On Mondays, also includes high priority
@@ -190,12 +191,8 @@ class WorkTaskAlertProvider:
             )
         ]
 
-    def mark_sent(self, source_id: str) -> None:
-        """No-op for scheduled reminders."""
-        pass
 
-
-class PersonalTaskAlertProvider:
+class PersonalTaskAlertProvider(AlertProvider):
     """Provider for daily personal task reminders.
 
     Sends personal and photography tasks due today. On Saturdays, also
@@ -301,12 +298,8 @@ class PersonalTaskAlertProvider:
             )
         ]
 
-    def mark_sent(self, source_id: str) -> None:
-        """No-op for scheduled reminders."""
-        pass
 
-
-class OverdueTaskAlertProvider:
+class OverdueTaskAlertProvider(AlertProvider):
     """Provider for daily overdue task reminders.
 
     Sends all tasks due today that are not completed, plus all overdue tasks.
@@ -367,7 +360,3 @@ class OverdueTaskAlertProvider:
                 items=items,
             )
         ]
-
-    def mark_sent(self, source_id: str) -> None:
-        """No-op for scheduled reminders."""
-        pass

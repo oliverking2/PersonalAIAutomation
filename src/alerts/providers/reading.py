@@ -6,12 +6,13 @@ from typing import Any, cast
 
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
+from src.alerts.providers.base import AlertProvider
 from src.api.client import InternalAPIClient
 
 logger = logging.getLogger(__name__)
 
 
-class ReadingAlertProvider:
+class ReadingAlertProvider(AlertProvider):
     """Provider for weekly reading list reminders using the internal API."""
 
     # Number of days after which an item is considered stale
@@ -108,12 +109,3 @@ class ReadingAlertProvider:
                 items=items,
             )
         ]
-
-    def mark_sent(self, source_id: str) -> None:
-        """No-op for scheduled reminders.
-
-        Reading reminders don't have a source record to update.
-
-        :param source_id: The week string (unused).
-        """
-        pass

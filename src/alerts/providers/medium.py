@@ -1,8 +1,8 @@
 """Medium digest alert provider."""
 
-from src.alerts.base.provider import BaseAlertProvider
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
+from src.alerts.providers.base import BaseAlertProvider
 from src.database.medium import MediumDigest
 
 

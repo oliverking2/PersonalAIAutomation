@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from src.alerts.enums import AlertType
 from src.alerts.formatters import (
     format_alert,
+    format_bin_schedule_alert,
     format_goal_alert,
     format_newsletter_alert,
     format_reading_alert,
@@ -258,6 +259,57 @@ class TestFormatReadingAlert(unittest.TestCase):
         self.assertIn("Important Article", text)
         self.assertIn("GETTING STALE", text)
         self.assertIn("Old Book", text)
+
+
+class TestFormatBinScheduleAlert(unittest.TestCase):
+    """Tests for format_bin_schedule_alert."""
+
+    def test_returns_tuple_with_parse_mode(self) -> None:
+        """Test that formatter returns (text, parse_mode) tuple."""
+        alert = AlertData(
+            alert_type=AlertType.BIN_SCHEDULE,
+            source_id="2026-W05",
+            title="Bin Reminder",
+            items=[AlertItem(name="General Waste", metadata={"bin_type": "General Waste"})],
+        )
+
+        result = format_bin_schedule_alert(alert)
+
+        self.assertIsInstance(result, tuple)
+        _text, parse_mode = result
+        self.assertEqual(parse_mode, "MarkdownV2")
+
+    def test_formats_general_waste_alert(self) -> None:
+        """Test formatting a General Waste bin reminder."""
+        alert = AlertData(
+            alert_type=AlertType.BIN_SCHEDULE,
+            source_id="2026-W05",
+            title="Bin Reminder",
+            items=[AlertItem(name="General Waste", metadata={"bin_type": "General Waste"})],
+        )
+
+        text, parse_mode = format_bin_schedule_alert(alert)
+
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Bin Reminder", text)
+        self.assertIn("General Waste", text)
+        self.assertIn("collection tomorrow", text)
+
+    def test_formats_recycling_alert(self) -> None:
+        """Test formatting a Recycling bin reminder."""
+        alert = AlertData(
+            alert_type=AlertType.BIN_SCHEDULE,
+            source_id="2026-W06",
+            title="Bin Reminder",
+            items=[AlertItem(name="Recycling", metadata={"bin_type": "Recycling"})],
+        )
+
+        text, parse_mode = format_bin_schedule_alert(alert)
+
+        self.assertEqual(parse_mode, "MarkdownV2")
+        self.assertIn("Bin Reminder", text)
+        self.assertIn("Recycling", text)
+        self.assertIn("collection tomorrow", text)
 
 
 class TestFormatAlert(unittest.TestCase):

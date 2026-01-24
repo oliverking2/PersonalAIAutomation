@@ -25,6 +25,7 @@ class AlertType(StrEnum):
     WEEKLY_GOAL = "weekly_goal"
     WEEKLY_READING = "weekly_reading"
     SUBSTACK = "substack"
+    BIN_SCHEDULE = "bin_schedule"
 
 
 class SentAlert(Base):

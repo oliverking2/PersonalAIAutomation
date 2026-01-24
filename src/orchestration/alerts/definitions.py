@@ -3,6 +3,7 @@
 from dagster import Definitions
 
 from src.orchestration.alerts.jobs import (
+    bin_schedule_alerts_job,
     overdue_task_alerts_job,
     personal_task_alerts_job,
     weekly_goal_alerts_job,
@@ -10,6 +11,7 @@ from src.orchestration.alerts.jobs import (
     work_task_alerts_job,
 )
 from src.orchestration.alerts.schedules import (
+    bin_schedule_alert_schedule,
     overdue_task_alert_schedule,
     personal_task_alert_weekday_schedule,
     personal_task_alert_weekend_schedule,
@@ -25,6 +27,7 @@ defs = Definitions(
         overdue_task_alerts_job,
         weekly_goal_alerts_job,
         weekly_reading_alerts_job,
+        bin_schedule_alerts_job,
     ],
     schedules=[
         work_task_alert_schedule,
@@ -33,5 +36,6 @@ defs = Definitions(
         overdue_task_alert_schedule,
         weekly_goal_alert_schedule,
         weekly_reading_alert_schedule,
+        bin_schedule_alert_schedule,
     ],
 )

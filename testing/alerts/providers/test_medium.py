@@ -20,7 +20,7 @@ class TestMediumAlertProvider(unittest.TestCase):
         provider = MediumAlertProvider(session=self.mock_session)
         self.assertEqual(provider.alert_type, AlertType.MEDIUM)
 
-    @patch("src.alerts.base.provider.get_unsent_by_alerted_at")
+    @patch("src.alerts.providers.base.get_unsent_by_alerted_at")
     def test_get_pending_alerts_converts_digests(self, mock_get_unsent: MagicMock) -> None:
         """Test that digests are converted to AlertData."""
         mock_digest = MagicMock()
@@ -38,7 +38,7 @@ class TestMediumAlertProvider(unittest.TestCase):
         self.assertIn("Medium Digest", alerts[0].title)
         self.assertIn("Medium Daily Digest", alerts[0].title)
 
-    @patch("src.alerts.base.provider.get_unsent_by_alerted_at")
+    @patch("src.alerts.providers.base.get_unsent_by_alerted_at")
     def test_get_pending_alerts_includes_articles(self, mock_get_unsent: MagicMock) -> None:
         """Test that articles are included as items."""
         mock_article = MagicMock()
@@ -60,7 +60,7 @@ class TestMediumAlertProvider(unittest.TestCase):
         self.assertEqual(alerts[0].items[0].url, "https://medium.com/@author/test-article")
         self.assertEqual(alerts[0].items[0].metadata["description"], "Article description")
 
-    @patch("src.alerts.base.provider.get_unsent_by_alerted_at")
+    @patch("src.alerts.providers.base.get_unsent_by_alerted_at")
     def test_get_pending_alerts_handles_empty_description(self, mock_get_unsent: MagicMock) -> None:
         """Test that empty descriptions are handled."""
         mock_article = MagicMock()
@@ -79,7 +79,7 @@ class TestMediumAlertProvider(unittest.TestCase):
 
         self.assertEqual(alerts[0].items[0].metadata["description"], "")
 
-    @patch("src.alerts.base.provider.mark_alerted")
+    @patch("src.alerts.providers.base.mark_alerted")
     def test_mark_sent_calls_database(self, mock_mark: MagicMock) -> None:
         """Test that mark_sent calls mark_alerted."""
         test_id = uuid.uuid4()
@@ -89,7 +89,7 @@ class TestMediumAlertProvider(unittest.TestCase):
 
         mock_mark.assert_called_once()
 
-    @patch("src.alerts.base.provider.get_unsent_by_alerted_at")
+    @patch("src.alerts.providers.base.get_unsent_by_alerted_at")
     def test_get_pending_alerts_empty_list(self, mock_get_unsent: MagicMock) -> None:
         """Test that empty result returns empty list."""
         mock_get_unsent.return_value = []

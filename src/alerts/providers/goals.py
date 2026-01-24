@@ -8,13 +8,14 @@ from dateutil.relativedelta import relativedelta
 
 from src.alerts.enums import AlertType
 from src.alerts.models import AlertData, AlertItem
+from src.alerts.providers.base import AlertProvider
 from src.api.client import InternalAPIClient
 from src.notion.enums import GoalStatus
 
 logger = logging.getLogger(__name__)
 
 
-class GoalAlertProvider:
+class GoalAlertProvider(AlertProvider):
     """Provider for weekly goal review reminders using the internal API."""
 
     def __init__(self, api_client: InternalAPIClient) -> None:
@@ -104,12 +105,3 @@ class GoalAlertProvider:
                 items=items,
             )
         ]
-
-    def mark_sent(self, source_id: str) -> None:
-        """No-op for scheduled reminders.
-
-        Goal reviews don't have a source record to update.
-
-        :param source_id: The week string (unused).
-        """
-        pass

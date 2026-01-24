@@ -1,6 +1,12 @@
 """Alert providers package."""
 
-from src.alerts.providers.base import AlertProvider
+from src.alerts.providers.base import (
+    AlertProvider,
+    BaseAlertProvider,
+    DatabaseAlertProvider,
+    articles_to_alert_items,
+)
+from src.alerts.providers.bin_schedule import BinScheduleAlertProvider, BinType
 from src.alerts.providers.goals import GoalAlertProvider
 from src.alerts.providers.medium import MediumAlertProvider
 from src.alerts.providers.newsletter import NewsletterAlertProvider
@@ -14,6 +20,10 @@ from src.alerts.providers.tasks import (
 
 __all__ = [
     "AlertProvider",
+    "BaseAlertProvider",
+    "BinScheduleAlertProvider",
+    "BinType",
+    "DatabaseAlertProvider",
     "GoalAlertProvider",
     "MediumAlertProvider",
     "NewsletterAlertProvider",
@@ -22,4 +32,5 @@ __all__ = [
     "ReadingAlertProvider",
     "SubstackAlertProvider",
     "WorkTaskAlertProvider",
+    "articles_to_alert_items",
 ]

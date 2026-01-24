@@ -3,6 +3,7 @@
 from dagster import job
 
 from src.orchestration.alerts.ops import (
+    send_bin_schedule_alerts_op,
     send_overdue_task_alerts_op,
     send_personal_task_alerts_op,
     send_weekly_goal_alerts_op,
@@ -73,3 +74,16 @@ def weekly_reading_alerts_job() -> None:
     Sends a summary of high priority and stale reading items.
     """
     send_weekly_reading_alerts_op()
+
+
+@job(
+    name="bin_schedule_alerts_job",
+    description="Send weekly bin collection reminder alerts via Telegram (Sunday 8pm).",
+)
+def bin_schedule_alerts_job() -> None:
+    """Job for sending bin collection reminders.
+
+    Sends a reminder indicating which bin (General Waste or Recycling)
+    to put out for collection the next day.
+    """
+    send_bin_schedule_alerts_op()

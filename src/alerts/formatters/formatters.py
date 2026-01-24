@@ -265,6 +265,27 @@ def format_medium_alert(alert: AlertData) -> tuple[str, str]:
     return format_message(markdown)
 
 
+def format_bin_schedule_alert(alert: AlertData) -> tuple[str, str]:
+    """Format a bin schedule reminder as Markdown for Telegram.
+
+    :param alert: The alert data to format.
+    :returns: Tuple of (formatted_text, parse_mode).
+    """
+    bin_type = alert.items[0].name if alert.items else "Unknown"
+
+    # Choose emoji based on bin type
+    emoji = "\u267b\ufe0f" if "Recycling" in bin_type else "\U0001f5d1\ufe0f"
+
+    lines = [
+        f"**{alert.title}** {emoji}",
+        "",
+        f"Put out the **{bin_type}** bin for collection tomorrow.",
+    ]
+
+    markdown = "\n".join(lines)
+    return format_message(markdown)
+
+
 def format_alert(alert: AlertData) -> tuple[str, str]:
     """Format any alert based on its type.
 
@@ -281,6 +302,7 @@ def format_alert(alert: AlertData) -> tuple[str, str]:
         AlertType.WEEKLY_GOAL: format_goal_alert,
         AlertType.WEEKLY_READING: format_reading_alert,
         AlertType.SUBSTACK: format_substack_alert,
+        AlertType.BIN_SCHEDULE: format_bin_schedule_alert,
     }
 
     formatter = formatters.get(alert.alert_type)
