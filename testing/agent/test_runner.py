@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from src.agent.bedrock_client import ToolUseBlock
 from src.agent.enums import ConfidenceLevel, RiskLevel
 from src.agent.exceptions import MaxStepsExceededError, ToolExecutionError, ToolTimeoutError
-from src.agent.models import ToolDef
+from src.agent.models import ToolCall, ToolDef
 from src.agent.runner import DEFAULT_SYSTEM_PROMPT, AgentRunner
 from src.agent.utils.confidence_classifier import ConfidenceClassification
 from src.agent.utils.config import DEFAULT_AGENT_CONFIG, AgentConfig
@@ -1347,6 +1347,7 @@ class TestEmptyContentHandling(unittest.TestCase):
 
         This prevents Bedrock ValidationException on subsequent turns when
         the message with empty content is loaded from conversation history.
+        The placeholder is also returned in the response to the user.
         """
         mock_create_conv.return_value = self.mock_conversation
         mock_create_run.return_value = self.mock_run
@@ -1371,10 +1372,10 @@ class TestEmptyContentHandling(unittest.TestCase):
 
         result = runner.run("Do something", self.mock_session, tool_names=["safe_tool"])
 
-        # Response should be empty (handled by caller with fallback)
-        self.assertEqual(result.response, "")
+        # Response should contain the placeholder (not empty)
+        self.assertEqual(result.response, "Done.")
 
-        # But the stored message should have placeholder content
+        # The stored message should also have placeholder content
         mock_save_state.assert_called_once()
         saved_state = mock_save_state.call_args[0][2]
 
@@ -1385,7 +1386,7 @@ class TestEmptyContentHandling(unittest.TestCase):
         assistant_msg = saved_state.messages[1]
         self.assertEqual(assistant_msg["role"], "assistant")
         self.assertTrue(len(assistant_msg["content"]) > 0)
-        self.assertIn("text", assistant_msg["content"][0])
+        self.assertEqual(assistant_msg["content"][0]["text"], "Done.")
 
     @patch("src.agent.runner.save_conversation_state")
     @patch("src.agent.runner.complete_agent_run")
@@ -1428,6 +1429,141 @@ class TestEmptyContentHandling(unittest.TestCase):
         # Assistant message should have original content
         stored_assistant = saved_state.messages[1]
         self.assertEqual(stored_assistant["content"][0]["text"], "Hi there!")
+
+
+class TestEmptyResponsePlaceholder(unittest.TestCase):
+    """Tests for context-aware empty response placeholder generation."""
+
+    def test_no_tool_calls_returns_done(self) -> None:
+        """Test that no tool calls returns generic 'Done.' placeholder."""
+        placeholder = AgentRunner._generate_empty_response_placeholder([])
+        self.assertEqual(placeholder, "Done.")
+
+    def test_memory_tool_returns_noted_message(self) -> None:
+        """Test that memory tools return appropriate confirmation."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="add_to_memory",
+                input_args={"content": "test"},
+                output={"id": "abc123"},
+                is_error=False,
+            )
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "I've noted that.")
+
+    def test_update_memory_tool_returns_noted_message(self) -> None:
+        """Test that update_memory also returns noted message."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="update_memory",
+                input_args={"memory_id": "abc", "content": "updated"},
+                output={"id": "abc123"},
+                is_error=False,
+            )
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "I've noted that.")
+
+    def test_create_tasks_returns_created_task(self) -> None:
+        """Test that create_tasks returns singular 'task' message."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="create_tasks",
+                input_args={"task_name": "Test task"},
+                output={"id": "task-123"},
+                is_error=False,
+            )
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "Created the task.")
+
+    def test_create_goals_returns_created_goal(self) -> None:
+        """Test that create_goals returns singular 'goal' message."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="create_goals",
+                input_args={"goal_name": "Test goal"},
+                output={"id": "goal-123"},
+                is_error=False,
+            )
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "Created the goal.")
+
+    def test_multiple_create_tools_returns_generic_created(self) -> None:
+        """Test that multiple create tools returns generic success message."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="create_tasks",
+                input_args={"task_name": "Task 1"},
+                output={"id": "task-1"},
+                is_error=False,
+            ),
+            ToolCall(
+                tool_use_id="test-2",
+                tool_name="create_goals",
+                input_args={"goal_name": "Goal 1"},
+                output={"id": "goal-1"},
+                is_error=False,
+            ),
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "Created successfully.")
+
+    def test_update_tool_returns_updated_message(self) -> None:
+        """Test that update tools return updated message."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="update_task",
+                input_args={"task_id": "123", "status": "Done"},
+                output={"id": "task-123"},
+                is_error=False,
+            )
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "Updated successfully.")
+
+    def test_query_tool_returns_done(self) -> None:
+        """Test that query tools return generic done message."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="query_tasks",
+                input_args={},
+                output={"items": []},
+                is_error=False,
+            )
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "Done.")
+
+    def test_memory_takes_priority_over_create(self) -> None:
+        """Test that memory operations take priority in placeholder selection."""
+        tool_calls = [
+            ToolCall(
+                tool_use_id="test-1",
+                tool_name="create_tasks",
+                input_args={"task_name": "Test"},
+                output={"id": "task-123"},
+                is_error=False,
+            ),
+            ToolCall(
+                tool_use_id="test-2",
+                tool_name="add_to_memory",
+                input_args={"content": "test"},
+                output={"id": "mem-123"},
+                is_error=False,
+            ),
+        ]
+        placeholder = AgentRunner._generate_empty_response_placeholder(tool_calls)
+        self.assertEqual(placeholder, "I've noted that.")
 
 
 class TestToolTimeout(unittest.TestCase):

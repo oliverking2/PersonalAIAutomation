@@ -107,6 +107,8 @@ When using tools:
 
 IMPORTANT: Before saying you cannot do something, check your available tools. If you have a tool that could accomplish the task, use it.
 
+IMPORTANT: After completing tool calls, always provide a brief natural response to the user summarising what you did. Never end a turn with only tool results and no text response.
+
 ## Memory Management
 
 You have persistent memory across conversations. Store facts about people, user preferences, and recurring context - but not transient details.
@@ -1308,21 +1310,25 @@ class AgentRunner:
     ) -> AgentRunResult:
         """Build the final result when the agent is done."""
         final_response = self.client.parse_text_response(response)
+        assistant_message = response["output"]["message"]
+
+        # Validate message has content - Bedrock requires non-empty content arrays
+        # Edge case: Claude can return end_turn with empty content, which breaks
+        # subsequent conversation turns when loaded from history
+        if not assistant_message.get("content"):
+            placeholder = self._generate_empty_response_placeholder(state.tool_calls)
+            logger.warning(
+                f"LLM returned end_turn with empty content, adding placeholder: {placeholder}"
+            )
+            assistant_message = {
+                "role": "assistant",
+                "content": [{"text": placeholder}],
+            }
+            # Update final_response to use the placeholder
+            final_response = placeholder
 
         # Update conversation state with messages from this run
         if conv_state is not None:
-            assistant_message = response["output"]["message"]
-
-            # Validate message has content - Bedrock requires non-empty content arrays
-            # Edge case: Claude can return end_turn with empty content, which breaks
-            # subsequent conversation turns when loaded from history
-            if not assistant_message.get("content"):
-                logger.warning("LLM returned end_turn with empty content, adding placeholder")
-                assistant_message = {
-                    "role": "assistant",
-                    "content": [{"text": "Done."}],
-                }
-
             state.messages.append(assistant_message)
             # Only append new messages (skip context that's already stored)
             new_messages = state.messages[state.context_length :]
@@ -1425,6 +1431,42 @@ class AgentRunner:
                 "status": "error" if is_error else "success",
             }
         }
+
+    @staticmethod
+    def _generate_empty_response_placeholder(tool_calls: list[ToolCall]) -> str:
+        """Generate a context-aware placeholder when LLM returns empty content.
+
+        This is a fallback for when Claude returns end_turn without text after
+        tool execution. The placeholder provides minimal user feedback based on
+        what tools were executed.
+
+        :param tool_calls: List of tool calls made during this run.
+        :returns: Context-appropriate placeholder message.
+        """
+        if not tool_calls:
+            return "Done."
+
+        tool_names = [tc.tool_name for tc in tool_calls]
+
+        # Check for memory operations (highest priority)
+        if "add_to_memory" in tool_names or "update_memory" in tool_names:
+            return "I've noted that."
+
+        # Check for create operations
+        create_tools = [t for t in tool_names if t.startswith("create_")]
+        if create_tools:
+            # Extract domain from tool name (e.g., "create_tasks" -> "tasks")
+            domains = [t.replace("create_", "") for t in create_tools]
+            if len(domains) == 1:
+                return f"Created the {domains[0].rstrip('s')}."
+            return "Created successfully."
+
+        # Check for update operations
+        if any(t.startswith("update_") for t in tool_names):
+            return "Updated successfully."
+
+        # Default for query/get operations and anything else
+        return "Done."
 
     def _fetch_previous_values(
         self,
