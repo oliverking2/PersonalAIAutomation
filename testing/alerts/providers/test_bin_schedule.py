@@ -14,7 +14,7 @@ class TestBinScheduleAlertProvider(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test fixtures."""
-        # Reference date: Sunday 26 Jan 2026 (General Waste week)
+        # Reference date: Sunday 26 Jan 2026 (Recycling week)
         self.reference_date = "2026-01-26"
 
     @patch.dict(os.environ, {"BIN_REFERENCE_DATE": "2026-01-26"})
@@ -24,44 +24,44 @@ class TestBinScheduleAlertProvider(unittest.TestCase):
         self.assertEqual(provider.alert_type, AlertType.BIN_SCHEDULE)
 
     @patch.dict(os.environ, {"BIN_REFERENCE_DATE": "2026-01-26"})
-    def test_reference_date_returns_general_waste(self) -> None:
-        """Test that the reference date itself returns General Waste."""
+    def test_reference_date_returns_recycling(self) -> None:
+        """Test that the reference date itself returns Recycling."""
         provider = BinScheduleAlertProvider()
         reference = date(2026, 1, 26)
 
         bin_type = provider.get_current_bin_type(reference)
 
-        self.assertEqual(bin_type, BinType.GENERAL_WASTE)
+        self.assertEqual(bin_type, BinType.RECYCLING)
 
     @patch.dict(os.environ, {"BIN_REFERENCE_DATE": "2026-01-26"})
-    def test_one_week_later_returns_recycling(self) -> None:
-        """Test that one week after reference returns Recycling."""
+    def test_one_week_later_returns_general_waste(self) -> None:
+        """Test that one week after reference returns General Waste."""
         provider = BinScheduleAlertProvider()
         one_week_later = date(2026, 2, 2)  # Feb 2, 2026
 
         bin_type = provider.get_current_bin_type(one_week_later)
 
-        self.assertEqual(bin_type, BinType.RECYCLING)
+        self.assertEqual(bin_type, BinType.GENERAL_WASTE)
 
     @patch.dict(os.environ, {"BIN_REFERENCE_DATE": "2026-01-26"})
-    def test_two_weeks_later_returns_general_waste(self) -> None:
-        """Test that two weeks after reference returns General Waste."""
+    def test_two_weeks_later_returns_recycling(self) -> None:
+        """Test that two weeks after reference returns Recycling."""
         provider = BinScheduleAlertProvider()
         two_weeks_later = date(2026, 2, 9)  # Feb 9, 2026
 
         bin_type = provider.get_current_bin_type(two_weeks_later)
 
-        self.assertEqual(bin_type, BinType.GENERAL_WASTE)
+        self.assertEqual(bin_type, BinType.RECYCLING)
 
     @patch.dict(os.environ, {"BIN_REFERENCE_DATE": "2026-01-26"})
-    def test_three_weeks_later_returns_recycling(self) -> None:
-        """Test that three weeks after reference returns Recycling."""
+    def test_three_weeks_later_returns_general_waste(self) -> None:
+        """Test that three weeks after reference returns General Waste."""
         provider = BinScheduleAlertProvider()
         three_weeks_later = date(2026, 2, 16)  # Feb 16, 2026
 
         bin_type = provider.get_current_bin_type(three_weeks_later)
 
-        self.assertEqual(bin_type, BinType.RECYCLING)
+        self.assertEqual(bin_type, BinType.GENERAL_WASTE)
 
     @patch.dict(os.environ, {"BIN_REFERENCE_DATE": "2026-01-26"})
     def test_mid_week_uses_week_number(self) -> None:
@@ -72,8 +72,8 @@ class TestBinScheduleAlertProvider(unittest.TestCase):
         # Wednesday one week later (Feb 4, 2026)
         mid_next_week = date(2026, 2, 4)
 
-        self.assertEqual(provider.get_current_bin_type(mid_reference_week), BinType.GENERAL_WASTE)
-        self.assertEqual(provider.get_current_bin_type(mid_next_week), BinType.RECYCLING)
+        self.assertEqual(provider.get_current_bin_type(mid_reference_week), BinType.RECYCLING)
+        self.assertEqual(provider.get_current_bin_type(mid_next_week), BinType.GENERAL_WASTE)
 
     @patch.dict(os.environ, {"BIN_REFERENCE_DATE": "2026-01-26"})
     def test_get_pending_alerts_returns_alert_data(self) -> None:

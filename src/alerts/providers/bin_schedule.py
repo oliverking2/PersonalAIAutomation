@@ -23,10 +23,10 @@ class BinScheduleAlertProvider(AlertProvider):
     """Provider for weekly bin collection reminders.
 
     Calculates which bin to put out based on alternating weeks from a reference date.
-    The reference date should be a Sunday when General Waste is collected the next day.
+    The reference date should be a Sunday when Recycling is collected the next day.
 
     Configuration via environment variable:
-        BIN_REFERENCE_DATE: A known "General Waste" Sunday in YYYY-MM-DD format
+        BIN_REFERENCE_DATE: A known "Recycling" Sunday in YYYY-MM-DD format
     """
 
     def __init__(self) -> None:
@@ -70,11 +70,11 @@ class BinScheduleAlertProvider(AlertProvider):
         days_elapsed = (today - self._reference_date).days
         weeks_elapsed = days_elapsed // 7
 
-        # Even weeks (including reference week 0) = General Waste
-        # Odd weeks = Recycling
+        # Even weeks (including reference week 0) = Recycling
+        # Odd weeks = General Waste
         if weeks_elapsed % 2 == 0:
-            return BinType.GENERAL_WASTE
-        return BinType.RECYCLING
+            return BinType.RECYCLING
+        return BinType.GENERAL_WASTE
 
     def get_pending_alerts(self) -> list[AlertData]:
         """Get bin reminder alert for the current week.
